@@ -20,6 +20,7 @@ pub mod mcp;
 pub mod orchestration;
 pub mod plugin;
 pub mod retry;
+pub mod streaming;
 pub mod rules;
 pub mod session;
 pub mod token;
@@ -94,4 +95,7 @@ pub use dag::{
 };
 pub use orchestration::{
     create_orchestrator, Orchestrator, OrchestratorTask, ParallelConfig, ParallelResult, TaskResult,
+};
+pub use streaming::{
+    create_streaming_agent, AgentStreamEvent, StreamingAgent, StreamingConfig, StreamProcessor,
 };
