@@ -13,15 +13,18 @@ pub mod feature_flags;
 pub mod git;
 pub mod github;
 pub mod github_tools;
+pub mod hooks;
 pub mod logger;
 pub mod plugin;
 pub mod retry;
 pub mod rules;
+pub mod mcp;
 pub mod session;
 pub mod token;
 pub mod tool;
 pub mod tools;
 pub mod types;
+pub mod workflow;
 
 pub use agent::{
     Agent, AgentConfig, AgentError, AgentEvent, AgentResult, ExecutorRegistry, RiskLevel,
@@ -64,6 +67,7 @@ pub use github_tools::{
     create_github_tool_registry, AddCommentTool, AddLabelsTool, CreateIssueTool,
     CreatePullRequestTool, GetIssueTool, ListIssuesTool, ListPullRequestsTool,
 };
+pub use hooks::{Hook, HookAction, HookContext, HookEvent, HookManager, HookResult, HooksConfig};
 pub use logger::{init_logger, init_logger_with_config, LogFormat, LogLevel, LoggerConfig};
 pub use plugin::{Plugin, PluginContext, PluginManager, PluginMetadata, PluginResult, PluginState};
 pub use retry::{retry_with_backoff, RetryConfig as BackoffRetryConfig};
@@ -76,3 +80,10 @@ pub use tools::{
     GrepTool, ReadTool, WriteTool,
 };
 pub use types::*;
+pub use workflow::{
+    FailurePolicy, StepCondition, StepResult, StepStatus, Workflow, WorkflowContext,
+    WorkflowManager, WorkflowResult, WorkflowStatus, WorkflowStep,
+};
+pub use mcp::{
+    McpConfig, McpError, McpManager, McpRequest, McpResponse, McpServer, McpServerConfig, McpTool,
+};

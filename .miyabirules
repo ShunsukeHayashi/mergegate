@@ -1,0 +1,76 @@
+# Miyabi CLI Project Rules
+# This file defines project-specific rules and agent preferences
+
+version: 1
+
+rules:
+  # Rust best practices
+  - name: "no-unwrap"
+    pattern: ".unwrap()"
+    suggestion: "Use ? operator or proper error handling instead of unwrap()"
+    file_extensions: ["rs"]
+    severity: "warning"
+    enabled: true
+
+  - name: "no-expect"
+    pattern: ".expect("
+    suggestion: "Consider using ? operator or match for better error messages"
+    file_extensions: ["rs"]
+    severity: "info"
+    enabled: true
+
+  - name: "no-println-debug"
+    pattern: "println!"
+    suggestion: "Use tracing macros (info!, debug!, error!) for logging"
+    file_extensions: ["rs"]
+    severity: "info"
+    enabled: true
+
+  - name: "no-dbg"
+    pattern: "dbg!"
+    suggestion: "Remove debug macro before committing"
+    file_extensions: ["rs"]
+    severity: "warning"
+    enabled: true
+
+  - name: "no-todo"
+    pattern: "TODO"
+    suggestion: "Address TODO comments or create GitHub issues"
+    file_extensions: ["rs", "ts", "js", "md"]
+    severity: "info"
+    enabled: true
+
+  - name: "no-fixme"
+    pattern: "FIXME"
+    suggestion: "Address FIXME comments before merging"
+    file_extensions: ["rs", "ts", "js"]
+    severity: "warning"
+    enabled: true
+
+# Agent-specific preferences
+agent_preferences:
+  codegen:
+    style: "functional"
+    error_handling: "result"
+    min_score: 80
+    clippy_strict: true
+
+  review:
+    focus_areas:
+      - "error_handling"
+      - "performance"
+      - "security"
+    min_score: 70
+
+  refactor:
+    preserve_tests: true
+    max_changes_per_file: 100
+
+# Global settings
+settings:
+  auto_format: true
+  max_file_size: 1048576
+  ignore_patterns:
+    - "target/"
+    - "node_modules/"
+    - ".git/"

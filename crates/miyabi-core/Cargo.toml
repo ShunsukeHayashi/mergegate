@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 chrono = { workspace = true }
 uuid = { workspace = true }
 reqwest = { workspace = true }
@@ -23,6 +24,8 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 regex = { workspace = true }
+git2 = "0.19"
+serde_yaml = "0.9"
 dirs = "5"
 toml = "0.8"
 

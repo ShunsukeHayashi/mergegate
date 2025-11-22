@@ -1,8 +1,25 @@
 //! Miyabi CLI - Main entry point
 
 use clap::{Parser, Subcommand};
+use miyabi_core::{FeatureFlagManager, RulesLoader};
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
+
+/// Global feature flags manager
+static FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();
+
+/// Get the global feature flags manager
+pub fn feature_flags() -> &'static FeatureFlagManager {
+    FEATURE_FLAGS.get_or_init(|| {
+        let manager = FeatureFlagManager::new();
+        // Default feature flags
+        manager.set_flag("extended_thinking", true);
+        manager.set_flag("auto_save_sessions", true);
+        manager.set_flag("syntax_highlighting", true);
+        manager.set_flag("vim_mode", false);
+        manager
+    })
+}
 
 #[derive(Parser)]
 #[command(name = "miyabi")]
@@ -54,6 +71,12 @@ enum Commands {
     },
     /// Show version and system information
     Version,
+    /// Show project rules (.miyabirules)
+    Rules {
+        /// Show detailed rule information
+        #[arg(short, long)]
+        verbose: bool,
+    },
     /// Run agent with a prompt (autonomous execution)
     Agent {
         /// The prompt to execute
@@ -145,11 +168,40 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Some(Commands::Status) => {
+            use miyabi_core::config::Config;
+
+            let config = Config::load().unwrap_or_default();
+
             println!("Miyabi Status: Ready");
-            println!(
-                "Config path: {:?}",
-                miyabi_core::config::Config::default_path()
-            );
+            println!();
+            println!("Config:   {}", Config::default_path().display());
+            println!("Sessions: {}", config.sessions_dir().display());
+            println!("Model:    {}", config.api.model);
+            println!();
+
+            // Load and show rules info
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let loader = RulesLoader::new(cwd);
+            match loader.load() {
+                Ok(Some(rules)) => {
+                    println!("Rules:    {} rules loaded", rules.rules.len());
+                    if !rules.agent_preferences.is_empty() {
+                        println!("Agents:   {} agent preferences", rules.agent_preferences.len());
+                    }
+                }
+                Ok(None) => {
+                    println!("Rules:    No .miyabirules found");
+                }
+                Err(e) => {
+                    println!("Rules:    Error loading - {}", e);
+                }
+            }
+
+            // Show feature flags
+            let flags = feature_flags();
+            let all_flags = flags.get_all_flags();
+            let enabled_count = all_flags.iter().filter(|f| f.enabled).count();
+            println!("Flags:    {}/{} enabled", enabled_count, all_flags.len());
         }
         Some(Commands::Init) => {
             use miyabi_core::config::Config;
@@ -283,6 +335,78 @@ async fn main() -> anyhow::Result<()> {
                 std::env::consts::OS,
                 std::env::consts::ARCH
             );
+        }
+        Some(Commands::Rules { verbose }) => {
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let loader = RulesLoader::new(cwd.clone());
+
+            match loader.load() {
+                Ok(Some(rules)) => {
+                    println!("Project Rules (.miyabirules)");
+                    println!("============================");
+                    println!();
+
+                    if rules.rules.is_empty() {
+                        println!("No rules defined.");
+                    } else {
+                        println!("Rules ({}):", rules.rules.len());
+                        for rule in &rules.rules {
+                            let status = if rule.enabled { "✓" } else { "✗" };
+                            let severity = match rule.severity.as_str() {
+                                "error" => "🔴",
+                                "warning" => "🟡",
+                                _ => "🔵",
+                            };
+                            println!("  {} {} {} - {}", status, severity, rule.name, rule.suggestion);
+
+                            if verbose {
+                                if let Some(pattern) = &rule.pattern {
+                                    println!("      Pattern: {}", pattern);
+                                }
+                                if !rule.file_extensions.is_empty() {
+                                    println!("      Extensions: {}", rule.file_extensions.join(", "));
+                                }
+                                println!();
+                            }
+                        }
+                    }
+
+                    if !rules.agent_preferences.is_empty() {
+                        println!();
+                        println!("Agent Preferences ({}):", rules.agent_preferences.len());
+                        for (agent, prefs) in &rules.agent_preferences {
+                            println!("  {}:", agent);
+                            if let Some(style) = &prefs.style {
+                                println!("    Style: {}", style);
+                            }
+                            if let Some(handling) = &prefs.error_handling {
+                                println!("    Error Handling: {}", handling);
+                            }
+                            if let Some(score) = prefs.min_score {
+                                println!("    Min Score: {}", score);
+                            }
+                        }
+                    }
+
+                    if verbose && !rules.settings.is_empty() {
+                        println!();
+                        println!("Settings:");
+                        for (key, value) in &rules.settings {
+                            println!("  {}: {}", key, value);
+                        }
+                    }
+                }
+                Ok(None) => {
+                    println!("No .miyabirules file found in {} or parent directories.", cwd.display());
+                    println!();
+                    println!("Create a .miyabirules file to define project-specific rules.");
+                    println!("See: miyabi --help for more information.");
+                }
+                Err(e) => {
+                    eprintln!("Error loading rules: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
         Some(Commands::Agent {
             prompt,

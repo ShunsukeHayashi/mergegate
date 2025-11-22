@@ -15,6 +15,7 @@ use crate::history_cell::{
 use crate::views::{MainView, ViewAction};
 use miyabi_core::anthropic::{AnthropicClient, ContentBlock, Message, StreamEvent};
 use miyabi_core::config::Config;
+use miyabi_core::rules::{MiyabiRules, RulesLoader};
 use miyabi_core::session::{Session, SessionStorage};
 use miyabi_core::tool::ToolRegistry;
 use miyabi_core::tools::create_standard_tool_registry;
@@ -72,6 +73,8 @@ pub struct App {
     max_tokens: u32,
     /// Whether to request extended thinking
     thinking: bool,
+    /// Project rules loaded from .miyabirules
+    rules: Option<MiyabiRules>,
 }
 
 impl App {
@@ -135,6 +138,27 @@ impl App {
         let max_tokens = config.api.max_tokens;
         let thinking = config.api.thinking;
 
+        // Load project rules from .miyabirules
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let loader = RulesLoader::new(cwd);
+        let rules = match loader.load() {
+            Ok(Some(rules)) => {
+                let count = rules.rules.len();
+                if count > 0 {
+                    view.notifications.info(
+                        "Rules Loaded",
+                        format!("{} project rules active", count),
+                    );
+                }
+                Some(rules)
+            }
+            Ok(None) => None,
+            Err(e) => {
+                view.notifications.error("Rules Error", format!("Failed to load: {}", e));
+                None
+            }
+        };
+
         Self {
             should_quit: false,
             view,
@@ -151,7 +175,13 @@ impl App {
             model_name,
             max_tokens,
             thinking,
+            rules,
         }
+    }
+
+    /// Get the loaded project rules
+    pub fn get_rules(&self) -> Option<&MiyabiRules> {
+        self.rules.as_ref()
     }
 
     /// Toggle agent mode
@@ -241,18 +271,106 @@ impl App {
                                 self.view.notifications.panel.push(notification);
                             }
                             ViewAction::Copy(text) => {
-                                // TODO: Implement clipboard support
-                                self.view
-                                    .notifications
-                                    .info("Copied", format!("{} chars", text.len()));
+                                #[cfg(feature = "clipboard")]
+                                {
+                                    match arboard::Clipboard::new() {
+                                        Ok(mut clipboard) => {
+                                            if let Err(e) = clipboard.set_text(&text) {
+                                                self.view
+                                                    .notifications
+                                                    .error("Clipboard Error", e.to_string());
+                                            } else {
+                                                self.view
+                                                    .notifications
+                                                    .info("Copied", format!("{} chars", text.len()));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            self.view
+                                                .notifications
+                                                .error("Clipboard Error", e.to_string());
+                                        }
+                                    }
+                                }
+                                #[cfg(not(feature = "clipboard"))]
+                                {
+                                    self.view
+                                        .notifications
+                                        .warning("Clipboard", "Clipboard feature not enabled");
+                                    let _ = text; // Suppress unused warning
+                                }
                             }
                             ViewAction::OpenFile(path) => {
-                                // TODO: Implement file opening
-                                self.view.notifications.info("Open File", &path);
+                                // Open file with system default application
+                                #[cfg(target_os = "macos")]
+                                let result = std::process::Command::new("open").arg(&path).spawn();
+                                #[cfg(target_os = "linux")]
+                                let result = std::process::Command::new("xdg-open").arg(&path).spawn();
+                                #[cfg(target_os = "windows")]
+                                let result = std::process::Command::new("cmd")
+                                    .args(["/C", "start", "", &path])
+                                    .spawn();
+
+                                match result {
+                                    Ok(_) => {
+                                        self.view.notifications.info("Opened", &path);
+                                    }
+                                    Err(e) => {
+                                        self.view
+                                            .notifications
+                                            .error("Open Error", e.to_string());
+                                    }
+                                }
                             }
                             ViewAction::ResumeSession(session_id) => {
-                                // TODO: Implement session resume
-                                self.view.notifications.info("Resume Session", &session_id);
+                                match self.load_session(&session_id) {
+                                    Ok(()) => {
+                                        // Rebuild UI from loaded conversation
+                                        self.view.history.clear();
+                                        let timestamp =
+                                            chrono::Local::now().format("%H:%M").to_string();
+
+                                        // Replay conversation into UI
+                                        for msg in &self.conversation {
+                                            match msg.role {
+                                                miyabi_core::anthropic::Role::User => {
+                                                    if let Some(ContentBlock::Text { text }) =
+                                                        msg.content.first()
+                                                    {
+                                                        self.view.push_message(Box::new(
+                                                            UserMessageCell {
+                                                                content: text.clone(),
+                                                                timestamp: timestamp.clone(),
+                                                            },
+                                                        ));
+                                                    }
+                                                }
+                                                miyabi_core::anthropic::Role::Assistant => {
+                                                    if let Some(ContentBlock::Text { text }) =
+                                                        msg.content.first()
+                                                    {
+                                                        let mut cell = AssistantMessageCell::new(
+                                                            timestamp.clone(),
+                                                        );
+                                                        cell.set_content(text);
+                                                        cell.set_complete();
+                                                        self.view.push_message(Box::new(cell));
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        self.view.notifications.success(
+                                            "Session Resumed",
+                                            format!("{} messages loaded", self.conversation.len()),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        self.view
+                                            .notifications
+                                            .error("Resume Error", e.to_string());
+                                    }
+                                }
                             }
                             ViewAction::ToggleAgentMode => {
                                 self.toggle_agent_mode();
@@ -815,7 +933,7 @@ impl App {
         match client
             .message_stream(
                 self.conversation.clone(),
-                Some("You are a helpful AI assistant. Be concise and clear.".to_string()),
+                self.system_prompt.clone(),
                 None,
                 None,
             )
