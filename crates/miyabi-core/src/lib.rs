@@ -16,6 +16,7 @@ pub use anthropic::{
     AnthropicClient, AnthropicError, Message, Role, ContentBlock,
     MessagesRequest, MessagesResponse, StreamEvent, StopReason, Usage,
     Tool as ApiTool,  // Anthropic API tool definition format
+    RetryConfig,  // Retry configuration for API requests
 };
 pub use tool::{
     Tool as ToolTrait, ToolRegistry, ToolError, ToolOutput, ToolResult, ParameterDef,

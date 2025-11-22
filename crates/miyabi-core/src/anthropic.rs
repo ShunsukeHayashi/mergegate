@@ -23,6 +23,70 @@ const MAX_RETRIES: u32 = 3;
 /// Base delay for exponential backoff (in milliseconds)
 const RETRY_BASE_DELAY_MS: u64 = 1000;
 
+/// Retry configuration for API requests
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts
+    pub max_retries: u32,
+    /// Base delay for exponential backoff (milliseconds)
+    pub base_delay_ms: u64,
+    /// Maximum delay cap (milliseconds)
+    pub max_delay_ms: u64,
+    /// Whether to retry on network errors
+    pub retry_on_network_error: bool,
+    /// Whether to retry on rate limits
+    pub retry_on_rate_limit: bool,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: MAX_RETRIES,
+            base_delay_ms: RETRY_BASE_DELAY_MS,
+            max_delay_ms: 60_000, // 1 minute max
+            retry_on_network_error: true,
+            retry_on_rate_limit: true,
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Create a new retry config
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set maximum retries
+    pub fn with_max_retries(mut self, max: u32) -> Self {
+        self.max_retries = max;
+        self
+    }
+
+    /// Set base delay
+    pub fn with_base_delay_ms(mut self, delay: u64) -> Self {
+        self.base_delay_ms = delay;
+        self
+    }
+
+    /// Set maximum delay cap
+    pub fn with_max_delay_ms(mut self, delay: u64) -> Self {
+        self.max_delay_ms = delay;
+        self
+    }
+
+    /// Disable retries
+    pub fn no_retries(mut self) -> Self {
+        self.max_retries = 0;
+        self
+    }
+
+    /// Calculate delay for attempt (exponential backoff)
+    pub fn delay_for_attempt(&self, attempt: u32) -> u64 {
+        let delay = self.base_delay_ms * 2u64.pow(attempt);
+        delay.min(self.max_delay_ms)
+    }
+}
+
 /// Anthropic API errors
 #[derive(Error, Debug)]
 pub enum AnthropicError {
@@ -555,5 +619,91 @@ mod tests {
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains("\"type\":\"text\""));
         assert!(json.contains("\"text\":\"Hello\""));
+    }
+
+    #[test]
+    fn test_retry_config_default() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.base_delay_ms, 1000);
+        assert_eq!(config.max_delay_ms, 60_000);
+        assert!(config.retry_on_network_error);
+        assert!(config.retry_on_rate_limit);
+    }
+
+    #[test]
+    fn test_retry_config_builder() {
+        let config = RetryConfig::new()
+            .with_max_retries(5)
+            .with_base_delay_ms(500);
+
+        assert_eq!(config.max_retries, 5);
+        assert_eq!(config.base_delay_ms, 500);
+    }
+
+    #[test]
+    fn test_retry_config_no_retries() {
+        let config = RetryConfig::new().no_retries();
+        assert_eq!(config.max_retries, 0);
+    }
+
+    #[test]
+    fn test_retry_delay_calculation() {
+        let config = RetryConfig::new().with_base_delay_ms(1000);
+
+        // Exponential backoff: 1000, 2000, 4000, 8000...
+        assert_eq!(config.delay_for_attempt(0), 1000);
+        assert_eq!(config.delay_for_attempt(1), 2000);
+        assert_eq!(config.delay_for_attempt(2), 4000);
+        assert_eq!(config.delay_for_attempt(3), 8000);
+    }
+
+    #[test]
+    fn test_retry_delay_capped_at_max() {
+        let config = RetryConfig::new()
+            .with_base_delay_ms(1000)
+            .with_max_delay_ms(5000);
+
+        // Should be capped at 5000ms
+        assert_eq!(config.delay_for_attempt(0), 1000);
+        assert_eq!(config.delay_for_attempt(1), 2000);
+        assert_eq!(config.delay_for_attempt(2), 4000);
+        assert_eq!(config.delay_for_attempt(3), 5000); // capped
+        assert_eq!(config.delay_for_attempt(10), 5000); // still capped
+    }
+
+    #[test]
+    fn test_error_types() {
+        let auth_err = AnthropicError::AuthError("invalid key".to_string());
+        assert!(auth_err.to_string().contains("invalid key"));
+
+        let rate_err = AnthropicError::RateLimited { retry_after_ms: 5000 };
+        assert!(rate_err.to_string().contains("5000"));
+
+        let api_err = AnthropicError::ApiError {
+            status: 500,
+            message: "Internal error".to_string(),
+        };
+        assert!(api_err.to_string().contains("500"));
+        assert!(api_err.to_string().contains("Internal error"));
+    }
+
+    #[test]
+    fn test_tool_definition() {
+        let tool = Tool {
+            name: "read".to_string(),
+            description: "Read a file".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"}
+                },
+                "required": ["path"]
+            }),
+        };
+
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains("\"name\":\"read\""));
+        assert!(json.contains("\"description\":\"Read a file\""));
     }
 }
