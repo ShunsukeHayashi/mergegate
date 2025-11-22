@@ -46,3 +46,4 @@ serde_json = { workspace = true }
 # Utilities
 chrono = { workspace = true }
 once_cell = { workspace = true }
+uuid = { workspace = true }
