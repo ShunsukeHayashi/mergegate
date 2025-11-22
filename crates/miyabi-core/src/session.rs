@@ -343,4 +343,124 @@ mod tests {
         assert_eq!(metadata.message_count, 1);
         assert_eq!(metadata.tokens_used, 100);
     }
+
+    #[test]
+    fn test_session_with_id() {
+        let session = Session::with_id("custom-id", "Custom Session");
+        assert_eq!(session.id, "custom-id");
+        assert_eq!(session.title, "Custom Session");
+    }
+
+    #[test]
+    fn test_session_with_system_prompt() {
+        let session = Session::new("Test")
+            .system_prompt("You are a helpful assistant");
+        assert_eq!(session.system_prompt, Some("You are a helpful assistant".to_string()));
+    }
+
+    #[test]
+    fn test_session_tags() {
+        let mut session = Session::new("Test");
+        session.tags.push("development".to_string());
+        session.tags.push("rust".to_string());
+        assert_eq!(session.tags.len(), 2);
+    }
+
+    #[test]
+    fn test_session_preview_truncation() {
+        let mut session = Session::new("Test");
+        let long_message = "A".repeat(200);
+        session.push_message(Message::user(&long_message));
+        let preview = session.preview();
+        assert_eq!(preview.len(), 100);
+    }
+
+    #[test]
+    fn test_session_preview_empty() {
+        let session = Session::new("Test");
+        assert!(session.preview().is_empty());
+    }
+
+    #[test]
+    fn test_storage_default_dir() {
+        let storage = SessionStorage::default_dir();
+        // Should create storage without panic
+        assert!(storage.sessions_dir.ends_with("sessions"));
+    }
+
+    #[test]
+    fn test_storage_exists() {
+        let dir = TempDir::new().unwrap();
+        let storage = SessionStorage::new(dir.path());
+
+        let session = Session::new("Test");
+        assert!(!storage.exists(&session.id));
+
+        storage.save(&session).unwrap();
+        assert!(storage.exists(&session.id));
+    }
+
+    #[test]
+    fn test_storage_list_metadata() {
+        let dir = TempDir::new().unwrap();
+        let storage = SessionStorage::new(dir.path());
+
+        let mut session = Session::new("Test");
+        session.push_message(Message::user("Hello"));
+        storage.save(&session).unwrap();
+
+        let metadata_list = storage.list_metadata().unwrap();
+        assert_eq!(metadata_list.len(), 1);
+        assert_eq!(metadata_list[0].message_count, 1);
+    }
+
+    #[test]
+    fn test_session_builder_pattern() {
+        let session = Session::new("Builder Test")
+            .model("claude-3-opus")
+            .system_prompt("Be concise");
+
+        assert_eq!(session.title, "Builder Test");
+        assert_eq!(session.model, "claude-3-opus");
+        assert_eq!(session.system_prompt, Some("Be concise".to_string()));
+    }
+
+    #[test]
+    fn test_storage_load_nonexistent() {
+        let dir = TempDir::new().unwrap();
+        let storage = SessionStorage::new(dir.path());
+
+        let result = storage.load("nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_storage_delete_nonexistent() {
+        let dir = TempDir::new().unwrap();
+        let storage = SessionStorage::new(dir.path());
+
+        // Should not error when deleting nonexistent
+        let result = storage.delete("nonexistent-id");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_metadata_preview() {
+        let mut session = Session::new("Test");
+        session.push_message(Message::user("Preview text"));
+
+        let metadata: SessionMetadata = session.into();
+        assert_eq!(metadata.preview, "Preview text");
+    }
+
+    #[test]
+    fn test_session_update_timestamp() {
+        let mut session = Session::new("Test");
+        let initial_updated = session.updated_at;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        session.push_message(Message::user("Update"));
+
+        assert!(session.updated_at > initial_updated);
+    }
 }
