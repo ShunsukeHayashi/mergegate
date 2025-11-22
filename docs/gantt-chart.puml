@@ -1,0 +1,118 @@
+@startgantt miyabi-cli-gantt
+
+title miyabi-cli-standalone - Project Timeline
+project starts 2025-11-25
+
+' === Milestones ===
+[v0.2.0 TUI Foundation] happens at 2025-12-06
+[v1.0.0 Production Ready] happens at 2025-12-20
+
+' === Sprint 1: Foundation ===
+[Sprint 1] as [S1] lasts 5 days and is colored in LightBlue
+[S1] starts 2025-11-25
+
+-- Sprint 1: Foundation --
+
+[#10 Core Structure] as [T10] lasts 1 day
+[T10] starts at [S1]'s start
+[T10] is colored in Coral
+
+[#15 Diff Core] as [T15] lasts 1 day
+[T15] starts at [S1]'s start
+[T15] is colored in Orange
+
+[#19 API Client] as [T19] lasts 2 days
+[T19] starts at [S1]'s start
+[T19] is colored in Coral
+
+[#24 Tool Trait] as [T24] lasts 2 days
+[T24] starts at [S1]'s start
+[T24] is colored in Coral
+
+' === Sprint 2: Parser & State ===
+[Sprint 2] as [S2] lasts 5 days and is colored in LightGreen
+[S2] starts at [S1]'s end
+
+-- Sprint 2: Parser & State --
+
+[#11 Incremental Parser] as [T11] lasts 2 days
+[T11] starts at [T10]'s end
+[T11] is colored in Coral
+
+[#16 Diff Visualization] as [T16] lasts 2 days
+[T16] starts at [T15]'s end
+[T16] is colored in Orange
+
+[#20 Conversation State] as [T20] lasts 2 days
+[T20] starts at [T19]'s end
+[T20] is colored in Coral
+
+[#25 File Tools] as [T25] lasts 2 days
+[T25] starts at [T24]'s end
+[T25] is colored in Coral
+
+' === Sprint 3: Integration ===
+[Sprint 3] as [S3] lasts 5 days and is colored in LightYellow
+[S3] starts at [S2]'s end
+
+-- Sprint 3: Integration --
+
+[#12 Code Blocks] as [T12] lasts 1 day
+[T12] starts at [T11]'s end
+[T12] is colored in Orange
+
+[#17 Syntax in Diff] as [T17] lasts 1 day
+[T17] starts at [T16]'s end
+[T17] is colored in Yellow
+
+[#21 Token Management] as [T21] lasts 2 days
+[T21] starts at [T20]'s end
+[T21] is colored in Orange
+
+[#22 Tool Definitions] as [T22] lasts 2 days
+[T22] starts at [T20]'s end
+[T22] is colored in Coral
+
+[#26 Bash Tool] as [T26] lasts 2 days
+[T26] starts at [T25]'s end
+[T26] is colored in Coral
+
+' === Sprint 4: Polish ===
+[Sprint 4] as [S4] lasts 5 days and is colored in LightCoral
+[S4] starts at [S3]'s end
+
+-- Sprint 4: Polish --
+
+[#13 Cursor Tracking] as [T13] lasts 1 day
+[T13] starts at [T12]'s end
+[T13] is colored in Yellow
+
+[#14 Tests] as [T14] lasts 1 day
+[T14] starts at [T13]'s end
+[T14] is colored in Yellow
+
+[#18 Navigation] as [T18] lasts 1 day
+[T18] starts at [T17]'s end
+[T18] is colored in Yellow
+
+[#23 Rate Limiting] as [T23] lasts 1 day
+[T23] starts at [T22]'s end
+[T23] is colored in Yellow
+
+[#27 Search Tools] as [T27] lasts 2 days
+[T27] starts at [T26]'s end
+[T27] is colored in Orange
+
+[#28 Result Formatting] as [T28] lasts 1 day
+[T28] starts at [T27]'s end
+[T28] is colored in Yellow
+
+' Critical path highlighting
+[T19] is colored in Red
+[T20] is colored in Red
+[T22] is colored in Red
+[T24] is colored in Red
+[T25] is colored in Red
+[T26] is colored in Red
+
+@endgantt

@@ -1,0 +1,104 @@
+@startuml miyabi-cli-wbs
+
+!theme plain
+title miyabi-cli-standalone - Critical Path & WBS
+
+' Define colors
+!$critical = "#FF6B6B"
+!$high = "#FFA94D"
+!$medium = "#69DB7C"
+!$low = "#74C0FC"
+
+' Milestones
+rectangle "v0.2.0\nTUI Foundation" as M1 #LightBlue
+rectangle "v0.3.0\nChat Composer" as M2 #LightGreen
+rectangle "v0.4.0\nApproval & Nav" as M3 #LightYellow
+rectangle "v1.0.0\nProduction" as M4 #LightCoral
+
+' === Stream A: TUI Rendering ===
+package "Stream A: TUI Rendering" {
+    rectangle "#10\nCore Structure" as T10 $critical
+    rectangle "#11\nParser" as T11 $critical
+    rectangle "#12\nCode Blocks" as T12 $high
+    rectangle "#13\nCursor" as T13 $medium
+    rectangle "#14\nTests" as T14 $medium
+
+    rectangle "#15\nDiff Core" as T15 $high
+    rectangle "#16\nVisualization" as T16 $high
+    rectangle "#17\nSyntax" as T17 $medium
+    rectangle "#18\nNavigation" as T18 $medium
+}
+
+' === Stream B: LLM Integration ===
+package "Stream B: LLM Integration" #FFE4E1 {
+    rectangle "#19\nAPI Client" as T19 $critical
+    rectangle "#20\nConversation" as T20 $critical
+    rectangle "#21\nTokens" as T21 $high
+    rectangle "#22\nTool Defs" as T22 $critical
+    rectangle "#23\nRate Limit" as T23 $medium
+}
+
+' === Stream C: Tool System ===
+package "Stream C: Tool System" #E8F5E9 {
+    rectangle "#24\nTool Trait" as T24 $critical
+    rectangle "#25\nFile Tools" as T25 $critical
+    rectangle "#26\nBash Tool" as T26 $critical
+    rectangle "#27\nSearch" as T27 $high
+    rectangle "#28\nFormatting" as T28 $medium
+}
+
+' Dependencies - Stream A
+T10 --> T11
+T11 --> T12
+T12 --> T13
+T13 --> T14
+
+T15 --> T16
+T16 --> T17
+T17 --> T18
+
+' Dependencies - Stream B (CRITICAL PATH)
+T19 --> T20 : **CRITICAL**
+T20 --> T21
+T20 --> T22 : **CRITICAL**
+T19 --> T23
+
+' Dependencies - Stream C
+T24 --> T25 : **CRITICAL**
+T25 --> T26 : **CRITICAL**
+T26 --> T27
+T27 --> T28
+
+' Cross-stream dependencies
+T22 ..> T24 : "requires"
+
+' Milestone connections
+T14 --> M1
+T18 --> M1
+M1 --> M2
+M2 --> M3
+T23 --> M4
+T28 --> M4
+
+' Legend
+legend right
+  |= Color |= Priority |
+  | <$critical> | P0 Critical |
+  | <$high> | P1 High |
+  | <$medium> | P2 Medium |
+  | <$low> | P3 Low |
+endlegend
+
+note bottom of T19
+  **Critical Path Start**
+  API Client is the foundation
+  for all LLM functionality
+end note
+
+note bottom of T28
+  **Critical Path End**
+  Result formatting completes
+  the tool system
+end note
+
+@enduml

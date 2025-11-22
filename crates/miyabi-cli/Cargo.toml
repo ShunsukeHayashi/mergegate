@@ -1,0 +1,36 @@
+[package]
+name = "miyabi-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Miyabi CLI - Main command-line interface"
+
+[[bin]]
+name = "miyabi"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace crates
+miyabi-core = { path = "../miyabi-core" }
+miyabi-tui = { path = "../miyabi-tui" }
+
+# CLI
+clap = { workspace = true }
+
+# TUI Framework
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true }
+
+# Error Handling
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

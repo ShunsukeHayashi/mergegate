@@ -1,0 +1,45 @@
+[package]
+name = "miyabi-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Miyabi TUI - Terminal User Interface following Codex patterns"
+
+[[bin]]
+name = "miyabi-tui"
+path = "src/main.rs"
+
+[lib]
+name = "miyabi_tui"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+miyabi-core = { path = "../miyabi-core" }
+
+# TUI Framework
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+
+# Text Processing
+textwrap = { workspace = true }
+unicode-width = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Error Handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
