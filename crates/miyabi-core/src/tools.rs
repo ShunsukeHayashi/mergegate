@@ -5,6 +5,8 @@
 
 use crate::tool::{ParameterDef, Tool, ToolError, ToolOutput, ToolResult};
 use async_trait::async_trait;
+use glob::glob;
+use regex::Regex;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -563,13 +565,290 @@ impl Tool for BashTool {
     }
 }
 
+/// Glob tool for finding files matching patterns
+///
+/// Finds files in the filesystem that match glob patterns.
+#[derive(Debug, Clone)]
+pub struct GlobTool {
+    /// Base directory for relative patterns
+    base_dir: PathBuf,
+    /// Maximum number of results to return
+    max_results: usize,
+}
+
+impl Default for GlobTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GlobTool {
+    /// Create a new glob tool
+    pub fn new() -> Self {
+        Self {
+            base_dir: std::env::current_dir().unwrap_or_default(),
+            max_results: 1000,
+        }
+    }
+
+    /// Create with a specific base directory
+    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            base_dir: base_dir.into(),
+            max_results: 1000,
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for GlobTool {
+    fn name(&self) -> &str {
+        "glob"
+    }
+
+    fn description(&self) -> &str {
+        "Find files matching a glob pattern"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("pattern", "Glob pattern to match (e.g., **/*.rs, src/**/*.ts)"),
+            ParameterDef::optional_string("path", "Base directory to search in"),
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let pattern = input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("pattern is required".to_string()))?;
+
+        let base_path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.base_dir.clone());
+
+        debug!("Glob search: {} in {:?}", pattern, base_path);
+
+        // Construct full pattern
+        let full_pattern = if pattern.starts_with('/') {
+            pattern.to_string()
+        } else {
+            format!("{}/{}", base_path.display(), pattern)
+        };
+
+        // Execute glob
+        let entries = glob(&full_pattern).map_err(|e| {
+            ToolError::InvalidInput(format!("Invalid glob pattern: {}", e))
+        })?;
+
+        let mut matches = Vec::new();
+        for entry in entries {
+            match entry {
+                Ok(path) => {
+                    if matches.len() >= self.max_results {
+                        break;
+                    }
+                    matches.push(path.display().to_string());
+                }
+                Err(e) => {
+                    warn!("Glob error for entry: {}", e);
+                }
+            }
+        }
+
+        Ok(ToolOutput::success(serde_json::json!({
+            "pattern": pattern,
+            "matches": matches,
+            "count": matches.len(),
+            "truncated": matches.len() >= self.max_results
+        })))
+    }
+}
+
+/// Grep tool for searching file contents
+///
+/// Searches for patterns in file contents using regex.
+#[derive(Debug, Clone)]
+pub struct GrepTool {
+    /// Base directory for relative paths
+    base_dir: PathBuf,
+    /// Maximum number of matches to return
+    max_matches: usize,
+    /// Maximum file size to search (in bytes)
+    max_file_size: u64,
+}
+
+impl Default for GrepTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GrepTool {
+    /// Create a new grep tool
+    pub fn new() -> Self {
+        Self {
+            base_dir: std::env::current_dir().unwrap_or_default(),
+            max_matches: 100,
+            max_file_size: 10 * 1024 * 1024, // 10MB
+        }
+    }
+
+    /// Create with a specific base directory
+    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            base_dir: base_dir.into(),
+            max_matches: 100,
+            max_file_size: 10 * 1024 * 1024,
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for GrepTool {
+    fn name(&self) -> &str {
+        "grep"
+    }
+
+    fn description(&self) -> &str {
+        "Search for a pattern in files using regex"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("pattern", "Regex pattern to search for"),
+            ParameterDef::required_string("path", "File or directory to search in"),
+            ParameterDef::optional_string("glob", "Glob pattern to filter files (e.g., *.rs)"),
+            ParameterDef {
+                name: "case_insensitive".to_string(),
+                param_type: "boolean".to_string(),
+                description: "Case insensitive search".to_string(),
+                required: false,
+                default: Some(Value::Bool(false)),
+                enum_values: None,
+            },
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let pattern = input
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("pattern is required".to_string()))?;
+
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("path is required".to_string()))?;
+
+        let glob_pattern = input.get("glob").and_then(|v| v.as_str());
+
+        let case_insensitive = input
+            .get("case_insensitive")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        debug!("Grep search: {} in {} (case_insensitive: {})", pattern, path, case_insensitive);
+
+        // Build regex
+        let regex_pattern = if case_insensitive {
+            format!("(?i){}", pattern)
+        } else {
+            pattern.to_string()
+        };
+
+        let regex = Regex::new(&regex_pattern).map_err(|e| {
+            ToolError::InvalidInput(format!("Invalid regex pattern: {}", e))
+        })?;
+
+        let search_path = if Path::new(path).is_absolute() {
+            PathBuf::from(path)
+        } else {
+            self.base_dir.join(path)
+        };
+
+        let mut results = Vec::new();
+
+        // Collect files to search
+        let files_to_search = if search_path.is_file() {
+            vec![search_path]
+        } else if search_path.is_dir() {
+            // Use glob to find files
+            let glob_str = if let Some(g) = glob_pattern {
+                format!("{}/**/{}", search_path.display(), g)
+            } else {
+                format!("{}/**/*", search_path.display())
+            };
+
+            glob(&glob_str)
+                .map_err(|e| ToolError::ExecutionFailed(format!("Glob error: {}", e)))?
+                .filter_map(|entry| entry.ok())
+                .filter(|p| p.is_file())
+                .collect()
+        } else {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Path does not exist: {}",
+                path
+            )));
+        };
+
+        // Search files
+        for file_path in files_to_search {
+            if results.len() >= self.max_matches {
+                break;
+            }
+
+            // Check file size
+            let metadata = match std::fs::metadata(&file_path) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+
+            if metadata.len() > self.max_file_size {
+                continue;
+            }
+
+            // Read and search file
+            let content = match std::fs::read_to_string(&file_path) {
+                Ok(c) => c,
+                Err(_) => continue, // Skip binary files
+            };
+
+            for (line_num, line) in content.lines().enumerate() {
+                if results.len() >= self.max_matches {
+                    break;
+                }
+
+                if regex.is_match(line) {
+                    results.push(serde_json::json!({
+                        "file": file_path.display().to_string(),
+                        "line": line_num + 1,
+                        "content": line
+                    }));
+                }
+            }
+        }
+
+        Ok(ToolOutput::success(serde_json::json!({
+            "pattern": pattern,
+            "matches": results,
+            "count": results.len(),
+            "truncated": results.len() >= self.max_matches
+        })))
+    }
+}
+
 /// Create a tool registry with all file tools
 pub fn create_file_tool_registry() -> crate::tool::ToolRegistry {
     let mut registry = crate::tool::ToolRegistry::new();
     registry
         .register(ReadTool::new())
         .register(WriteTool::new())
-        .register(EditTool::new());
+        .register(EditTool::new())
+        .register(GlobTool::new())
+        .register(GrepTool::new());
     registry
 }
 
@@ -580,7 +859,9 @@ pub fn create_standard_tool_registry() -> crate::tool::ToolRegistry {
         .register(ReadTool::new())
         .register(WriteTool::new())
         .register(EditTool::new())
-        .register(BashTool::new());
+        .register(BashTool::new())
+        .register(GlobTool::new())
+        .register(GrepTool::new());
     registry
 }
 
@@ -752,10 +1033,12 @@ mod tests {
     #[test]
     fn test_create_file_tool_registry() {
         let registry = create_file_tool_registry();
-        assert_eq!(registry.len(), 3);
+        assert_eq!(registry.len(), 5);
         assert!(registry.contains("read"));
         assert!(registry.contains("write"));
         assert!(registry.contains("edit"));
+        assert!(registry.contains("glob"));
+        assert!(registry.contains("grep"));
     }
 
     #[test]
@@ -860,8 +1143,8 @@ mod tests {
     fn test_standard_registry_has_all_tools() {
         let registry = create_standard_tool_registry();
 
-        // Should have all 4 tools
-        assert_eq!(registry.len(), 4);
+        // Should have all 6 tools
+        assert_eq!(registry.len(), 6);
 
         // Check each tool exists
         let api_tools = registry.to_anthropic_tools();
@@ -871,6 +1154,8 @@ mod tests {
         assert!(tool_names.contains(&"write"));
         assert!(tool_names.contains(&"edit"));
         assert!(tool_names.contains(&"bash"));
+        assert!(tool_names.contains(&"glob"));
+        assert!(tool_names.contains(&"grep"));
     }
 
     #[test]
@@ -941,10 +1226,138 @@ mod tests {
     #[test]
     fn test_create_standard_tool_registry() {
         let registry = create_standard_tool_registry();
-        assert_eq!(registry.len(), 4);
+        assert_eq!(registry.len(), 6);
         assert!(registry.contains("read"));
         assert!(registry.contains("write"));
         assert!(registry.contains("edit"));
         assert!(registry.contains("bash"));
+        assert!(registry.contains("glob"));
+        assert!(registry.contains("grep"));
+    }
+
+    #[tokio::test]
+    async fn test_glob_tool_basic() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test1.txt", "content");
+        create_temp_file(&dir, "test2.txt", "content");
+
+        let tool = GlobTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "*.txt"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.success);
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 2); // test1.txt and test2.txt
+    }
+
+    #[tokio::test]
+    async fn test_glob_tool_recursive() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "root.rs", "fn main() {}");
+        let sub_dir = dir.path().join("src");
+        std::fs::create_dir(&sub_dir).unwrap();
+        let sub_path = sub_dir.join("lib.rs");
+        std::fs::write(&sub_path, "pub fn test() {}").unwrap();
+
+        let tool = GlobTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "**/*.rs"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 2); // root.rs and src/lib.rs
+    }
+
+    #[tokio::test]
+    async fn test_grep_tool_basic() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "Line 1\nLine 2 with pattern\nLine 3");
+
+        let tool = GrepTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "pattern",
+                "path": "test.txt"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.success);
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 1);
+
+        let matches = output.content["matches"].as_array().unwrap();
+        assert_eq!(matches[0]["line"], 2);
+        assert!(matches[0]["content"].as_str().unwrap().contains("pattern"));
+    }
+
+    #[tokio::test]
+    async fn test_grep_tool_regex() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "foo123\nbar456\nfoo789");
+
+        let tool = GrepTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "foo\\d+",
+                "path": "test.txt"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 2); // foo123 and foo789
+    }
+
+    #[tokio::test]
+    async fn test_grep_tool_case_insensitive() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "Hello\nhello\nHELLO");
+
+        let tool = GrepTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "hello",
+                "path": "test.txt",
+                "case_insensitive": true
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 3);
+    }
+
+    #[tokio::test]
+    async fn test_grep_tool_directory_search() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "file1.txt", "pattern here");
+        create_temp_file(&dir, "file2.txt", "no match");
+        create_temp_file(&dir, "file3.txt", "pattern again");
+
+        let tool = GrepTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "pattern": "pattern",
+                "path": "."
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        let count = output.content["count"].as_u64().unwrap();
+        assert_eq!(count, 2);
     }
 }
