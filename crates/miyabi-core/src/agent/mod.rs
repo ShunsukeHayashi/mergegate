@@ -8,6 +8,9 @@ mod core;
 mod events;
 mod executor;
 
+#[cfg(test)]
+mod tests;
+
 pub use approval::{
     ApprovalCallback, ApprovalDecision, ApprovalRequest, AutoApproveAll, ChannelApprover,
     RejectHighRisk,
