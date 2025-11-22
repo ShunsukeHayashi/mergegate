@@ -1,33 +1,20 @@
 //! Main TUI Application
 
-use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
-    Frame,
-};
-use crossterm::event::{KeyCode, KeyModifiers};
 use futures::StreamExt;
 
 use crate::event::{Event, EventHandler};
 use crate::history_cell::{
-    HistoryCell, UserMessageCell, AssistantMessageCell, SystemMessageCell, SystemMessageType,
+    UserMessageCell, AssistantMessageCell, SystemMessageCell, SystemMessageType,
 };
+use crate::views::{MainView, ViewAction};
 use miyabi_core::anthropic::{AnthropicClient, Message, StreamEvent};
 
 /// Main application state
 pub struct App {
     /// Whether the app should quit
     pub should_quit: bool,
-    /// Current input buffer
-    pub input: String,
-    /// Chat history cells
-    pub cells: Vec<Box<dyn HistoryCell>>,
-    /// Scroll position
-    pub scroll: u16,
-    /// Maximum scroll
-    pub max_scroll: u16,
+    /// Main view with all UI components
+    pub view: MainView,
     /// Anthropic API client
     client: Option<AnthropicClient>,
     /// Conversation history for API calls
@@ -48,23 +35,28 @@ impl App {
             .map(|c| c.with_max_tokens(8192));
 
         let welcome_message = if client.is_some() {
-            "Welcome to Miyabi CLI! Type your message and press Enter."
+            "Welcome to Miyabi CLI! Type your message and press Enter. Press Ctrl+P for commands, F1 for help."
         } else {
-            "⚠ ANTHROPIC_API_KEY not set. Running in demo mode."
+            "⚠ ANTHROPIC_API_KEY not set. Running in demo mode. Press Ctrl+P for commands."
         };
 
-        let welcome_cell: Box<dyn HistoryCell> = Box::new(SystemMessageCell {
+        let mut view = MainView::new();
+
+        // Add welcome message
+        view.push_message(Box::new(SystemMessageCell {
             content: welcome_message.to_string(),
             timestamp: timestamp.clone(),
             message_type: if client.is_some() { SystemMessageType::Info } else { SystemMessageType::Warning },
-        });
+        }));
+
+        // Set model name if client available
+        if client.is_some() {
+            view = view.with_model("claude-sonnet-4-20250514");
+        }
 
         Self {
             should_quit: false,
-            input: String::new(),
-            cells: vec![welcome_cell],
-            scroll: 0,
-            max_scroll: 0,
+            view,
             client,
             conversation: Vec::new(),
             is_streaming: false,
@@ -79,49 +71,36 @@ impl App {
         let mut events = EventHandler::new(100);
 
         loop {
-            terminal.draw(|f| self.draw(f))?;
+            terminal.draw(|f| self.view.render(f))?;
 
             if let Some(event) = events.next().await {
                 match event {
                     Event::Key(key) => {
-                        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-                            self.should_quit = true;
-                        } else {
-                            match key.code {
-                                KeyCode::Enter => {
-                                    if !self.input.is_empty() && !self.is_streaming {
-                                        self.send_message().await;
-                                    }
-                                }
-                                KeyCode::Char(c) => {
-                                    self.input.push(c);
-                                }
-                                KeyCode::Backspace => {
-                                    self.input.pop();
-                                }
-                                KeyCode::Esc => {
-                                    self.should_quit = true;
-                                }
-                                KeyCode::Up => {
-                                    self.scroll = self.scroll.saturating_sub(1);
-                                }
-                                KeyCode::Down => {
-                                    if self.scroll < self.max_scroll {
-                                        self.scroll += 1;
-                                    }
-                                }
-                                KeyCode::PageUp => {
-                                    self.scroll = self.scroll.saturating_sub(10);
-                                }
-                                KeyCode::PageDown => {
-                                    self.scroll = (self.scroll + 10).min(self.max_scroll);
-                                }
-                                _ => {}
+                        let action = self.view.handle_key(key);
+                        match action {
+                            ViewAction::Quit => {
+                                self.should_quit = true;
                             }
+                            ViewAction::SendMessage(message) => {
+                                if !self.is_streaming {
+                                    self.send_message(message).await;
+                                }
+                            }
+                            ViewAction::ExecuteCommand(cmd) => {
+                                self.execute_command(&cmd).await;
+                            }
+                            ViewAction::Cancel => {
+                                // Cancel current streaming
+                                self.is_streaming = false;
+                                self.view.set_streaming(false);
+                            }
+                            _ => {}
                         }
                     }
                     Event::Resize(_, _) => {}
-                    Event::Tick => {}
+                    Event::Tick => {
+                        self.view.tick();
+                    }
                     Event::Mouse(_) => {}
                 }
             }
@@ -134,94 +113,25 @@ impl App {
         Ok(())
     }
 
-    /// Draw the UI
-    fn draw(&mut self, frame: &mut Frame) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),     // Header
-                Constraint::Min(1),        // Chat area
-                Constraint::Length(3),     // Input
-            ])
-            .split(frame.area());
-
-        self.draw_header(frame, chunks[0]);
-        self.draw_chat(frame, chunks[1]);
-        self.draw_input(frame, chunks[2]);
-    }
-
-    fn draw_header(&self, frame: &mut Frame, area: Rect) {
-        let title = Paragraph::new(Line::from(vec![
-            Span::styled(" Miyabi ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::styled("CLI", Style::default().fg(Color::Cyan)),
-        ]))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(86, 95, 137))));
-
-        frame.render_widget(title, area);
-    }
-
-    fn draw_chat(&mut self, frame: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Rgb(86, 95, 137)))
-            .title(Span::styled(" Chat ", Style::default().fg(Color::Rgb(192, 202, 245))));
-
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-
-        // Render cells
-        let mut lines: Vec<Line<'static>> = Vec::new();
-        let width = inner.width.saturating_sub(4);
-
-        for cell in &self.cells {
-            lines.push(Line::from(""));
-            lines.extend(cell.render(width));
+    /// Execute a command
+    async fn execute_command(&mut self, cmd: &str) {
+        match cmd {
+            "quit" | "exit" => self.should_quit = true,
+            "clear" => {
+                self.view.history.clear();
+                self.conversation.clear();
+            }
+            "help" => self.view.show_help(),
+            _ => {}
         }
-
-        let total_lines = lines.len() as u16;
-        self.max_scroll = total_lines.saturating_sub(inner.height);
-
-        let paragraph = Paragraph::new(lines)
-            .scroll((self.scroll, 0));
-
-        frame.render_widget(paragraph, inner);
-
-        // Scrollbar
-        if self.max_scroll > 0 {
-            let scrollbar = Scrollbar::default()
-                .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(Style::default().fg(Color::Magenta));
-
-            let mut scrollbar_state = ScrollbarState::new(self.max_scroll as usize)
-                .position(self.scroll as usize);
-
-            frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
-        }
-    }
-
-    fn draw_input(&self, frame: &mut Frame, area: Rect) {
-        let input = Paragraph::new(Line::from(vec![
-            Span::styled("› ", Style::default().fg(Color::Cyan)),
-            Span::raw(self.input.clone()),
-            Span::styled("█", Style::default().fg(Color::Cyan)),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Rgb(86, 95, 137)))
-                .title(Span::styled(" Input ", Style::default().fg(Color::Rgb(192, 202, 245)))),
-        );
-
-        frame.render_widget(input, area);
     }
 
     /// Send a message
-    async fn send_message(&mut self) {
-        let message = std::mem::take(&mut self.input);
+    async fn send_message(&mut self, message: String) {
         let timestamp = chrono::Local::now().format("%H:%M").to_string();
 
         // Add user message to UI
-        self.cells.push(Box::new(UserMessageCell {
+        self.view.push_message(Box::new(UserMessageCell {
             content: message.clone(),
             timestamp: timestamp.clone(),
         }));
@@ -232,10 +142,11 @@ impl App {
         // Call API if client is available
         if let Some(client) = &self.client {
             self.is_streaming = true;
+            self.view.set_streaming(true);
 
             // Add streaming placeholder
-            let cell_index = self.cells.len();
-            self.cells.push(Box::new(AssistantMessageCell {
+            let cell_index = self.view.history.len();
+            self.view.push_message(Box::new(AssistantMessageCell {
                 content: String::new(),
                 timestamp: timestamp.clone(),
                 streaming: true,
@@ -256,7 +167,7 @@ impl App {
                             Ok(StreamEvent::ContentBlockDelta { delta, .. }) => {
                                 response_text.push_str(&delta.text);
                                 // Update the cell content
-                                if let Some(cell) = self.cells.get_mut(cell_index) {
+                                if let Some(cell) = self.view.history.get_mut(cell_index) {
                                     if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
                                         assistant_cell.content = response_text.clone();
                                     }
@@ -274,7 +185,7 @@ impl App {
                     }
 
                     // Mark as done streaming
-                    if let Some(cell) = self.cells.get_mut(cell_index) {
+                    if let Some(cell) = self.view.history.get_mut(cell_index) {
                         if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
                             assistant_cell.streaming = false;
                             if response_text.is_empty() {
@@ -290,7 +201,7 @@ impl App {
                 }
                 Err(e) => {
                     // Replace with error message
-                    if let Some(cell) = self.cells.get_mut(cell_index) {
+                    if let Some(cell) = self.view.history.get_mut(cell_index) {
                         if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
                             assistant_cell.content = format!("Error: {}", e);
                             assistant_cell.streaming = false;
@@ -300,10 +211,11 @@ impl App {
             }
 
             self.is_streaming = false;
+            self.view.set_streaming(false);
         } else {
             // Demo mode - no API key
             let response = format!("You said: {}\n\nThis is a **demo response** with `markdown` support!\n\nSet ANTHROPIC_API_KEY to enable real responses.", message);
-            self.cells.push(Box::new(AssistantMessageCell {
+            self.view.push_message(Box::new(AssistantMessageCell {
                 content: response,
                 timestamp,
                 streaming: false,
@@ -311,7 +223,7 @@ impl App {
         }
 
         // Auto-scroll to bottom
-        self.scroll = self.max_scroll;
+        self.view.history_scroll = self.view.max_scroll;
     }
 }
 
