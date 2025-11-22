@@ -413,12 +413,12 @@ impl TaskGraphBuilder {
             .task_names
             .get(&from_name)
             .copied()
-            .ok_or_else(|| DAGError::TaskNotFound(from_name))?;
+            .ok_or(DAGError::TaskNotFound(from_name))?;
         let to_id = self
             .task_names
             .get(&to_name)
             .copied()
-            .ok_or_else(|| DAGError::TaskNotFound(to_name))?;
+            .ok_or(DAGError::TaskNotFound(to_name))?;
 
         self.graph.add_dependency(from_id, to_id)?;
         Ok(self)

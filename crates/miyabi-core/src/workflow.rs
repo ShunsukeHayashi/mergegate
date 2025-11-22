@@ -64,8 +64,10 @@ fn default_step_timeout() -> u64 {
 /// Condition for step execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum StepCondition {
     /// Always execute
+    #[default]
     Always,
     /// Execute if previous step succeeded
     OnSuccess,
@@ -75,11 +77,6 @@ pub enum StepCondition {
     If { expression: String },
 }
 
-impl Default for StepCondition {
-    fn default() -> Self {
-        StepCondition::Always
-    }
-}
 
 /// Retry configuration for a step
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,8 +109,10 @@ fn default_retry_delay() -> u64 {
 /// Failure policy for workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum FailurePolicy {
     /// Stop workflow on first failure
+    #[default]
     Stop,
     /// Continue with remaining steps
     Continue,
@@ -121,11 +120,6 @@ pub enum FailurePolicy {
     Cleanup,
 }
 
-impl Default for FailurePolicy {
-    fn default() -> Self {
-        FailurePolicy::Stop
-    }
-}
 
 /// Step execution result
 #[derive(Debug, Clone)]
@@ -530,6 +524,7 @@ impl WorkflowManager {
         Ok(order)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn visit_step(
         &self,
         workflow: &Workflow,
