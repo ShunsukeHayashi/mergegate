@@ -10,6 +10,7 @@ pub mod history_cell;
 pub mod markdown_render;
 pub mod markdown_stream;
 pub mod diff_render;
+pub mod diff_viewer;
 pub mod markdown_parser;
 
 pub use app::App;
@@ -19,4 +20,5 @@ pub use history_cell::{HistoryCell, UserMessageCell, AssistantMessageCell, ToolR
 pub use markdown_render::{MarkdownRenderer, MarkdownStyles};
 pub use markdown_stream::{MarkdownStream, StreamState, StreamBuffer};
 pub use diff_render::{DiffRender, DiffLine, DiffLineType, DiffHunk, FileDiff};
+pub use diff_viewer::{DiffViewer, DiffViewerOptions, DiffColors, render_diff, render_diff_minimal};
 pub use markdown_parser::MarkdownParser;
