@@ -138,6 +138,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
 # Agentic OS
 # Dependencies
 node_modules/

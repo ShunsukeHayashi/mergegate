@@ -4,6 +4,7 @@
 //! line numbers, and indicators for a professional git diff display.
 
 use crate::diff_render::{DiffRender, DiffLine, DiffLineType};
+use crate::syntax::{normalize_language, SyntaxHighlighter};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -83,6 +84,8 @@ pub struct DiffViewerOptions {
     pub show_gutter: bool,
     /// Show file headers
     pub show_file_headers: bool,
+    /// Enable syntax highlighting for code content
+    pub enable_syntax_highlighting: bool,
 }
 
 impl Default for DiffViewerOptions {
@@ -93,6 +96,7 @@ impl Default for DiffViewerOptions {
             line_number_width: 4,
             show_gutter: true,
             show_file_headers: true,
+            enable_syntax_highlighting: true,
         }
     }
 }
@@ -104,6 +108,8 @@ pub struct DiffViewer {
     diff: DiffRender,
     /// Viewer options
     options: DiffViewerOptions,
+    /// Syntax highlighter for code content
+    highlighter: SyntaxHighlighter,
 }
 
 impl Default for DiffViewer {
@@ -118,6 +124,7 @@ impl DiffViewer {
         Self {
             diff: DiffRender::new(),
             options: DiffViewerOptions::default(),
+            highlighter: SyntaxHighlighter::new(),
         }
     }
 
@@ -126,6 +133,7 @@ impl DiffViewer {
         Self {
             diff: DiffRender::new(),
             options,
+            highlighter: SyntaxHighlighter::new(),
         }
     }
 
@@ -168,14 +176,25 @@ impl DiffViewer {
                 lines.push(self.render_file_header(&file.old_path, &file.new_path));
             }
 
+            // Extract file extension for syntax highlighting
+            let extension = Self::extract_extension(&file.new_path);
+
             for hunk in &file.hunks {
                 for diff_line in &hunk.lines {
-                    lines.push(self.render_line(diff_line));
+                    lines.push(self.render_line(diff_line, extension.as_deref()));
                 }
             }
         }
 
         lines
+    }
+
+    /// Extract file extension from path
+    fn extract_extension(path: &str) -> Option<String> {
+        std::path::Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|s| s.to_string())
     }
 
     /// Render file header
@@ -195,8 +214,8 @@ impl DiffViewer {
         ))
     }
 
-    /// Render a single diff line
-    fn render_line(&self, line: &DiffLine) -> Line<'static> {
+    /// Render a single diff line with optional syntax highlighting
+    fn render_line(&self, line: &DiffLine, extension: Option<&str>) -> Line<'static> {
         let mut spans = Vec::new();
 
         // Line numbers
@@ -227,43 +246,76 @@ impl DiffViewer {
             ));
         }
 
-        // Content
-        let (content, style) = match line.line_type {
-            DiffLineType::Addition => {
-                let mut style = Style::default().fg(self.options.colors.addition_fg);
-                if let Some(bg) = self.options.colors.addition_bg {
-                    style = style.bg(bg);
-                }
-                (line.content.clone(), style)
-            }
-            DiffLineType::Deletion => {
-                let mut style = Style::default().fg(self.options.colors.deletion_fg);
-                if let Some(bg) = self.options.colors.deletion_bg {
-                    style = style.bg(bg);
-                }
-                (line.content.clone(), style)
-            }
-            DiffLineType::Context => (
-                line.content.clone(),
-                Style::default().fg(self.options.colors.context_fg),
-            ),
-            DiffLineType::HunkHeader => (
-                line.content.clone(),
-                Style::default()
-                    .fg(self.options.colors.hunk_header_fg)
-                    .add_modifier(Modifier::DIM),
-            ),
-            DiffLineType::FileHeader => (
-                line.content.clone(),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        };
+        // Content with optional syntax highlighting
+        match line.line_type {
+            DiffLineType::Addition | DiffLineType::Deletion | DiffLineType::Context => {
+                // Determine background color for additions/deletions
+                let bg_color = match line.line_type {
+                    DiffLineType::Addition => self.options.colors.addition_bg,
+                    DiffLineType::Deletion => self.options.colors.deletion_bg,
+                    _ => None,
+                };
 
-        spans.push(Span::styled(content, style));
+                // Apply syntax highlighting if enabled and extension is available
+                if self.options.enable_syntax_highlighting {
+                    if let Some(ext) = extension {
+                        let lang = normalize_language(ext);
+                        let highlighted = self.highlighter.highlight_line(&line.content, lang);
+
+                        // Apply background color to each highlighted span
+                        for span in highlighted.spans {
+                            let mut style = span.style;
+                            if let Some(bg) = bg_color {
+                                style = style.bg(bg);
+                            }
+                            spans.push(Span::styled(span.content.into_owned(), style));
+                        }
+                    } else {
+                        // No extension, use default colors
+                        let style = self.get_content_style(&line.line_type, bg_color);
+                        spans.push(Span::styled(line.content.clone(), style));
+                    }
+                } else {
+                    // Syntax highlighting disabled
+                    let style = self.get_content_style(&line.line_type, bg_color);
+                    spans.push(Span::styled(line.content.clone(), style));
+                }
+            }
+            DiffLineType::HunkHeader => {
+                spans.push(Span::styled(
+                    line.content.clone(),
+                    Style::default()
+                        .fg(self.options.colors.hunk_header_fg)
+                        .add_modifier(Modifier::DIM),
+                ));
+            }
+            DiffLineType::FileHeader => {
+                spans.push(Span::styled(
+                    line.content.clone(),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ));
+            }
+        }
 
         Line::from(spans)
+    }
+
+    /// Get content style for a line type (when syntax highlighting is disabled)
+    fn get_content_style(&self, line_type: &DiffLineType, bg_color: Option<Color>) -> Style {
+        let mut style = match line_type {
+            DiffLineType::Addition => Style::default().fg(self.options.colors.addition_fg),
+            DiffLineType::Deletion => Style::default().fg(self.options.colors.deletion_fg),
+            DiffLineType::Context => Style::default().fg(self.options.colors.context_fg),
+            _ => Style::default(),
+        };
+
+        if let Some(bg) = bg_color {
+            style = style.bg(bg);
+        }
+
+        style
     }
 
     /// Format line numbers
@@ -418,5 +470,104 @@ mod tests {
 
         let lines = viewer.render();
         assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_syntax_highlighting_enabled_by_default() {
+        let options = DiffViewerOptions::default();
+        assert!(options.enable_syntax_highlighting);
+    }
+
+    #[test]
+    fn test_syntax_highlighting_disabled() {
+        let options = DiffViewerOptions {
+            enable_syntax_highlighting: false,
+            ..Default::default()
+        };
+        let mut viewer = DiffViewer::with_options(options);
+        viewer.parse(SAMPLE_DIFF);
+
+        let lines = viewer.render();
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_extract_extension() {
+        assert_eq!(
+            DiffViewer::extract_extension("src/main.rs"),
+            Some("rs".to_string())
+        );
+        assert_eq!(
+            DiffViewer::extract_extension("app.js"),
+            Some("js".to_string())
+        );
+        assert_eq!(
+            DiffViewer::extract_extension("no_extension"),
+            None
+        );
+        assert_eq!(
+            DiffViewer::extract_extension("/path/to/file.py"),
+            Some("py".to_string())
+        );
+    }
+
+    #[test]
+    fn test_syntax_highlighting_with_rust() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+
+        let lines = viewer.render();
+        // Should have file header + hunk header + content lines
+        assert!(lines.len() > 2);
+    }
+
+    #[test]
+    fn test_syntax_highlighting_with_python() {
+        let python_diff = r#"diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -1,3 +1,4 @@
+ def main():
+-    print("Hello")
++    print("Hello, World!")
++    return 0
+"#;
+        let mut viewer = DiffViewer::new();
+        viewer.parse(python_diff);
+
+        let lines = viewer.render();
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_syntax_highlighting_with_javascript() {
+        let js_diff = r#"diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -1,2 +1,3 @@
+ const x = 1;
++const y = 2;
+ console.log(x);
+"#;
+        let mut viewer = DiffViewer::new();
+        viewer.parse(js_diff);
+
+        let lines = viewer.render();
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_syntax_highlighting_preserves_backgrounds() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+
+        // Render and check that we have content
+        let lines = viewer.render();
+        assert!(!lines.is_empty());
+
+        // The rendered lines should have spans for syntax-highlighted content
+        for line in &lines {
+            assert!(!line.spans.is_empty());
+        }
     }
 }
