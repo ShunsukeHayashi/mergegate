@@ -499,4 +499,364 @@ mod tests {
         assert_eq!(post_hooks.len(), 1);
         assert_eq!(post_hooks[0].name, "hook2");
     }
+
+    #[test]
+    fn test_hook_event_all_variants() {
+        assert_eq!(HookEvent::PreMessage.to_string(), "pre_message");
+        assert_eq!(HookEvent::PostMessage.to_string(), "post_message");
+        assert_eq!(HookEvent::PreTool.to_string(), "pre_tool");
+        assert_eq!(HookEvent::PostTool.to_string(), "post_tool");
+        assert_eq!(HookEvent::PreCommit.to_string(), "pre_commit");
+        assert_eq!(HookEvent::PostCommit.to_string(), "post_commit");
+        assert_eq!(HookEvent::SessionStart.to_string(), "session_start");
+        assert_eq!(HookEvent::SessionEnd.to_string(), "session_end");
+        assert_eq!(HookEvent::OnError.to_string(), "on_error");
+    }
+
+    #[test]
+    fn test_hook_event_equality() {
+        assert_eq!(HookEvent::PreTool, HookEvent::PreTool);
+        assert_ne!(HookEvent::PreTool, HookEvent::PostTool);
+        assert_eq!(
+            HookEvent::Custom("test".to_string()),
+            HookEvent::Custom("test".to_string())
+        );
+        assert_ne!(
+            HookEvent::Custom("test1".to_string()),
+            HookEvent::Custom("test2".to_string())
+        );
+    }
+
+    #[test]
+    fn test_hook_context_with_error() {
+        let context = HookContext::new().with_error("Something failed");
+        assert_eq!(context.error, Some("Something failed".to_string()));
+    }
+
+    #[test]
+    fn test_hook_context_default() {
+        let context = HookContext::default();
+        assert!(context.data.is_empty());
+        assert!(context.tool_name.is_none());
+        assert!(context.tool_result.is_none());
+        assert!(context.error.is_none());
+    }
+
+    #[test]
+    fn test_hook_action_shell() {
+        let action = HookAction::Shell {
+            command: "echo test".to_string(),
+        };
+        let yaml = serde_yaml::to_string(&action).unwrap();
+        assert!(yaml.contains("shell"));
+        assert!(yaml.contains("echo test"));
+    }
+
+    #[test]
+    fn test_hook_action_agent() {
+        let action = HookAction::Agent {
+            prompt: "Do something".to_string(),
+            spec: Some("coder".to_string()),
+        };
+        let yaml = serde_yaml::to_string(&action).unwrap();
+        assert!(yaml.contains("agent"));
+        assert!(yaml.contains("Do something"));
+    }
+
+    #[test]
+    fn test_hook_action_notify() {
+        let action = HookAction::Notify {
+            title: "Alert".to_string(),
+            message: "Task complete".to_string(),
+        };
+        let yaml = serde_yaml::to_string(&action).unwrap();
+        assert!(yaml.contains("notify"));
+        assert!(yaml.contains("Alert"));
+    }
+
+    #[test]
+    fn test_hook_action_script() {
+        let action = HookAction::Script {
+            path: PathBuf::from("/path/to/script.sh"),
+        };
+        let yaml = serde_yaml::to_string(&action).unwrap();
+        assert!(yaml.contains("script"));
+    }
+
+    #[test]
+    fn test_hook_default_values() {
+        let yaml = r#"
+name: test-hook
+event: pre_tool
+action:
+  type: log
+  level: info
+  message: test
+"#;
+        let hook: Hook = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(hook.name, "test-hook");
+        assert!(hook.enabled); // default_true
+        assert_eq!(hook.timeout, 30); // default_timeout
+        assert!(hook.condition.is_none());
+    }
+
+    #[test]
+    fn test_hook_result_creation() {
+        let result = HookResult {
+            hook_name: "test".to_string(),
+            success: true,
+            output: Some("output".to_string()),
+            error: None,
+        };
+        assert_eq!(result.hook_name, "test");
+        assert!(result.success);
+        assert!(result.output.is_some());
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_hooks_config_default() {
+        let config = HooksConfig::default();
+        assert!(config.hooks.is_empty());
+    }
+
+    #[test]
+    fn test_hooks_config_save_and_load() {
+        use tempfile::TempDir;
+
+        let config = HooksConfig {
+            hooks: vec![Hook {
+                name: "test".to_string(),
+                event: HookEvent::PreTool,
+                action: HookAction::Log {
+                    level: "info".to_string(),
+                    message: "test".to_string(),
+                },
+                enabled: true,
+                condition: None,
+                timeout: 30,
+            }],
+        };
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("hooks.yml");
+
+        config.save(&path).unwrap();
+        assert!(path.exists());
+
+        let loaded = HooksConfig::load(&path).unwrap();
+        assert_eq!(loaded.hooks.len(), 1);
+        assert_eq!(loaded.hooks[0].name, "test");
+    }
+
+    #[test]
+    fn test_hook_manager_new() {
+        let manager = HookManager::new();
+        assert!(manager.list_hooks().is_empty());
+    }
+
+    #[test]
+    fn test_hook_manager_default() {
+        let manager = HookManager::default();
+        assert!(manager.list_hooks().is_empty());
+    }
+
+    #[test]
+    fn test_hook_manager_from_config() {
+        let config = HooksConfig {
+            hooks: vec![Hook {
+                name: "test".to_string(),
+                event: HookEvent::PreTool,
+                action: HookAction::Log {
+                    level: "info".to_string(),
+                    message: "test".to_string(),
+                },
+                enabled: true,
+                condition: None,
+                timeout: 30,
+            }],
+        };
+
+        let manager = HookManager::from_config(config);
+        assert_eq!(manager.list_hooks().len(), 1);
+    }
+
+    #[test]
+    fn test_hook_manager_register() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "hook1".to_string(),
+            event: HookEvent::PreTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "test".to_string(),
+            },
+            enabled: true,
+            condition: None,
+            timeout: 30,
+        });
+
+        assert_eq!(manager.list_hooks().len(), 1);
+    }
+
+    #[test]
+    fn test_hook_manager_enable_disable() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "hook1".to_string(),
+            event: HookEvent::PreTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "test".to_string(),
+            },
+            enabled: true,
+            condition: None,
+            timeout: 30,
+        });
+
+        // Disable
+        manager.disable("hook1");
+        assert!(!manager.list_hooks()[0].enabled);
+
+        // Enable
+        manager.enable("hook1");
+        assert!(manager.list_hooks()[0].enabled);
+    }
+
+    #[test]
+    fn test_hook_manager_disabled_hooks_not_returned() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "enabled".to_string(),
+            event: HookEvent::PreTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "test".to_string(),
+            },
+            enabled: true,
+            condition: None,
+            timeout: 30,
+        });
+
+        manager.register(Hook {
+            name: "disabled".to_string(),
+            event: HookEvent::PreTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "test".to_string(),
+            },
+            enabled: false,
+            condition: None,
+            timeout: 30,
+        });
+
+        let hooks = manager.get_hooks(&HookEvent::PreTool);
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(hooks[0].name, "enabled");
+    }
+
+    #[test]
+    fn test_expand_variables_with_error() {
+        let manager = HookManager::new();
+        let context = HookContext::new().with_error("Error message");
+
+        let input = "Error: ${error}";
+        let expanded = manager.expand_variables(input, &context);
+        assert_eq!(expanded, "Error: Error message");
+    }
+
+    #[test]
+    fn test_expand_variables_no_replacements() {
+        let manager = HookManager::new();
+        let context = HookContext::new();
+
+        let input = "Static text without variables";
+        let expanded = manager.expand_variables(input, &context);
+        assert_eq!(expanded, "Static text without variables");
+    }
+
+    #[test]
+    fn test_hook_event_serialization() {
+        let event = HookEvent::PostTool;
+        let yaml = serde_yaml::to_string(&event).unwrap();
+        let deserialized: HookEvent = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(deserialized, event);
+    }
+
+    #[tokio::test]
+    async fn test_hook_manager_execute_log() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "log-hook".to_string(),
+            event: HookEvent::PostTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "Tool ${tool_name} completed".to_string(),
+            },
+            enabled: true,
+            condition: None,
+            timeout: 30,
+        });
+
+        let context = HookContext::new().with_tool("bash");
+        let results = manager.execute(&HookEvent::PostTool, &context).await;
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].success);
+        assert_eq!(results[0].output, Some("Tool bash completed".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_hook_manager_execute_notify() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "notify-hook".to_string(),
+            event: HookEvent::PostTool,
+            action: HookAction::Notify {
+                title: "Complete".to_string(),
+                message: "${tool_name} finished".to_string(),
+            },
+            enabled: true,
+            condition: None,
+            timeout: 30,
+        });
+
+        let context = HookContext::new().with_tool("test");
+        let results = manager.execute(&HookEvent::PostTool, &context).await;
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].success);
+    }
+
+    #[tokio::test]
+    async fn test_hook_manager_execute_with_condition() {
+        let mut manager = HookManager::new();
+
+        manager.register(Hook {
+            name: "bash-only".to_string(),
+            event: HookEvent::PostTool,
+            action: HookAction::Log {
+                level: "info".to_string(),
+                message: "Bash completed".to_string(),
+            },
+            enabled: true,
+            condition: Some("bash".to_string()),
+            timeout: 30,
+        });
+
+        // Context with bash - should execute
+        let context = HookContext::new().with_tool("bash");
+        let results = manager.execute(&HookEvent::PostTool, &context).await;
+        assert_eq!(results.len(), 1);
+
+        // Context with different tool - should not execute
+        let context = HookContext::new().with_tool("python");
+        let results = manager.execute(&HookEvent::PostTool, &context).await;
+        assert_eq!(results.len(), 0);
+    }
 }
