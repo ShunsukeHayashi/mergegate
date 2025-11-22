@@ -7,6 +7,7 @@ pub mod anthropic;
 pub mod cache;
 pub mod config;
 pub mod conversation;
+pub mod dag;
 pub mod error;
 pub mod error_policy;
 pub mod feature_flags;
@@ -86,4 +87,7 @@ pub use workflow::{
 };
 pub use mcp::{
     McpConfig, McpError, McpManager, McpRequest, McpResponse, McpServer, McpServerConfig, McpTool,
+};
+pub use dag::{
+    DAGError, Task as DAGTask, TaskGraph, TaskGraphBuilder, TaskId, TaskLevel, TaskNode,
 };
