@@ -1,13 +1,15 @@
 //! Agent struct and execution loop
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::{AnthropicClient, ContentBlock, Message, Role, StopReason};
 use crate::hooks::{HookContext, HookEvent, HookManager, HooksConfig};
+use crate::{AnthropicClient, ContentBlock, Message, Role, StopReason};
 
+use super::approval::{ApprovalCallback, ApprovalDecision, ApprovalRequest, AutoApproveAll};
 use super::{AgentError, AgentEvent, AgentResult, ExecutorRegistry};
 
 /// Configuration for agent execution
@@ -45,6 +47,7 @@ pub struct Agent {
     system_prompt: Option<String>,
     event_tx: Option<mpsc::Sender<AgentEvent>>,
     hook_manager: HookManager,
+    approval_callback: Arc<dyn ApprovalCallback>,
 }
 
 impl Agent {
@@ -62,12 +65,19 @@ impl Agent {
             system_prompt: None,
             event_tx: None,
             hook_manager,
+            approval_callback: Arc::new(AutoApproveAll),
         }
     }
 
     /// Set custom hook manager
     pub fn with_hook_manager(mut self, hook_manager: HookManager) -> Self {
         self.hook_manager = hook_manager;
+        self
+    }
+
+    /// Set custom approval callback
+    pub fn with_approval_callback<C: ApprovalCallback + 'static>(mut self, callback: C) -> Self {
+        self.approval_callback = Arc::new(callback);
         self
     }
 
@@ -233,6 +243,8 @@ impl Agent {
                         let needs_approval = !self.is_auto_approved(&tool_use.name)
                             && self.executor_registry.requires_approval(&tool_use.name);
 
+                        let mut final_input = tool_use.input.clone();
+
                         if needs_approval {
                             self.emit_event(AgentEvent::AwaitingApproval {
                                 id: tool_use.id.clone(),
@@ -240,8 +252,50 @@ impl Agent {
                                 input: tool_use.input.clone(),
                             })
                             .await;
-                            // In non-interactive mode, auto-approve for now
-                            // TODO: Add approval callback mechanism
+
+                            // Request approval via callback
+                            let risk_level = self
+                                .executor_registry
+                                .risk_level(&tool_use.name)
+                                .unwrap_or(super::executor::RiskLevel::Medium);
+
+                            let approval_request = ApprovalRequest {
+                                id: tool_use.id.clone(),
+                                name: tool_use.name.clone(),
+                                input: tool_use.input.clone(),
+                                risk_level,
+                                description: self
+                                    .executor_registry
+                                    .get(&tool_use.name)
+                                    .map(|e| e.description().to_string())
+                                    .unwrap_or_default(),
+                            };
+
+                            let decision = self
+                                .approval_callback
+                                .request_approval(&approval_request)
+                                .await;
+
+                            match decision {
+                                ApprovalDecision::Approved => {
+                                    // Continue with execution
+                                }
+                                ApprovalDecision::Rejected(reason) => {
+                                    // Add rejection as tool result
+                                    let error_msg = reason.unwrap_or_else(|| {
+                                        format!("Tool {} was rejected by approval", tool_use.name)
+                                    });
+                                    results.push(ContentBlock::ToolResult {
+                                        tool_use_id: tool_use.id,
+                                        content: format!("Rejected: {}", error_msg),
+                                    });
+                                    continue;
+                                }
+                                ApprovalDecision::ModifyInput(new_input) => {
+                                    // Use modified input
+                                    final_input = new_input;
+                                }
+                            }
                         }
 
                         // Execute PreTool hooks
@@ -253,13 +307,13 @@ impl Agent {
                         // Execute tool
                         self.emit_event(AgentEvent::ToolExecuting {
                             name: tool_use.name.clone(),
-                            input: tool_use.input.clone(),
+                            input: final_input.clone(),
                         })
                         .await;
 
                         match self
                             .executor_registry
-                            .execute(&tool_use.name, tool_use.input.clone())
+                            .execute(&tool_use.name, final_input.clone())
                             .await
                         {
                             Ok(output) => {
