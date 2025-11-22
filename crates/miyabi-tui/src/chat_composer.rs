@@ -9,10 +9,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    layout::Rect,
+    style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -800,4 +800,242 @@ pub enum ComposerAction {
     Submit,
     /// Cancel input
     Cancel,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_composer_creation() {
+        let composer = ChatComposer::new();
+        assert!(composer.is_empty());
+        assert_eq!(composer.line_count(), 1);
+    }
+
+    #[test]
+    fn test_insert_char() {
+        let mut composer = ChatComposer::new();
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        composer.handle_key(key);
+        assert_eq!(composer.get_input(), "a");
+    }
+
+    #[test]
+    fn test_insert_multiple_chars() {
+        let mut composer = ChatComposer::new();
+        for c in "hello".chars() {
+            let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+            composer.handle_key(key);
+        }
+        assert_eq!(composer.get_input(), "hello");
+    }
+
+    #[test]
+    fn test_backspace() {
+        let mut composer = ChatComposer::new();
+        for c in "ab".chars() {
+            let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+            composer.handle_key(key);
+        }
+        let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+        composer.handle_key(key);
+        assert_eq!(composer.get_input(), "a");
+    }
+
+    #[test]
+    fn test_submit() {
+        let mut composer = ChatComposer::new();
+        for c in "test".chars() {
+            let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+            composer.handle_key(key);
+        }
+        let action = composer.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(action, ComposerAction::Submit);
+    }
+
+    #[test]
+    fn test_submit_empty() {
+        let mut composer = ChatComposer::new();
+        let action = composer.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(action, ComposerAction::None);
+    }
+
+    #[test]
+    fn test_cancel() {
+        let mut composer = ChatComposer::new();
+        let action = composer.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(action, ComposerAction::Cancel);
+    }
+
+    #[test]
+    fn test_multiline_input() {
+        let mut composer = ChatComposer::new();
+        for c in "line1".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+        for c in "line2".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(composer.get_input(), "line1\nline2");
+        assert_eq!(composer.line_count(), 2);
+    }
+
+    #[test]
+    fn test_cursor_movement_left_right() {
+        let mut composer = ChatComposer::new();
+        for c in "abc".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        // Cursor at position 3
+        composer.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        // Cursor at position 2
+        composer.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(composer.get_input(), "abxc");
+    }
+
+    #[test]
+    fn test_cursor_home_end() {
+        let mut composer = ChatComposer::new();
+        for c in "hello".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        composer.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(composer.get_input(), "xhello");
+    }
+
+    #[test]
+    fn test_history() {
+        let mut composer = ChatComposer::new();
+
+        // Submit first message
+        for c in "msg1".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.submit();
+
+        // Submit second message
+        for c in "msg2".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.submit();
+
+        // Navigate back
+        composer.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(composer.get_input(), "msg2");
+
+        composer.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(composer.get_input(), "msg1");
+    }
+
+    #[test]
+    fn test_command_mode() {
+        let mut composer = ChatComposer::new();
+        composer.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
+        assert_eq!(composer.mode, InputMode::Command);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut composer = ChatComposer::new();
+        for c in "test".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.clear();
+        assert!(composer.is_empty());
+    }
+
+    #[test]
+    fn test_ctrl_u_clear_line() {
+        let mut composer = ChatComposer::new();
+        for c in "test".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(composer.get_input(), "");
+    }
+
+    #[test]
+    fn test_ctrl_k_kill_to_end() {
+        let mut composer = ChatComposer::new();
+        for c in "hello".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        // Move to position 2
+        composer.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        composer.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        composer.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        // Kill to end
+        composer.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        assert_eq!(composer.get_input(), "he");
+    }
+
+    #[test]
+    fn test_placeholder() {
+        let composer = ChatComposer::new().placeholder("Custom placeholder");
+        assert_eq!(composer.placeholder, "Custom placeholder");
+    }
+
+    #[test]
+    fn test_max_history() {
+        let mut composer = ChatComposer::new().max_history(2);
+
+        for i in 0..5 {
+            for c in format!("msg{}", i).chars() {
+                composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+            }
+            composer.submit();
+        }
+
+        assert_eq!(composer.history.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_key() {
+        let mut composer = ChatComposer::new();
+        for c in "ab".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        composer.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        composer.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+        assert_eq!(composer.get_input(), "b");
+    }
+
+    #[test]
+    fn test_unicode_support() {
+        let mut composer = ChatComposer::new();
+        for c in "日本語".chars() {
+            composer.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(composer.get_input(), "日本語");
+    }
+
+    #[test]
+    fn test_cursor_position_struct() {
+        let pos = CursorPos { line: 1, col: 5 };
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.col, 5);
+    }
+
+    #[test]
+    fn test_input_mode_enum() {
+        assert_ne!(InputMode::Normal, InputMode::Command);
+        assert_ne!(InputMode::Command, InputMode::Search);
+    }
+
+    #[test]
+    fn test_composer_action_enum() {
+        assert_ne!(ComposerAction::None, ComposerAction::Submit);
+        assert_ne!(ComposerAction::Submit, ComposerAction::Cancel);
+    }
+
+    #[test]
+    fn test_focused_state() {
+        let mut composer = ChatComposer::new();
+        assert!(composer.focused);
+        composer.set_focused(false);
+        assert!(!composer.focused);
+    }
 }
