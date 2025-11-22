@@ -16,10 +16,11 @@ pub mod github;
 pub mod github_tools;
 pub mod hooks;
 pub mod logger;
+pub mod mcp;
+pub mod orchestration;
 pub mod plugin;
 pub mod retry;
 pub mod rules;
-pub mod mcp;
 pub mod session;
 pub mod token;
 pub mod tool;
@@ -90,4 +91,7 @@ pub use mcp::{
 };
 pub use dag::{
     DAGError, Task as DAGTask, TaskGraph, TaskGraphBuilder, TaskId, TaskLevel, TaskNode,
+};
+pub use orchestration::{
+    create_orchestrator, Orchestrator, OrchestratorTask, ParallelConfig, ParallelResult, TaskResult,
 };
