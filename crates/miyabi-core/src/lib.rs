@@ -5,10 +5,15 @@
 pub mod error;
 pub mod types;
 pub mod anthropic;
+pub mod tool;
 
 pub use error::Error;
 pub use types::*;
 pub use anthropic::{
     AnthropicClient, AnthropicError, Message, Role, ContentBlock,
-    Tool, MessagesRequest, MessagesResponse, StreamEvent, StopReason, Usage,
+    MessagesRequest, MessagesResponse, StreamEvent, StopReason, Usage,
+};
+// Note: anthropic::Tool is a different type from tool::Tool trait
+pub use tool::{
+    Tool as ToolTrait, ToolRegistry, ToolError, ToolOutput, ToolResult, ParameterDef,
 };

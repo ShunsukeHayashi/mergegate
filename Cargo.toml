@@ -22,6 +22,7 @@ categories = ["command-line-utilities", "development-tools"]
 # Async Runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync", "process", "signal"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # TUI Framework
 ratatui = { version = "0.29.0", features = [
