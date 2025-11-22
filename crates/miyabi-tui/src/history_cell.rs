@@ -7,6 +7,8 @@
 //! - Magenta: Assistant/Miyabi brand
 //! - Dim: Secondary, timestamps
 
+use std::any::Any;
+
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -22,6 +24,7 @@ pub trait HistoryCell: Send + Sync {
     fn is_streaming(&self) -> bool {
         false
     }
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// User message cell - Cyan accented card
@@ -83,6 +86,10 @@ impl HistoryCell for UserMessageCell {
 
     fn timestamp(&self) -> &str {
         &self.timestamp
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -162,6 +169,10 @@ impl HistoryCell for AssistantMessageCell {
     fn is_streaming(&self) -> bool {
         self.streaming
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 /// Tool result cell - Green/Red based on success
@@ -232,6 +243,10 @@ impl HistoryCell for ToolResultCell {
     fn timestamp(&self) -> &str {
         &self.timestamp
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 /// System message cell
@@ -268,5 +283,9 @@ impl HistoryCell for SystemMessageCell {
 
     fn timestamp(&self) -> &str {
         &self.timestamp
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

@@ -149,12 +149,12 @@ impl DiffRender {
 
             // Diff content lines
             if let Some(ref mut hunk) = current_hunk {
-                let (line_type, content) = if line.starts_with('+') {
-                    (DiffLineType::Addition, line[1..].to_string())
-                } else if line.starts_with('-') {
-                    (DiffLineType::Deletion, line[1..].to_string())
-                } else if line.starts_with(' ') {
-                    (DiffLineType::Context, line[1..].to_string())
+                let (line_type, content) = if let Some(stripped) = line.strip_prefix('+') {
+                    (DiffLineType::Addition, stripped.to_string())
+                } else if let Some(stripped) = line.strip_prefix('-') {
+                    (DiffLineType::Deletion, stripped.to_string())
+                } else if let Some(stripped) = line.strip_prefix(' ') {
+                    (DiffLineType::Context, stripped.to_string())
                 } else {
                     (DiffLineType::Context, line.to_string())
                 };

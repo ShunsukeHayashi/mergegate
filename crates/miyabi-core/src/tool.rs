@@ -4,12 +4,15 @@
 //! tools that can be executed by AI agents.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 /// Tool execution errors
 #[derive(Error, Debug)]
@@ -299,13 +302,11 @@ pub trait Tool: Send + Sync {
         let params = self.parameters();
 
         for param in params {
-            if param.required {
-                if input.get(&param.name).is_none() {
-                    return Err(ToolError::ValidationError(format!(
-                        "Required parameter '{}' is missing",
-                        param.name
-                    )));
-                }
+            if param.required && input.get(&param.name).is_none() {
+                return Err(ToolError::ValidationError(format!(
+                    "Required parameter '{}' is missing",
+                    param.name
+                )));
             }
         }
 
@@ -429,6 +430,581 @@ impl std::fmt::Debug for ToolRegistry {
         f.debug_struct("ToolRegistry")
             .field("tools", &self.tools.keys().collect::<Vec<_>>())
             .finish()
+    }
+}
+
+// =============================================================================
+// Tool Orchestration System
+// =============================================================================
+
+/// Tool call request for orchestration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    /// Unique call ID
+    pub id: String,
+    /// Tool name
+    pub name: String,
+    /// Input parameters
+    pub input: Value,
+    /// Whether approval is required
+    #[serde(default)]
+    pub requires_approval: bool,
+    /// Priority (higher = more urgent)
+    #[serde(default)]
+    pub priority: i32,
+    /// Dependencies (other call IDs that must complete first)
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+impl ToolCall {
+    /// Create a new tool call
+    pub fn new(name: impl Into<String>, input: Value) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name: name.into(),
+            input,
+            requires_approval: false,
+            priority: 0,
+            dependencies: Vec::new(),
+        }
+    }
+
+    /// Set approval requirement
+    pub fn with_approval(mut self, required: bool) -> Self {
+        self.requires_approval = required;
+        self
+    }
+
+    /// Set priority
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    /// Add dependency
+    pub fn depends_on(mut self, call_id: impl Into<String>) -> Self {
+        self.dependencies.push(call_id.into());
+        self
+    }
+}
+
+/// Status of a tool execution
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExecutionStatus {
+    /// Waiting for dependencies
+    Pending,
+    /// Waiting for approval
+    AwaitingApproval,
+    /// Currently executing
+    Running,
+    /// Completed successfully
+    Completed,
+    /// Failed with error
+    Failed,
+    /// Cancelled by user
+    Cancelled,
+    /// Timed out
+    TimedOut,
+}
+
+/// Record of a single tool execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionRecord {
+    /// Call ID
+    pub call_id: String,
+    /// Tool name
+    pub tool_name: String,
+    /// Input parameters
+    pub input: Value,
+    /// Execution status
+    pub status: ExecutionStatus,
+    /// Output (if completed)
+    pub output: Option<ToolOutput>,
+    /// Error message (if failed)
+    pub error: Option<String>,
+    /// When execution started
+    pub started_at: Option<DateTime<Utc>>,
+    /// When execution completed
+    pub completed_at: Option<DateTime<Utc>>,
+    /// Duration in milliseconds
+    pub duration_ms: Option<u64>,
+}
+
+impl ExecutionRecord {
+    /// Create a new pending record
+    pub fn new(call: &ToolCall) -> Self {
+        Self {
+            call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            input: call.input.clone(),
+            status: ExecutionStatus::Pending,
+            output: None,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        }
+    }
+
+    /// Mark as running
+    pub fn start(&mut self) {
+        self.status = ExecutionStatus::Running;
+        self.started_at = Some(Utc::now());
+    }
+
+    /// Mark as completed
+    pub fn complete(&mut self, output: ToolOutput) {
+        self.status = ExecutionStatus::Completed;
+        self.completed_at = Some(Utc::now());
+        self.duration_ms = output.duration_ms.into();
+        self.output = Some(output);
+    }
+
+    /// Mark as failed
+    pub fn fail(&mut self, error: impl Into<String>) {
+        self.status = ExecutionStatus::Failed;
+        self.completed_at = Some(Utc::now());
+        self.error = Some(error.into());
+        if let (Some(start), Some(end)) = (self.started_at, self.completed_at) {
+            self.duration_ms = Some((end - start).num_milliseconds() as u64);
+        }
+    }
+}
+
+/// Execution history for tracking tool calls
+#[derive(Debug, Clone, Default)]
+pub struct ExecutionHistory {
+    /// All execution records
+    records: VecDeque<ExecutionRecord>,
+    /// Maximum history size
+    max_size: usize,
+}
+
+impl ExecutionHistory {
+    /// Create new history with default max size
+    pub fn new() -> Self {
+        Self {
+            records: VecDeque::new(),
+            max_size: 1000,
+        }
+    }
+
+    /// Create with custom max size
+    pub fn with_max_size(max_size: usize) -> Self {
+        Self {
+            records: VecDeque::new(),
+            max_size,
+        }
+    }
+
+    /// Add a record
+    pub fn add(&mut self, record: ExecutionRecord) {
+        if self.records.len() >= self.max_size {
+            self.records.pop_front();
+        }
+        self.records.push_back(record);
+    }
+
+    /// Get record by call ID
+    pub fn get(&self, call_id: &str) -> Option<&ExecutionRecord> {
+        self.records.iter().find(|r| r.call_id == call_id)
+    }
+
+    /// Get mutable record by call ID
+    pub fn get_mut(&mut self, call_id: &str) -> Option<&mut ExecutionRecord> {
+        self.records.iter_mut().find(|r| r.call_id == call_id)
+    }
+
+    /// Get all records
+    pub fn all(&self) -> impl Iterator<Item = &ExecutionRecord> {
+        self.records.iter()
+    }
+
+    /// Get recent records (last N)
+    pub fn recent(&self, count: usize) -> impl Iterator<Item = &ExecutionRecord> {
+        self.records.iter().rev().take(count)
+    }
+
+    /// Get records by status
+    pub fn by_status(&self, status: ExecutionStatus) -> Vec<&ExecutionRecord> {
+        self.records.iter().filter(|r| r.status == status).collect()
+    }
+
+    /// Get records for a tool
+    pub fn by_tool(&self, tool_name: &str) -> Vec<&ExecutionRecord> {
+        self.records.iter().filter(|r| r.tool_name == tool_name).collect()
+    }
+
+    /// Total execution count
+    pub fn total_count(&self) -> usize {
+        self.records.len()
+    }
+
+    /// Success count
+    pub fn success_count(&self) -> usize {
+        self.records.iter().filter(|r| r.status == ExecutionStatus::Completed).count()
+    }
+
+    /// Failure count
+    pub fn failure_count(&self) -> usize {
+        self.records.iter().filter(|r| r.status == ExecutionStatus::Failed).count()
+    }
+
+    /// Average execution time (for completed executions)
+    pub fn average_duration_ms(&self) -> Option<f64> {
+        let durations: Vec<u64> = self.records
+            .iter()
+            .filter_map(|r| r.duration_ms)
+            .collect();
+
+        if durations.is_empty() {
+            None
+        } else {
+            Some(durations.iter().sum::<u64>() as f64 / durations.len() as f64)
+        }
+    }
+
+    /// Clear history
+    pub fn clear(&mut self) {
+        self.records.clear();
+    }
+}
+
+/// Event emitted during tool execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExecutionEvent {
+    /// Tool call queued
+    Queued { call_id: String, tool_name: String },
+    /// Waiting for approval
+    AwaitingApproval { call_id: String, tool_name: String },
+    /// Approval granted
+    Approved { call_id: String },
+    /// Approval denied
+    Denied { call_id: String, reason: String },
+    /// Execution started
+    Started { call_id: String },
+    /// Progress update
+    Progress { call_id: String, progress: f32, message: String },
+    /// Output chunk (for streaming)
+    OutputChunk { call_id: String, chunk: String },
+    /// Execution completed
+    Completed { call_id: String, output: ToolOutput },
+    /// Execution failed
+    Failed { call_id: String, error: String },
+    /// Execution cancelled
+    Cancelled { call_id: String },
+}
+
+/// Tool executor for orchestrating multiple tool calls
+pub struct ToolExecutor {
+    /// Tool registry
+    registry: Arc<ToolRegistry>,
+    /// Execution history
+    history: Arc<RwLock<ExecutionHistory>>,
+    /// Event sender
+    event_tx: mpsc::Sender<ExecutionEvent>,
+    /// Concurrency limit
+    max_concurrent: usize,
+    /// Default timeout in milliseconds
+    default_timeout_ms: u64,
+}
+
+impl ToolExecutor {
+    /// Create a new executor
+    pub fn new(
+        registry: Arc<ToolRegistry>,
+        event_tx: mpsc::Sender<ExecutionEvent>,
+    ) -> Self {
+        Self {
+            registry,
+            history: Arc::new(RwLock::new(ExecutionHistory::new())),
+            event_tx,
+            max_concurrent: 4,
+            default_timeout_ms: 120_000,
+        }
+    }
+
+    /// Set concurrency limit
+    pub fn with_concurrency(mut self, max: usize) -> Self {
+        self.max_concurrent = max.max(1);
+        self
+    }
+
+    /// Set default timeout
+    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
+        self.default_timeout_ms = timeout_ms;
+        self
+    }
+
+    /// Execute a single tool call
+    pub async fn execute(&self, call: ToolCall) -> ToolResult<ToolOutput> {
+        let call_id = call.id.clone();
+        let tool_name = call.name.clone();
+
+        // Create record
+        let record = ExecutionRecord::new(&call);
+        self.history.write().await.add(record);
+
+        // Emit queued event
+        let _ = self.event_tx.send(ExecutionEvent::Queued {
+            call_id: call_id.clone(),
+            tool_name: tool_name.clone(),
+        }).await;
+
+        // Check approval requirement
+        if call.requires_approval {
+            let _ = self.event_tx.send(ExecutionEvent::AwaitingApproval {
+                call_id: call_id.clone(),
+                tool_name: tool_name.clone(),
+            }).await;
+
+            if let Some(record) = self.history.write().await.get_mut(&call_id) {
+                record.status = ExecutionStatus::AwaitingApproval;
+            }
+
+            // In a real implementation, we would wait for approval here
+            // For now, we auto-approve
+            let _ = self.event_tx.send(ExecutionEvent::Approved {
+                call_id: call_id.clone(),
+            }).await;
+        }
+
+        // Mark as running
+        if let Some(record) = self.history.write().await.get_mut(&call_id) {
+            record.start();
+        }
+
+        let _ = self.event_tx.send(ExecutionEvent::Started {
+            call_id: call_id.clone(),
+        }).await;
+
+        // Execute with timeout
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(self.default_timeout_ms),
+            self.registry.execute(&call.name, call.input)
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                // Success
+                if let Some(record) = self.history.write().await.get_mut(&call_id) {
+                    record.complete(output.clone());
+                }
+
+                let _ = self.event_tx.send(ExecutionEvent::Completed {
+                    call_id,
+                    output: output.clone(),
+                }).await;
+
+                Ok(output)
+            }
+            Ok(Err(e)) => {
+                // Tool error
+                let error_msg = e.to_string();
+                if let Some(record) = self.history.write().await.get_mut(&call_id) {
+                    record.fail(&error_msg);
+                }
+
+                let _ = self.event_tx.send(ExecutionEvent::Failed {
+                    call_id,
+                    error: error_msg,
+                }).await;
+
+                Err(e)
+            }
+            Err(_) => {
+                // Timeout
+                let error_msg = format!("Timeout after {}ms", self.default_timeout_ms);
+                if let Some(record) = self.history.write().await.get_mut(&call_id) {
+                    record.status = ExecutionStatus::TimedOut;
+                    record.error = Some(error_msg.clone());
+                    record.completed_at = Some(Utc::now());
+                }
+
+                let _ = self.event_tx.send(ExecutionEvent::Failed {
+                    call_id,
+                    error: error_msg.clone(),
+                }).await;
+
+                Err(ToolError::Timeout(self.default_timeout_ms))
+            }
+        }
+    }
+
+    /// Execute multiple tool calls in parallel
+    pub async fn execute_parallel(&self, calls: Vec<ToolCall>) -> Vec<ToolResult<ToolOutput>> {
+        use futures::stream::{self, StreamExt};
+
+        let results = stream::iter(calls)
+            .map(|call| {
+                let executor = self.clone_inner();
+                async move {
+                    executor.execute(call).await
+                }
+            })
+            .buffer_unordered(self.max_concurrent)
+            .collect::<Vec<_>>()
+            .await;
+
+        results
+    }
+
+    /// Execute calls respecting dependencies (DAG execution)
+    pub async fn execute_dag(&self, calls: Vec<ToolCall>) -> HashMap<String, ToolResult<ToolOutput>> {
+        let mut results: HashMap<String, ToolResult<ToolOutput>> = HashMap::new();
+        let mut completed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut remaining: Vec<ToolCall> = calls;
+
+        while !remaining.is_empty() {
+            // Find calls with satisfied dependencies
+            let (ready, not_ready): (Vec<_>, Vec<_>) = remaining
+                .into_iter()
+                .partition(|call| {
+                    call.dependencies.iter().all(|dep| completed.contains(dep))
+                });
+
+            if ready.is_empty() && !not_ready.is_empty() {
+                // Circular dependency or missing dependency
+                warn!("Circular or missing dependencies detected");
+                for call in not_ready {
+                    results.insert(
+                        call.id.clone(),
+                        Err(ToolError::ExecutionFailed(
+                            "Unresolved dependencies".to_string()
+                        ))
+                    );
+                }
+                break;
+            }
+
+            // Execute ready calls in parallel
+            let batch_results = self.execute_parallel(ready.clone()).await;
+
+            for (call, result) in ready.into_iter().zip(batch_results) {
+                completed.insert(call.id.clone());
+                results.insert(call.id, result);
+            }
+
+            remaining = not_ready;
+        }
+
+        results
+    }
+
+    /// Get execution history
+    pub async fn history(&self) -> ExecutionHistory {
+        self.history.read().await.clone()
+    }
+
+    /// Clear history
+    pub async fn clear_history(&self) {
+        self.history.write().await.clear();
+    }
+
+    /// Clone inner state for async operations
+    fn clone_inner(&self) -> Self {
+        Self {
+            registry: self.registry.clone(),
+            history: self.history.clone(),
+            event_tx: self.event_tx.clone(),
+            max_concurrent: self.max_concurrent,
+            default_timeout_ms: self.default_timeout_ms,
+        }
+    }
+}
+
+/// Builder for creating execution plans
+#[derive(Debug, Clone, Default)]
+pub struct ExecutionPlan {
+    /// Tool calls in the plan
+    calls: Vec<ToolCall>,
+}
+
+impl ExecutionPlan {
+    /// Create a new empty plan
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a tool call
+    pub fn add(&mut self, call: ToolCall) -> &mut Self {
+        self.calls.push(call);
+        self
+    }
+
+    /// Add a tool call (builder style)
+    pub fn with_call(mut self, call: ToolCall) -> Self {
+        self.calls.push(call);
+        self
+    }
+
+    /// Get all calls
+    pub fn calls(&self) -> &[ToolCall] {
+        &self.calls
+    }
+
+    /// Take calls for execution
+    pub fn take_calls(self) -> Vec<ToolCall> {
+        self.calls
+    }
+
+    /// Number of calls
+    pub fn len(&self) -> usize {
+        self.calls.len()
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.calls.is_empty()
+    }
+
+    /// Sort calls by priority (highest first)
+    pub fn sort_by_priority(&mut self) {
+        self.calls.sort_by(|a, b| b.priority.cmp(&a.priority));
+    }
+}
+
+/// Statistics about tool execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionStats {
+    /// Total executions
+    pub total: usize,
+    /// Successful executions
+    pub successful: usize,
+    /// Failed executions
+    pub failed: usize,
+    /// Average duration in milliseconds
+    pub avg_duration_ms: Option<f64>,
+    /// Most used tools
+    pub tool_usage: HashMap<String, usize>,
+}
+
+impl ExecutionStats {
+    /// Calculate stats from history
+    pub fn from_history(history: &ExecutionHistory) -> Self {
+        let mut tool_usage: HashMap<String, usize> = HashMap::new();
+
+        for record in history.all() {
+            *tool_usage.entry(record.tool_name.clone()).or_insert(0) += 1;
+        }
+
+        Self {
+            total: history.total_count(),
+            successful: history.success_count(),
+            failed: history.failure_count(),
+            avg_duration_ms: history.average_duration_ms(),
+            tool_usage,
+        }
+    }
+
+    /// Success rate (0.0 - 1.0)
+    pub fn success_rate(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            self.successful as f64 / self.total as f64
+        }
     }
 }
 

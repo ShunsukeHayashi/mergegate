@@ -19,6 +19,11 @@ pub mod command_popup;
 pub mod approval_overlay;
 pub mod resume_picker;
 pub mod pager_overlay;
+pub mod shimmer;
+pub mod ui;
+pub mod help;
+pub mod notification;
+pub mod views;
 
 pub use app::App;
 pub use event::{Event, EventHandler};
@@ -36,3 +41,8 @@ pub use command_popup::{CommandPopup, CommandPopupAction, Command, CommandBuilde
 pub use approval_overlay::{ApprovalOverlay, ApprovalAction, ApprovalRequest, ApprovalBuilder, RiskLevel, BatchApproval};
 pub use resume_picker::{ResumePicker, ResumePickerAction, SessionEntry, SessionSortOrder, SessionManager};
 pub use pager_overlay::{PagerOverlay, PagerAction, PagerContent, PagerBuilder};
+pub use shimmer::{ShimmerState, ShimmerEffect, SkeletonLoader, Spinner, SpinnerStyle, ProgressBar, TypingIndicator, Countdown, LoadingState, LoadingOverlay};
+pub use ui::{colors, styles, layout, Modal, Toast, ToastType, ToastManager, Breadcrumb, StatusBar, StatusItem, Badge, Divider, EmptyState, KeyHint, KeyHints};
+pub use help::{HelpViewer, HelpAction, HelpCategory, KeyBinding, CheatSheet, CheatSection, QuickRef};
+pub use notification::{NotificationCenter, NotificationPanel, NotificationPanelAction, Notification, NotificationPriority, NotificationAction, Banner, Alert, AlertType, AlertButton, AlertAction};
+pub use views::{MainView, ViewAction, ViewBuilder, FocusArea, ActiveOverlay, AppMode, LayoutConfig};

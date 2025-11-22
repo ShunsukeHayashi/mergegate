@@ -8,11 +8,13 @@ use ratatui::{
     Frame,
 };
 use crossterm::event::{KeyCode, KeyModifiers};
+use futures::StreamExt;
 
 use crate::event::{Event, EventHandler};
 use crate::history_cell::{
     HistoryCell, UserMessageCell, AssistantMessageCell, SystemMessageCell, SystemMessageType,
 };
+use miyabi_core::anthropic::{AnthropicClient, Message, StreamEvent};
 
 /// Main application state
 pub struct App {
@@ -26,6 +28,12 @@ pub struct App {
     pub scroll: u16,
     /// Maximum scroll
     pub max_scroll: u16,
+    /// Anthropic API client
+    client: Option<AnthropicClient>,
+    /// Conversation history for API calls
+    conversation: Vec<Message>,
+    /// Whether currently streaming a response
+    is_streaming: bool,
 }
 
 impl App {
@@ -33,10 +41,22 @@ impl App {
     pub fn new() -> Self {
         let timestamp = chrono::Local::now().format("%H:%M").to_string();
 
+        // Try to get API key from environment
+        let client = std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .and_then(|key| AnthropicClient::new(key).ok())
+            .map(|c| c.with_max_tokens(8192));
+
+        let welcome_message = if client.is_some() {
+            "Welcome to Miyabi CLI! Type your message and press Enter."
+        } else {
+            "⚠ ANTHROPIC_API_KEY not set. Running in demo mode."
+        };
+
         let welcome_cell: Box<dyn HistoryCell> = Box::new(SystemMessageCell {
-            content: "Welcome to Miyabi CLI! Type your message and press Enter.".to_string(),
+            content: welcome_message.to_string(),
             timestamp: timestamp.clone(),
-            message_type: SystemMessageType::Info,
+            message_type: if client.is_some() { SystemMessageType::Info } else { SystemMessageType::Warning },
         });
 
         Self {
@@ -45,6 +65,9 @@ impl App {
             cells: vec![welcome_cell],
             scroll: 0,
             max_scroll: 0,
+            client,
+            conversation: Vec::new(),
+            is_streaming: false,
         }
     }
 
@@ -66,8 +89,8 @@ impl App {
                         } else {
                             match key.code {
                                 KeyCode::Enter => {
-                                    if !self.input.is_empty() {
-                                        self.send_message();
+                                    if !self.input.is_empty() && !self.is_streaming {
+                                        self.send_message().await;
                                     }
                                 }
                                 KeyCode::Char(c) => {
@@ -193,23 +216,99 @@ impl App {
     }
 
     /// Send a message
-    fn send_message(&mut self) {
+    async fn send_message(&mut self) {
         let message = std::mem::take(&mut self.input);
         let timestamp = chrono::Local::now().format("%H:%M").to_string();
 
-        // Add user message
+        // Add user message to UI
         self.cells.push(Box::new(UserMessageCell {
             content: message.clone(),
             timestamp: timestamp.clone(),
         }));
 
-        // Add demo assistant response
-        let response = format!("You said: {}\n\nThis is a **demo response** with `markdown` support!", message);
-        self.cells.push(Box::new(AssistantMessageCell {
-            content: response,
-            timestamp,
-            streaming: false,
-        }));
+        // Add to conversation history
+        self.conversation.push(Message::user(&message));
+
+        // Call API if client is available
+        if let Some(client) = &self.client {
+            self.is_streaming = true;
+
+            // Add streaming placeholder
+            let cell_index = self.cells.len();
+            self.cells.push(Box::new(AssistantMessageCell {
+                content: String::new(),
+                timestamp: timestamp.clone(),
+                streaming: true,
+            }));
+
+            // Start streaming
+            match client.message_stream(
+                self.conversation.clone(),
+                Some("You are a helpful AI assistant. Be concise and clear.".to_string()),
+                None,
+                None,
+            ).await {
+                Ok(mut stream) => {
+                    let mut response_text = String::new();
+
+                    while let Some(event) = stream.next().await {
+                        match event {
+                            Ok(StreamEvent::ContentBlockDelta { delta, .. }) => {
+                                response_text.push_str(&delta.text);
+                                // Update the cell content
+                                if let Some(cell) = self.cells.get_mut(cell_index) {
+                                    if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
+                                        assistant_cell.content = response_text.clone();
+                                    }
+                                }
+                            }
+                            Ok(StreamEvent::MessageStop) => {
+                                break;
+                            }
+                            Ok(StreamEvent::Error { error }) => {
+                                response_text = format!("Error: {}", error);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Mark as done streaming
+                    if let Some(cell) = self.cells.get_mut(cell_index) {
+                        if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
+                            assistant_cell.streaming = false;
+                            if response_text.is_empty() {
+                                assistant_cell.content = "(No response)".to_string();
+                            }
+                        }
+                    }
+
+                    // Add to conversation history
+                    if !response_text.is_empty() {
+                        self.conversation.push(Message::assistant(&response_text));
+                    }
+                }
+                Err(e) => {
+                    // Replace with error message
+                    if let Some(cell) = self.cells.get_mut(cell_index) {
+                        if let Some(assistant_cell) = (**cell).as_any_mut().downcast_mut::<AssistantMessageCell>() {
+                            assistant_cell.content = format!("Error: {}", e);
+                            assistant_cell.streaming = false;
+                        }
+                    }
+                }
+            }
+
+            self.is_streaming = false;
+        } else {
+            // Demo mode - no API key
+            let response = format!("You said: {}\n\nThis is a **demo response** with `markdown` support!\n\nSet ANTHROPIC_API_KEY to enable real responses.", message);
+            self.cells.push(Box::new(AssistantMessageCell {
+                content: response,
+                timestamp,
+                streaming: false,
+            }));
+        }
 
         // Auto-scroll to bottom
         self.scroll = self.max_scroll;

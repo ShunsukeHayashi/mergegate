@@ -749,6 +749,7 @@ pub struct SessionManager {
     /// Sessions
     sessions: Vec<SessionEntry>,
     /// Storage path
+    #[allow(dead_code)]
     storage_path: String,
 }
 
@@ -788,5 +789,550 @@ impl SessionManager {
     /// Get mutable session by ID
     pub fn get_mut(&mut self, id: &str) -> Option<&mut SessionEntry> {
         self.sessions.iter_mut().find(|s| s.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    // SessionEntry tests
+    #[test]
+    fn test_session_entry_creation() {
+        let entry = SessionEntry::new("id1", "Test Session");
+        assert_eq!(entry.id, "id1");
+        assert_eq!(entry.title, "Test Session");
+        assert!(entry.preview.is_empty());
+        assert_eq!(entry.message_count, 0);
+        assert_eq!(entry.tokens_used, 0);
+        assert!(!entry.pinned);
+    }
+
+    #[test]
+    fn test_session_entry_preview() {
+        let entry = SessionEntry::new("id1", "Test").preview("Hello world");
+        assert_eq!(entry.preview, "Hello world");
+    }
+
+    #[test]
+    fn test_session_entry_message_count() {
+        let entry = SessionEntry::new("id1", "Test").message_count(42);
+        assert_eq!(entry.message_count, 42);
+    }
+
+    #[test]
+    fn test_session_entry_model() {
+        let entry = SessionEntry::new("id1", "Test").model("claude-3-opus");
+        assert_eq!(entry.model, "claude-3-opus");
+    }
+
+    #[test]
+    fn test_session_entry_tokens() {
+        let entry = SessionEntry::new("id1", "Test").tokens_used(5000);
+        assert_eq!(entry.tokens_used, 5000);
+    }
+
+    #[test]
+    fn test_session_entry_tags() {
+        let entry = SessionEntry::new("id1", "Test").tags(vec!["rust".to_string(), "cli".to_string()]);
+        assert_eq!(entry.tags.len(), 2);
+        assert_eq!(entry.tags[0], "rust");
+    }
+
+    #[test]
+    fn test_session_entry_pinned() {
+        let entry = SessionEntry::new("id1", "Test").pinned(true);
+        assert!(entry.pinned);
+    }
+
+    #[test]
+    fn test_session_entry_timestamps() {
+        let created = Utc::now() - Duration::days(1);
+        let updated = Utc::now();
+        let entry = SessionEntry::new("id1", "Test").timestamps(created, updated);
+        assert_eq!(entry.created_at, created);
+        assert_eq!(entry.updated_at, updated);
+    }
+
+    #[test]
+    fn test_session_entry_time_ago_just_now() {
+        let entry = SessionEntry::new("id1", "Test");
+        assert_eq!(entry.time_ago(), "just now");
+    }
+
+    #[test]
+    fn test_session_entry_time_ago_minutes() {
+        let mut entry = SessionEntry::new("id1", "Test");
+        entry.updated_at = Utc::now() - Duration::minutes(30);
+        assert!(entry.time_ago().contains("m ago"));
+    }
+
+    #[test]
+    fn test_session_entry_time_ago_hours() {
+        let mut entry = SessionEntry::new("id1", "Test");
+        entry.updated_at = Utc::now() - Duration::hours(5);
+        assert!(entry.time_ago().contains("h ago"));
+    }
+
+    #[test]
+    fn test_session_entry_time_ago_days() {
+        let mut entry = SessionEntry::new("id1", "Test");
+        entry.updated_at = Utc::now() - Duration::days(3);
+        assert!(entry.time_ago().contains("d ago"));
+    }
+
+    // SessionSortOrder tests
+    #[test]
+    fn test_sort_order_enum() {
+        let order = SessionSortOrder::RecentFirst;
+        assert_eq!(order, SessionSortOrder::RecentFirst);
+
+        let order2 = SessionSortOrder::Alphabetical;
+        assert_eq!(order2, SessionSortOrder::Alphabetical);
+    }
+
+    // ResumePicker tests
+    #[test]
+    fn test_picker_creation() {
+        let picker = ResumePicker::new();
+        assert!(!picker.is_visible());
+        assert_eq!(picker.session_count(), 0);
+    }
+
+    #[test]
+    fn test_picker_title() {
+        let picker = ResumePicker::new().title("My Sessions");
+        assert_eq!(picker.title, "My Sessions");
+    }
+
+    #[test]
+    fn test_picker_sessions() {
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1"),
+            SessionEntry::new("2", "Session 2"),
+        ];
+        let picker = ResumePicker::new().sessions(sessions);
+        assert_eq!(picker.session_count(), 2);
+    }
+
+    #[test]
+    fn test_picker_show_hide() {
+        let mut picker = ResumePicker::new();
+        assert!(!picker.is_visible());
+        picker.show();
+        assert!(picker.is_visible());
+        picker.hide();
+        assert!(!picker.is_visible());
+    }
+
+    #[test]
+    fn test_picker_add_session() {
+        let mut picker = ResumePicker::new();
+        picker.add_session(SessionEntry::new("1", "Test"));
+        assert_eq!(picker.session_count(), 1);
+    }
+
+    #[test]
+    fn test_picker_remove_session() {
+        let mut picker = ResumePicker::new();
+        picker.add_session(SessionEntry::new("1", "Test"));
+        assert_eq!(picker.session_count(), 1);
+        assert!(picker.remove_session("1"));
+        assert_eq!(picker.session_count(), 0);
+    }
+
+    #[test]
+    fn test_picker_remove_nonexistent() {
+        let mut picker = ResumePicker::new();
+        assert!(!picker.remove_session("nonexistent"));
+    }
+
+    #[test]
+    fn test_picker_selected_session() {
+        let now = Utc::now();
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        let selected = picker.selected_session();
+        assert!(selected.is_some());
+        // Most recent first, so "2" should be first
+        assert_eq!(selected.unwrap().id, "2");
+    }
+
+    #[test]
+    fn test_picker_selected_session_empty() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        assert!(picker.selected_session().is_none());
+    }
+
+    #[test]
+    fn test_picker_set_sort_order() {
+        let mut picker = ResumePicker::new();
+        picker.set_sort_order(SessionSortOrder::Alphabetical);
+        assert_eq!(picker.sort_order, SessionSortOrder::Alphabetical);
+    }
+
+    #[test]
+    fn test_picker_toggle_details() {
+        let mut picker = ResumePicker::new();
+        assert!(picker.show_details);
+        picker.toggle_details();
+        assert!(!picker.show_details);
+        picker.toggle_details();
+        assert!(picker.show_details);
+    }
+
+    #[test]
+    fn test_picker_handle_key_not_visible() {
+        let mut picker = ResumePicker::new();
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, ResumePickerAction::None);
+    }
+
+    #[test]
+    fn test_picker_handle_key_escape() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+        assert_eq!(action, ResumePickerAction::Cancel);
+        assert!(!picker.is_visible());
+    }
+
+    #[test]
+    fn test_picker_handle_key_enter() {
+        let sessions = vec![SessionEntry::new("test-id", "Test Session")];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, ResumePickerAction::Select("test-id".to_string()));
+    }
+
+    #[test]
+    fn test_picker_handle_key_enter_empty() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, ResumePickerAction::None);
+    }
+
+    #[test]
+    fn test_picker_handle_key_navigation() {
+        let now = Utc::now();
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(3), now - Duration::hours(3)),
+            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("3", "Session 3").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        // First item is "3" (most recent), move down to "2"
+        picker.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        assert_eq!(picker.selected_session().unwrap().id, "2");
+
+        // Move up back to "3"
+        picker.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::empty()));
+        assert_eq!(picker.selected_session().unwrap().id, "3");
+    }
+
+    #[test]
+    fn test_picker_handle_key_tab() {
+        let now = Utc::now();
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        // First is "2" (most recent), tab moves to "1"
+        picker.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::empty()));
+        assert_eq!(picker.selected_session().unwrap().id, "1");
+    }
+
+    #[test]
+    fn test_picker_handle_key_home_end() {
+        let now = Utc::now();
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(3), now - Duration::hours(3)),
+            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("3", "Session 3").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        // End goes to last item (oldest = "1")
+        picker.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::empty()));
+        assert_eq!(picker.selected_session().unwrap().id, "1");
+
+        // Home goes to first item (newest = "3")
+        picker.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::empty()));
+        assert_eq!(picker.selected_session().unwrap().id, "3");
+    }
+
+    #[test]
+    fn test_picker_handle_key_page_down() {
+        let sessions: Vec<_> = (0..20)
+            .map(|i| SessionEntry::new(format!("{}", i), format!("Session {}", i)))
+            .collect();
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        picker.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::empty()));
+        assert!(picker.selected >= 10);
+    }
+
+    #[test]
+    fn test_picker_handle_key_delete() {
+        let sessions = vec![SessionEntry::new("test-id", "Test")];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        // Delete requires CONTROL modifier
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::CONTROL));
+        assert_eq!(action, ResumePickerAction::Delete("test-id".to_string()));
+    }
+
+    #[test]
+    fn test_picker_handle_key_ctrl_n() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        let action = picker.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(action, ResumePickerAction::NewSession);
+        assert!(!picker.is_visible());
+    }
+
+    #[test]
+    fn test_picker_handle_key_search() {
+        let sessions = vec![
+            SessionEntry::new("1", "Rust project"),
+            SessionEntry::new("2", "Python project"),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        picker.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::empty()));
+        picker.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::empty()));
+        picker.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()));
+        picker.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::empty()));
+
+        assert_eq!(picker.query, "rust");
+        assert_eq!(picker.filtered.len(), 1);
+    }
+
+    #[test]
+    fn test_picker_handle_key_backspace() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        picker.query = "test".to_string();
+
+        picker.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()));
+        assert_eq!(picker.query, "tes");
+    }
+
+    #[test]
+    fn test_picker_handle_key_ctrl_d_toggle_details() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        assert!(picker.show_details);
+
+        picker.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert!(!picker.show_details);
+    }
+
+    #[test]
+    fn test_picker_handle_key_ctrl_s_cycle_sort() {
+        let mut picker = ResumePicker::new();
+        picker.show();
+        assert_eq!(picker.sort_order, SessionSortOrder::RecentFirst);
+
+        picker.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        assert_eq!(picker.sort_order, SessionSortOrder::OldestFirst);
+
+        picker.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        assert_eq!(picker.sort_order, SessionSortOrder::Alphabetical);
+    }
+
+    #[test]
+    fn test_picker_handle_key_ctrl_p_toggle_pin() {
+        let sessions = vec![SessionEntry::new("1", "Test")];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        assert!(!picker.sessions[0].pinned);
+        picker.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert!(picker.sessions[0].pinned);
+    }
+
+    #[test]
+    fn test_picker_sorting_pinned_first() {
+        let sessions = vec![
+            SessionEntry::new("1", "First"),
+            SessionEntry::new("2", "Second").pinned(true),
+        ];
+        let picker = ResumePicker::new().sessions(sessions);
+
+        // Pinned should come first
+        assert!(picker.sessions[0].pinned);
+        assert_eq!(picker.sessions[0].id, "2");
+    }
+
+    #[test]
+    fn test_picker_filtering() {
+        let sessions = vec![
+            SessionEntry::new("1", "Rust development"),
+            SessionEntry::new("2", "Python script"),
+            SessionEntry::new("3", "Rust CLI tool"),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        picker.query = "rust".to_string();
+        picker.update_filtered();
+
+        assert_eq!(picker.filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_picker_filtering_by_tags() {
+        let sessions = vec![
+            SessionEntry::new("1", "Project A").tags(vec!["important".to_string()]),
+            SessionEntry::new("2", "Project B"),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+
+        picker.query = "important".to_string();
+        picker.update_filtered();
+
+        assert_eq!(picker.filtered.len(), 1);
+    }
+
+    #[test]
+    fn test_picker_show_resets_state() {
+        let sessions = vec![
+            SessionEntry::new("1", "Session 1"),
+            SessionEntry::new("2", "Session 2"),
+        ];
+        let mut picker = ResumePicker::new().sessions(sessions);
+        picker.show();
+        picker.query = "test".to_string();
+        picker.selected = 1;
+        picker.hide();
+
+        picker.show();
+        assert!(picker.query.is_empty());
+        assert_eq!(picker.selected, 0);
+    }
+
+    #[test]
+    fn test_picker_default() {
+        let picker = ResumePicker::default();
+        assert!(!picker.is_visible());
+        assert_eq!(picker.session_count(), 0);
+    }
+
+    // ResumePickerAction tests
+    #[test]
+    fn test_resume_picker_action_enum() {
+        let action = ResumePickerAction::None;
+        assert_eq!(action, ResumePickerAction::None);
+
+        let action = ResumePickerAction::Select("id".to_string());
+        assert!(matches!(action, ResumePickerAction::Select(_)));
+
+        let action = ResumePickerAction::Delete("id".to_string());
+        assert!(matches!(action, ResumePickerAction::Delete(_)));
+
+        let action = ResumePickerAction::NewSession;
+        assert_eq!(action, ResumePickerAction::NewSession);
+
+        let action = ResumePickerAction::Cancel;
+        assert_eq!(action, ResumePickerAction::Cancel);
+    }
+
+    // format_tokens tests
+    #[test]
+    fn test_format_tokens_small() {
+        assert_eq!(format_tokens(100), "100");
+        assert_eq!(format_tokens(999), "999");
+    }
+
+    #[test]
+    fn test_format_tokens_thousands() {
+        assert_eq!(format_tokens(1000), "1.0K");
+        assert_eq!(format_tokens(5500), "5.5K");
+        assert_eq!(format_tokens(999999), "1000.0K");
+    }
+
+    #[test]
+    fn test_format_tokens_millions() {
+        assert_eq!(format_tokens(1_000_000), "1.0M");
+        assert_eq!(format_tokens(2_500_000), "2.5M");
+    }
+
+    // SessionManager tests
+    #[test]
+    fn test_manager_creation() {
+        let manager = SessionManager::new("/tmp/sessions");
+        assert_eq!(manager.sessions().len(), 0);
+    }
+
+    #[test]
+    fn test_manager_add() {
+        let mut manager = SessionManager::new("/tmp");
+        manager.add(SessionEntry::new("1", "Test"));
+        assert_eq!(manager.sessions().len(), 1);
+    }
+
+    #[test]
+    fn test_manager_remove() {
+        let mut manager = SessionManager::new("/tmp");
+        manager.add(SessionEntry::new("1", "Test"));
+
+        let removed = manager.remove("1");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, "1");
+        assert_eq!(manager.sessions().len(), 0);
+    }
+
+    #[test]
+    fn test_manager_remove_nonexistent() {
+        let mut manager = SessionManager::new("/tmp");
+        assert!(manager.remove("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_manager_get() {
+        let mut manager = SessionManager::new("/tmp");
+        manager.add(SessionEntry::new("1", "Test"));
+
+        let session = manager.get("1");
+        assert!(session.is_some());
+        assert_eq!(session.unwrap().title, "Test");
+    }
+
+    #[test]
+    fn test_manager_get_nonexistent() {
+        let manager = SessionManager::new("/tmp");
+        assert!(manager.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_manager_get_mut() {
+        let mut manager = SessionManager::new("/tmp");
+        manager.add(SessionEntry::new("1", "Test"));
+
+        if let Some(session) = manager.get_mut("1") {
+            session.title = "Updated".to_string();
+        }
+
+        assert_eq!(manager.get("1").unwrap().title, "Updated");
     }
 }
