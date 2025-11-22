@@ -1,0 +1,571 @@
+//! File Operation Tools
+//!
+//! This module provides standard file operation tools that can be
+//! used by AI agents to interact with the filesystem.
+
+use crate::tool::{ParameterDef, Tool, ToolError, ToolOutput, ToolResult};
+use async_trait::async_trait;
+use serde_json::Value;
+use std::path::{Path, PathBuf};
+use tracing::debug;
+
+/// Read file tool
+///
+/// Reads content from a file with optional offset and limit.
+#[derive(Debug, Clone)]
+pub struct ReadTool {
+    /// Base directory for relative paths
+    base_dir: PathBuf,
+}
+
+impl Default for ReadTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReadTool {
+    /// Create a new read tool
+    pub fn new() -> Self {
+        Self {
+            base_dir: std::env::current_dir().unwrap_or_default(),
+        }
+    }
+
+    /// Create with a specific base directory
+    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            base_dir: base_dir.into(),
+        }
+    }
+
+    /// Resolve and validate path
+    fn resolve_path(&self, path: &str) -> ToolResult<PathBuf> {
+        let path = Path::new(path);
+        let resolved = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.base_dir.join(path)
+        };
+
+        // Security check: prevent path traversal
+        let canonical = resolved.canonicalize().map_err(|e| {
+            ToolError::ExecutionFailed(format!("Cannot resolve path: {}", e))
+        })?;
+
+        // Ensure path is within allowed boundaries
+        if !canonical.starts_with(&self.base_dir) && !canonical.is_absolute() {
+            return Err(ToolError::PermissionDenied(
+                "Path traversal detected".to_string(),
+            ));
+        }
+
+        Ok(canonical)
+    }
+}
+
+#[async_trait]
+impl Tool for ReadTool {
+    fn name(&self) -> &str {
+        "read"
+    }
+
+    fn description(&self) -> &str {
+        "Read content from a file with optional offset and limit"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("path", "Path to the file to read"),
+            ParameterDef {
+                name: "offset".to_string(),
+                param_type: "number".to_string(),
+                description: "Line number to start reading from (1-based)".to_string(),
+                required: false,
+                default: Some(Value::Number(1.into())),
+                enum_values: None,
+            },
+            ParameterDef {
+                name: "limit".to_string(),
+                param_type: "number".to_string(),
+                description: "Maximum number of lines to read".to_string(),
+                required: false,
+                default: None,
+                enum_values: None,
+            },
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("path is required".to_string()))?;
+
+        let offset = input
+            .get("offset")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1) as usize;
+
+        let limit = input
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        debug!("Reading file: {} (offset: {}, limit: {:?})", path, offset, limit);
+
+        let resolved = self.resolve_path(path)?;
+        let content = std::fs::read_to_string(&resolved)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to read file: {}", e)))?;
+
+        // Apply offset and limit
+        let lines: Vec<&str> = content.lines().collect();
+        let start = offset.saturating_sub(1);
+        let end = match limit {
+            Some(l) => (start + l).min(lines.len()),
+            None => lines.len(),
+        };
+
+        // Format with line numbers
+        let result: Vec<String> = lines[start..end]
+            .iter()
+            .enumerate()
+            .map(|(i, line)| format!("{:>6}\t{}", start + i + 1, line))
+            .collect();
+
+        Ok(ToolOutput::success(serde_json::json!({
+            "path": resolved.display().to_string(),
+            "content": result.join("\n"),
+            "total_lines": lines.len(),
+            "read_lines": end - start
+        })))
+    }
+}
+
+/// Write file tool
+///
+/// Writes content to a file, creating directories if needed.
+#[derive(Debug, Clone)]
+pub struct WriteTool {
+    /// Base directory for relative paths
+    base_dir: PathBuf,
+}
+
+impl Default for WriteTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WriteTool {
+    /// Create a new write tool
+    pub fn new() -> Self {
+        Self {
+            base_dir: std::env::current_dir().unwrap_or_default(),
+        }
+    }
+
+    /// Create with a specific base directory
+    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            base_dir: base_dir.into(),
+        }
+    }
+
+    /// Resolve path for writing
+    fn resolve_path(&self, path: &str) -> ToolResult<PathBuf> {
+        let path = Path::new(path);
+        let resolved = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.base_dir.join(path)
+        };
+
+        Ok(resolved)
+    }
+}
+
+#[async_trait]
+impl Tool for WriteTool {
+    fn name(&self) -> &str {
+        "write"
+    }
+
+    fn description(&self) -> &str {
+        "Write content to a file, creating directories if needed"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("path", "Path to the file to write"),
+            ParameterDef::required_string("content", "Content to write to the file"),
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("path is required".to_string()))?;
+
+        let content = input
+            .get("content")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("content is required".to_string()))?;
+
+        debug!("Writing file: {}", path);
+
+        let resolved = self.resolve_path(path)?;
+
+        // Create parent directories if needed
+        if let Some(parent) = resolved.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::ExecutionFailed(format!("Failed to create directories: {}", e))
+            })?;
+        }
+
+        std::fs::write(&resolved, content)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to write file: {}", e)))?;
+
+        Ok(ToolOutput::success(serde_json::json!({
+            "path": resolved.display().to_string(),
+            "bytes_written": content.len(),
+            "success": true
+        })))
+    }
+}
+
+/// Edit file tool
+///
+/// Edits a file by replacing text.
+#[derive(Debug, Clone)]
+pub struct EditTool {
+    /// Base directory for relative paths
+    base_dir: PathBuf,
+}
+
+impl Default for EditTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EditTool {
+    /// Create a new edit tool
+    pub fn new() -> Self {
+        Self {
+            base_dir: std::env::current_dir().unwrap_or_default(),
+        }
+    }
+
+    /// Create with a specific base directory
+    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            base_dir: base_dir.into(),
+        }
+    }
+
+    /// Resolve and validate path
+    fn resolve_path(&self, path: &str) -> ToolResult<PathBuf> {
+        let path = Path::new(path);
+        let resolved = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.base_dir.join(path)
+        };
+
+        // Check if file exists
+        if !resolved.exists() {
+            return Err(ToolError::ExecutionFailed(format!(
+                "File not found: {}",
+                resolved.display()
+            )));
+        }
+
+        Ok(resolved)
+    }
+}
+
+#[async_trait]
+impl Tool for EditTool {
+    fn name(&self) -> &str {
+        "edit"
+    }
+
+    fn description(&self) -> &str {
+        "Edit a file by replacing text occurrences"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("path", "Path to the file to edit"),
+            ParameterDef::required_string("old_string", "Text to find and replace"),
+            ParameterDef::required_string("new_string", "Text to replace with"),
+            ParameterDef {
+                name: "replace_all".to_string(),
+                param_type: "boolean".to_string(),
+                description: "Replace all occurrences (default: false, replaces first only)"
+                    .to_string(),
+                required: false,
+                default: Some(Value::Bool(false)),
+                enum_values: None,
+            },
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("path is required".to_string()))?;
+
+        let old_string = input
+            .get("old_string")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("old_string is required".to_string()))?;
+
+        let new_string = input
+            .get("new_string")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("new_string is required".to_string()))?;
+
+        let replace_all = input
+            .get("replace_all")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        debug!(
+            "Editing file: {} (replace_all: {})",
+            path, replace_all
+        );
+
+        let resolved = self.resolve_path(path)?;
+        let content = std::fs::read_to_string(&resolved)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to read file: {}", e)))?;
+
+        // Check if old_string exists
+        if !content.contains(old_string) {
+            return Err(ToolError::ExecutionFailed(
+                "old_string not found in file".to_string(),
+            ));
+        }
+
+        // Perform replacement
+        let (new_content, count) = if replace_all {
+            let count = content.matches(old_string).count();
+            (content.replace(old_string, new_string), count)
+        } else {
+            // Replace first occurrence only
+            let count = if content.contains(old_string) { 1 } else { 0 };
+            (content.replacen(old_string, new_string, 1), count)
+        };
+
+        std::fs::write(&resolved, &new_content)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to write file: {}", e)))?;
+
+        Ok(ToolOutput::success(serde_json::json!({
+            "path": resolved.display().to_string(),
+            "replacements": count,
+            "success": true
+        })))
+    }
+}
+
+/// Create a tool registry with all file tools
+pub fn create_file_tool_registry() -> crate::tool::ToolRegistry {
+    let mut registry = crate::tool::ToolRegistry::new();
+    registry
+        .register(ReadTool::new())
+        .register(WriteTool::new())
+        .register(EditTool::new());
+    registry
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn create_temp_file(dir: &TempDir, name: &str, content: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn test_read_tool_basic() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "test.txt", "Line 1\nLine 2\nLine 3");
+
+        let tool = ReadTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "test.txt"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.success);
+        assert_eq!(output.content["total_lines"], 3);
+    }
+
+    #[tokio::test]
+    async fn test_read_tool_offset_limit() {
+        let dir = TempDir::new().unwrap();
+        let content = (1..=10).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+        create_temp_file(&dir, "test.txt", &content);
+
+        let tool = ReadTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "test.txt",
+                "offset": 3,
+                "limit": 2
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert_eq!(output.content["read_lines"], 2);
+    }
+
+    #[tokio::test]
+    async fn test_read_tool_not_found() {
+        let dir = TempDir::new().unwrap();
+        let tool = ReadTool::with_base_dir(dir.path());
+
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "nonexistent.txt"
+            }))
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_write_tool_basic() {
+        let dir = TempDir::new().unwrap();
+        let tool = WriteTool::with_base_dir(dir.path());
+
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "output.txt",
+                "content": "Hello, World!"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.success);
+
+        // Verify file was written
+        let written = std::fs::read_to_string(dir.path().join("output.txt")).unwrap();
+        assert_eq!(written, "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_write_tool_creates_dirs() {
+        let dir = TempDir::new().unwrap();
+        let tool = WriteTool::with_base_dir(dir.path());
+
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "nested/dir/output.txt",
+                "content": "Nested content"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        assert!(dir.path().join("nested/dir/output.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn test_edit_tool_replace_first() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "foo bar foo baz");
+
+        let tool = EditTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "test.txt",
+                "old_string": "foo",
+                "new_string": "qux"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert_eq!(output.content["replacements"], 1);
+
+        let content = std::fs::read_to_string(dir.path().join("test.txt")).unwrap();
+        assert_eq!(content, "qux bar foo baz");
+    }
+
+    #[tokio::test]
+    async fn test_edit_tool_replace_all() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "foo bar foo baz foo");
+
+        let tool = EditTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "test.txt",
+                "old_string": "foo",
+                "new_string": "qux",
+                "replace_all": true
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert_eq!(output.content["replacements"], 3);
+
+        let content = std::fs::read_to_string(dir.path().join("test.txt")).unwrap();
+        assert_eq!(content, "qux bar qux baz qux");
+    }
+
+    #[tokio::test]
+    async fn test_edit_tool_string_not_found() {
+        let dir = TempDir::new().unwrap();
+        create_temp_file(&dir, "test.txt", "hello world");
+
+        let tool = EditTool::with_base_dir(dir.path());
+        let result = tool
+            .execute(serde_json::json!({
+                "path": "test.txt",
+                "old_string": "nonexistent",
+                "new_string": "replacement"
+            }))
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_file_tool_registry() {
+        let registry = create_file_tool_registry();
+        assert_eq!(registry.len(), 3);
+        assert!(registry.contains("read"));
+        assert!(registry.contains("write"));
+        assert!(registry.contains("edit"));
+    }
+
+    #[test]
+    fn test_tool_schemas() {
+        let read = ReadTool::new();
+        let schema = read.schema();
+        assert!(schema["properties"]["path"].is_object());
+
+        let write = WriteTool::new();
+        let schema = write.schema();
+        assert!(schema["properties"]["content"].is_object());
+
+        let edit = EditTool::new();
+        let schema = edit.schema();
+        assert!(schema["properties"]["old_string"].is_object());
+    }
+}

@@ -7,6 +7,7 @@ pub mod types;
 pub mod anthropic;
 pub mod tool;
 pub mod conversation;
+pub mod tools;
 
 pub use error::Error;
 pub use types::*;
@@ -21,3 +22,4 @@ pub use tool::{
 pub use conversation::{
     Conversation, ConversationMessage, ConversationManager, ConversationMetadata, ConversationError,
 };
+pub use tools::{ReadTool, WriteTool, EditTool, create_file_tool_registry};
