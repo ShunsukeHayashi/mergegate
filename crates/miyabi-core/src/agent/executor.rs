@@ -9,9 +9,16 @@ use serde_json::Value;
 
 use crate::{
     anthropic::Tool as ApiTool,
+    github::GitHubClient,
+    github_tools::{
+        AddCommentTool, AddLabelsTool, CreateIssueTool, CreatePullRequestTool, GetIssueTool,
+        ListIssuesTool, ListPullRequestsTool,
+    },
+    mcp::{McpManager, McpTool},
     tool::{Tool as ToolTrait, ToolError, ToolOutput},
     tools::{BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool},
 };
+use tokio::sync::Mutex as AsyncMutex;
 
 /// Risk level for tool execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -117,6 +124,71 @@ impl<T: ToolTrait + Send + Sync + 'static> ToolExecutor for ToolExecutorAdapter<
     }
 }
 
+/// Executor for MCP tools
+pub struct McpToolExecutor {
+    server_name: String,
+    tool_name: String,
+    tool_description: String,
+    input_schema: Value,
+    manager: Arc<AsyncMutex<McpManager>>,
+}
+
+impl McpToolExecutor {
+    pub fn new(
+        server_name: String,
+        tool: McpTool,
+        manager: Arc<AsyncMutex<McpManager>>,
+    ) -> Self {
+        Self {
+            server_name,
+            tool_name: tool.name,
+            tool_description: tool.description,
+            input_schema: tool.input_schema.unwrap_or(serde_json::json!({
+                "type": "object",
+                "properties": {}
+            })),
+            manager,
+        }
+    }
+}
+
+#[async_trait]
+impl ToolExecutor for McpToolExecutor {
+    fn name(&self) -> &str {
+        &self.tool_name
+    }
+
+    fn description(&self) -> &str {
+        &self.tool_description
+    }
+
+    fn definition(&self) -> ApiTool {
+        ApiTool {
+            name: self.tool_name.clone(),
+            description: self.tool_description.clone(),
+            input_schema: self.input_schema.clone(),
+        }
+    }
+
+    fn risk_level(&self) -> RiskLevel {
+        // MCP tools are external, treat as medium risk by default
+        RiskLevel::Medium
+    }
+
+    async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
+        let mut manager = self.manager.lock().await;
+
+        match manager.call_tool(&self.server_name, &self.tool_name, input).await {
+            Ok(result) => {
+                let content = serde_json::to_string_pretty(&result)
+                    .unwrap_or_else(|_| result.to_string());
+                Ok(ToolOutput::success(content))
+            }
+            Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
+        }
+    }
+}
+
 /// Registry for tool executors
 pub struct ExecutorRegistry {
     executors: HashMap<String, Arc<dyn ToolExecutor>>,
@@ -195,6 +267,68 @@ impl ExecutorRegistry {
         registry.register(ToolExecutorAdapter::new(BashTool::new(), RiskLevel::High));
 
         registry
+    }
+
+    /// Register MCP tools from an MCP manager
+    pub async fn register_mcp_tools(&mut self, manager: Arc<AsyncMutex<McpManager>>) -> Result<usize, ToolError> {
+        let mut count = 0;
+
+        // Get all tools from all servers
+        let all_tools = {
+            let mut mgr = manager.lock().await;
+            mgr.list_all_tools()
+                .await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+        };
+
+        for (server_name, tools) in all_tools {
+            for tool in tools {
+                let executor = McpToolExecutor::new(
+                    server_name.clone(),
+                    tool,
+                    manager.clone(),
+                );
+                self.register(executor);
+                count += 1;
+            }
+        }
+
+        Ok(count)
+    }
+
+    /// Register GitHub tools with the registry
+    pub fn register_github_tools(&mut self, client: GitHubClient) {
+        // Read-only tools (Low risk)
+        self.register(ToolExecutorAdapter::new(
+            ListIssuesTool::new(client.clone()),
+            RiskLevel::Low,
+        ));
+        self.register(ToolExecutorAdapter::new(
+            GetIssueTool::new(client.clone()),
+            RiskLevel::Low,
+        ));
+        self.register(ToolExecutorAdapter::new(
+            ListPullRequestsTool::new(client.clone()),
+            RiskLevel::Low,
+        ));
+
+        // Modification tools (Medium risk)
+        self.register(ToolExecutorAdapter::new(
+            CreateIssueTool::new(client.clone()),
+            RiskLevel::Medium,
+        ));
+        self.register(ToolExecutorAdapter::new(
+            AddCommentTool::new(client.clone()),
+            RiskLevel::Medium,
+        ));
+        self.register(ToolExecutorAdapter::new(
+            AddLabelsTool::new(client.clone()),
+            RiskLevel::Medium,
+        ));
+        self.register(ToolExecutorAdapter::new(
+            CreatePullRequestTool::new(client),
+            RiskLevel::Medium,
+        ));
     }
 }
 
