@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::agent::{Agent, ExecutorRegistry};
+use crate::AnthropicClient;
+
 /// Workflow definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workflow {
@@ -340,6 +343,140 @@ impl WorkflowManager {
                 output: Some(format!("Executed: {}", expanded_task)),
                 error: None,
                 duration_ms: step_start.elapsed().as_millis() as u64,
+            };
+
+            // Store output variable if specified
+            if let Some(output_var) = &step.output {
+                if let Some(output) = &result.output {
+                    context.set_variable(output_var, output);
+                }
+            }
+
+            if result.status == StepStatus::Failed {
+                all_succeeded = false;
+                if matches!(workflow.on_failure, FailurePolicy::Stop) {
+                    step_results.push(result.clone());
+                    context.add_result(result);
+                    break;
+                }
+            }
+
+            step_results.push(result.clone());
+            context.add_result(result);
+        }
+
+        let status = if all_succeeded {
+            WorkflowStatus::Completed
+        } else if step_results.iter().any(|r| r.status == StepStatus::Completed) {
+            WorkflowStatus::PartiallyCompleted
+        } else {
+            WorkflowStatus::Failed
+        };
+
+        Ok(WorkflowResult {
+            workflow_name: name.to_string(),
+            status,
+            steps: step_results,
+            duration_ms: start_time.elapsed().as_millis() as u64,
+        })
+    }
+
+    /// Execute a workflow with actual Agent execution
+    pub async fn execute_with_agent(
+        &self,
+        name: &str,
+        initial_vars: HashMap<String, String>,
+        client: AnthropicClient,
+        registry: ExecutorRegistry,
+    ) -> Result<WorkflowResult> {
+        let workflow = self
+            .workflows
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("Workflow not found: {}", name))?;
+
+        let start_time = std::time::Instant::now();
+        let mut context = WorkflowContext::new().with_variables(workflow.variables.clone());
+
+        // Add initial variables
+        for (key, value) in initial_vars {
+            context.set_variable(&key, &value);
+        }
+
+        let mut step_results = Vec::new();
+        let mut all_succeeded = true;
+
+        // Build dependency graph and execute
+        let execution_order = self.build_execution_order(workflow)?;
+
+        for step_id in execution_order {
+            let step = workflow
+                .steps
+                .iter()
+                .find(|s| s.id == step_id)
+                .ok_or_else(|| anyhow::anyhow!("Step not found: {}", step_id))?;
+
+            // Check dependencies
+            let deps_satisfied = step.depends_on.iter().all(|dep_id| {
+                context
+                    .get_result(dep_id)
+                    .map(|r| r.status == StepStatus::Completed)
+                    .unwrap_or(false)
+            });
+
+            if !deps_satisfied {
+                let result = StepResult {
+                    step_id: step.id.clone(),
+                    status: StepStatus::Skipped,
+                    output: None,
+                    error: Some("Dependencies not satisfied".to_string()),
+                    duration_ms: 0,
+                };
+                step_results.push(result.clone());
+                context.add_result(result);
+                continue;
+            }
+
+            // Check condition
+            if !self.evaluate_condition(&step.condition, &context) {
+                let result = StepResult {
+                    step_id: step.id.clone(),
+                    status: StepStatus::Skipped,
+                    output: None,
+                    error: Some("Condition not met".to_string()),
+                    duration_ms: 0,
+                };
+                step_results.push(result.clone());
+                context.add_result(result);
+                continue;
+            }
+
+            // Execute step with Agent
+            let step_start = std::time::Instant::now();
+            let expanded_task = context.expand(&step.task);
+
+            // Create agent for this step
+            let agent = Agent::new(client.clone(), registry.clone());
+
+            // Execute the task
+            let result = match agent.run(&expanded_task).await {
+                Ok(agent_result) => {
+                    StepResult {
+                        step_id: step.id.clone(),
+                        status: StepStatus::Completed,
+                        output: Some(agent_result.output),
+                        error: None,
+                        duration_ms: step_start.elapsed().as_millis() as u64,
+                    }
+                }
+                Err(e) => {
+                    StepResult {
+                        step_id: step.id.clone(),
+                        status: StepStatus::Failed,
+                        output: None,
+                        error: Some(e.to_string()),
+                        duration_ms: step_start.elapsed().as_millis() as u64,
+                    }
+                }
             };
 
             // Store output variable if specified

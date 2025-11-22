@@ -6,6 +6,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{AnthropicClient, ContentBlock, Message, Role, StopReason};
+use crate::hooks::{HookContext, HookEvent, HookManager, HooksConfig};
 
 use super::{AgentError, AgentEvent, AgentResult, ExecutorRegistry};
 
@@ -43,18 +44,31 @@ pub struct Agent {
     config: AgentConfig,
     system_prompt: Option<String>,
     event_tx: Option<mpsc::Sender<AgentEvent>>,
+    hook_manager: HookManager,
 }
 
 impl Agent {
     /// Create new agent with client and tools
     pub fn new(client: AnthropicClient, executor_registry: ExecutorRegistry) -> Self {
+        // Load hooks from default configuration
+        let hook_manager = HooksConfig::load_default()
+            .map(HookManager::from_config)
+            .unwrap_or_else(|_| HookManager::new());
+
         Self {
             client,
             executor_registry,
             config: AgentConfig::default(),
             system_prompt: None,
             event_tx: None,
+            hook_manager,
         }
+    }
+
+    /// Set custom hook manager
+    pub fn with_hook_manager(mut self, hook_manager: HookManager) -> Self {
+        self.hook_manager = hook_manager;
+        self
     }
 
     /// Set agent configuration
@@ -128,6 +142,11 @@ impl Agent {
 
     /// Main agent execution loop
     pub async fn run(&self, prompt: &str) -> Result<AgentResult, AgentError> {
+        // Execute SessionStart hooks
+        let session_context = HookContext::new()
+            .with_data("prompt", prompt);
+        self.hook_manager.execute(&HookEvent::SessionStart, &session_context).await;
+
         self.emit_event(AgentEvent::Started {
             prompt: prompt.to_string(),
         })
@@ -186,6 +205,13 @@ impl Agent {
                         result: result.clone(),
                     })
                     .await;
+
+                    // Execute SessionEnd hooks
+                    let end_context = HookContext::new()
+                        .with_data("iterations", &result.iterations.to_string())
+                        .with_data("tool_calls", &result.tool_calls.to_string());
+                    self.hook_manager.execute(&HookEvent::SessionEnd, &end_context).await;
+
                     return Ok(result);
                 }
                 Some(StopReason::ToolUse) => {
@@ -218,6 +244,12 @@ impl Agent {
                             // TODO: Add approval callback mechanism
                         }
 
+                        // Execute PreTool hooks
+                        let pre_tool_context = HookContext::new()
+                            .with_tool(&tool_use.name)
+                            .with_data("input", &tool_use.input.to_string());
+                        self.hook_manager.execute(&HookEvent::PreTool, &pre_tool_context).await;
+
                         // Execute tool
                         self.emit_event(AgentEvent::ToolExecuting {
                             name: tool_use.name.clone(),
@@ -237,6 +269,12 @@ impl Agent {
                                 })
                                 .await;
 
+                                // Execute PostTool hooks
+                                let post_tool_context = HookContext::new()
+                                    .with_tool(&tool_use.name)
+                                    .with_result(&output.content.to_string());
+                                self.hook_manager.execute(&HookEvent::PostTool, &post_tool_context).await;
+
                                 // Create tool result
                                 let content = serde_json::to_string(&output.content)
                                     .unwrap_or_else(|_| output.content.to_string());
@@ -252,6 +290,12 @@ impl Agent {
                                     error: e.to_string(),
                                 })
                                 .await;
+
+                                // Execute OnError hooks
+                                let error_context = HookContext::new()
+                                    .with_tool(&tool_use.name)
+                                    .with_error(&e.to_string());
+                                self.hook_manager.execute(&HookEvent::OnError, &error_context).await;
 
                                 // Add error as tool result
                                 results.push(ContentBlock::ToolResult {
@@ -294,6 +338,13 @@ impl Agent {
                         result: result.clone(),
                     })
                     .await;
+
+                    // Execute SessionEnd hooks
+                    let end_context = HookContext::new()
+                        .with_data("iterations", &result.iterations.to_string())
+                        .with_data("tool_calls", &result.tool_calls.to_string());
+                    self.hook_manager.execute(&HookEvent::SessionEnd, &end_context).await;
+
                     return Ok(result);
                 }
             }
