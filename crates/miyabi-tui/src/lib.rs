@@ -12,6 +12,7 @@ pub mod markdown_stream;
 pub mod diff_render;
 pub mod diff_viewer;
 pub mod markdown_parser;
+pub mod syntax;
 
 pub use app::App;
 pub use event::{Event, EventHandler};
@@ -22,3 +23,4 @@ pub use markdown_stream::{MarkdownStream, StreamState, StreamBuffer};
 pub use diff_render::{DiffRender, DiffLine, DiffLineType, DiffHunk, FileDiff};
 pub use diff_viewer::{DiffViewer, DiffViewerOptions, DiffColors, render_diff, render_diff_minimal};
 pub use markdown_parser::MarkdownParser;
+pub use syntax::{SyntaxHighlighter, highlight_code, render_code_block, normalize_language};
