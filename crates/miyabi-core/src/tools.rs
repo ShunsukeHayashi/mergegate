@@ -587,6 +587,7 @@ pub fn create_standard_tool_registry() -> crate::tool::ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tool::ToolRegistry;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -774,6 +775,112 @@ mod tests {
         let bash = BashTool::new();
         let schema = bash.schema();
         assert!(schema["properties"]["command"].is_object());
+    }
+
+    #[test]
+    fn test_tool_schema_format() {
+        // Test that schemas follow JSON Schema format
+        let read = ReadTool::new();
+        let schema = read.schema();
+
+        // Check required JSON Schema fields
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"].is_object());
+        assert!(schema["required"].is_array());
+
+        // Check that required params are in required array
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.contains(&serde_json::json!("path")));
+
+        // Check property types
+        assert_eq!(schema["properties"]["path"]["type"], "string");
+        assert_eq!(schema["properties"]["offset"]["type"], "number");
+        assert_eq!(schema["properties"]["limit"]["type"], "number");
+
+        // Check descriptions are present
+        assert!(schema["properties"]["path"]["description"].is_string());
+    }
+
+    #[test]
+    fn test_tool_schema_required_params() {
+        // Verify required vs optional parameter handling
+        let edit = EditTool::new();
+        let schema = edit.schema();
+
+        let required = schema["required"].as_array().unwrap();
+
+        // Required parameters
+        assert!(required.contains(&serde_json::json!("path")));
+        assert!(required.contains(&serde_json::json!("old_string")));
+        assert!(required.contains(&serde_json::json!("new_string")));
+
+        // Optional parameter should not be in required
+        assert!(!required.contains(&serde_json::json!("replace_all")));
+    }
+
+    #[test]
+    fn test_to_anthropic_tools() {
+        // Test conversion to Anthropic API format
+        let mut registry = ToolRegistry::new();
+        registry.register(ReadTool::new());
+        registry.register(WriteTool::new());
+
+        let api_tools = registry.to_anthropic_tools();
+
+        assert_eq!(api_tools.len(), 2);
+
+        // Find read tool
+        let read_tool = api_tools.iter().find(|t| t.name == "read").unwrap();
+        assert_eq!(read_tool.name, "read");
+        assert!(!read_tool.description.is_empty());
+        assert_eq!(read_tool.input_schema["type"], "object");
+        assert!(read_tool.input_schema["properties"]["path"].is_object());
+    }
+
+    #[test]
+    fn test_registry_schemas() {
+        // Test ToolRegistry::schemas method
+        let mut registry = ToolRegistry::new();
+        registry.register(BashTool::new());
+        registry.register(EditTool::new());
+
+        let schemas = registry.schemas();
+
+        assert_eq!(schemas.len(), 2);
+
+        // Each schema should have name, description, input_schema
+        for schema in &schemas {
+            assert!(schema["name"].is_string());
+            assert!(schema["description"].is_string());
+            assert!(schema["input_schema"]["type"] == "object");
+        }
+    }
+
+    #[test]
+    fn test_standard_registry_has_all_tools() {
+        let registry = create_standard_tool_registry();
+
+        // Should have all 4 tools
+        assert_eq!(registry.len(), 4);
+
+        // Check each tool exists
+        let api_tools = registry.to_anthropic_tools();
+        let tool_names: Vec<&str> = api_tools.iter().map(|t| t.name.as_str()).collect();
+
+        assert!(tool_names.contains(&"read"));
+        assert!(tool_names.contains(&"write"));
+        assert!(tool_names.contains(&"edit"));
+        assert!(tool_names.contains(&"bash"));
+    }
+
+    #[test]
+    fn test_tool_default_values_in_schema() {
+        // Test that default values are included in schema
+        let read = ReadTool::new();
+        let schema = read.schema();
+
+        // offset has a default value
+        assert_eq!(schema["properties"]["offset"]["default"], 1);
     }
 
     #[tokio::test]
