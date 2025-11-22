@@ -322,4 +322,371 @@ mod tests {
         let rules = loader.load().unwrap();
         assert!(rules.is_none());
     }
+
+    #[test]
+    fn test_rule_default_values() {
+        let yaml = r#"
+name: test-rule
+suggestion: Do something
+"#;
+        let rule: Rule = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(rule.name, "test-rule");
+        assert_eq!(rule.severity, "info");
+        assert!(rule.enabled);
+        assert!(rule.file_extensions.is_empty());
+        assert!(rule.pattern.is_none());
+    }
+
+    #[test]
+    fn test_rule_applies_to_file_no_extensions() {
+        let rule = Rule {
+            name: "Any file".to_string(),
+            pattern: None,
+            suggestion: "Test".to_string(),
+            file_extensions: vec![],
+            severity: "info".to_string(),
+            enabled: true,
+        };
+
+        assert!(rule.applies_to_file(Path::new("main.rs")));
+        assert!(rule.applies_to_file(Path::new("main.py")));
+        assert!(rule.applies_to_file(Path::new("file.txt")));
+    }
+
+    #[test]
+    fn test_rule_applies_to_file_no_extension() {
+        let rule = Rule {
+            name: "Rust rule".to_string(),
+            pattern: None,
+            suggestion: "Test".to_string(),
+            file_extensions: vec!["rs".to_string()],
+            severity: "info".to_string(),
+            enabled: true,
+        };
+
+        assert!(!rule.applies_to_file(Path::new("Makefile")));
+    }
+
+    #[test]
+    fn test_rule_matches_no_pattern() {
+        let rule = Rule {
+            name: "Test".to_string(),
+            pattern: None,
+            suggestion: "Test".to_string(),
+            file_extensions: vec![],
+            severity: "info".to_string(),
+            enabled: true,
+        };
+
+        assert!(!rule.matches("any content"));
+    }
+
+    #[test]
+    fn test_agent_preferences_default() {
+        let prefs = AgentPreferences::default();
+        assert!(prefs.style.is_none());
+        assert!(prefs.error_handling.is_none());
+        assert!(prefs.min_score.is_none());
+        assert!(prefs.clippy_strict.is_none());
+        assert!(prefs.custom.is_empty());
+    }
+
+    #[test]
+    fn test_agent_preferences_full() {
+        let yaml = r#"
+style: functional
+error_handling: propagate
+min_score: 80
+clippy_strict: true
+custom_key: "custom_value"
+"#;
+        let prefs: AgentPreferences = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(prefs.style, Some("functional".to_string()));
+        assert_eq!(prefs.error_handling, Some("propagate".to_string()));
+        assert_eq!(prefs.min_score, Some(80));
+        assert_eq!(prefs.clippy_strict, Some(true));
+        assert!(prefs.custom.contains_key("custom_key"));
+    }
+
+    #[test]
+    fn test_miyabi_rules_new() {
+        let rules = MiyabiRules::new();
+        assert_eq!(rules.version, 1);
+        assert!(rules.rules.is_empty());
+        assert!(rules.agent_preferences.is_empty());
+        assert!(rules.settings.is_empty());
+    }
+
+    #[test]
+    fn test_miyabi_rules_validate_invalid_version() {
+        let rules = MiyabiRules {
+            version: 2,
+            ..Default::default()
+        };
+        assert!(rules.validate().is_err());
+    }
+
+    #[test]
+    fn test_miyabi_rules_validate_empty_name() {
+        let rules = MiyabiRules {
+            rules: vec![Rule {
+                name: "".to_string(),
+                pattern: None,
+                suggestion: "Test".to_string(),
+                file_extensions: vec![],
+                severity: "info".to_string(),
+                enabled: true,
+            }],
+            ..Default::default()
+        };
+        assert!(rules.validate().is_err());
+    }
+
+    #[test]
+    fn test_miyabi_rules_validate_empty_suggestion() {
+        let rules = MiyabiRules {
+            rules: vec![Rule {
+                name: "Test".to_string(),
+                pattern: None,
+                suggestion: "".to_string(),
+                file_extensions: vec![],
+                severity: "info".to_string(),
+                enabled: true,
+            }],
+            ..Default::default()
+        };
+        assert!(rules.validate().is_err());
+    }
+
+    #[test]
+    fn test_miyabi_rules_validate_invalid_severity() {
+        let rules = MiyabiRules {
+            rules: vec![Rule {
+                name: "Test".to_string(),
+                pattern: None,
+                suggestion: "Do something".to_string(),
+                file_extensions: vec![],
+                severity: "critical".to_string(),
+                enabled: true,
+            }],
+            ..Default::default()
+        };
+        assert!(rules.validate().is_err());
+    }
+
+    #[test]
+    fn test_miyabi_rules_validate_valid_severities() {
+        for severity in &["info", "warning", "error"] {
+            let rules = MiyabiRules {
+                rules: vec![Rule {
+                    name: "Test".to_string(),
+                    pattern: None,
+                    suggestion: "Do something".to_string(),
+                    file_extensions: vec![],
+                    severity: severity.to_string(),
+                    enabled: true,
+                }],
+                ..Default::default()
+            };
+            assert!(rules.validate().is_ok());
+        }
+    }
+
+    #[test]
+    fn test_miyabi_rules_rules_for_file() {
+        let rules = MiyabiRules {
+            rules: vec![
+                Rule {
+                    name: "Rust rule".to_string(),
+                    pattern: Some("unwrap".to_string()),
+                    suggestion: "Use expect".to_string(),
+                    file_extensions: vec!["rs".to_string()],
+                    severity: "warning".to_string(),
+                    enabled: true,
+                },
+                Rule {
+                    name: "Python rule".to_string(),
+                    pattern: Some("import".to_string()),
+                    suggestion: "Check imports".to_string(),
+                    file_extensions: vec!["py".to_string()],
+                    severity: "info".to_string(),
+                    enabled: true,
+                },
+                Rule {
+                    name: "Disabled rule".to_string(),
+                    pattern: Some("test".to_string()),
+                    suggestion: "Disabled".to_string(),
+                    file_extensions: vec!["rs".to_string()],
+                    severity: "info".to_string(),
+                    enabled: false,
+                },
+            ],
+            ..Default::default()
+        };
+
+        let rust_rules = rules.rules_for_file(Path::new("main.rs"));
+        assert_eq!(rust_rules.len(), 1);
+        assert_eq!(rust_rules[0].name, "Rust rule");
+    }
+
+    #[test]
+    fn test_miyabi_rules_get_agent_preferences() {
+        let mut prefs = HashMap::new();
+        prefs.insert(
+            "coder".to_string(),
+            AgentPreferences {
+                style: Some("functional".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let rules = MiyabiRules {
+            agent_preferences: prefs,
+            ..Default::default()
+        };
+
+        let coder_prefs = rules.get_agent_preferences("coder");
+        assert!(coder_prefs.is_some());
+        assert_eq!(coder_prefs.unwrap().style, Some("functional".to_string()));
+
+        let other_prefs = rules.get_agent_preferences("other");
+        assert!(other_prefs.is_none());
+    }
+
+    #[test]
+    fn test_miyabi_rules_get_setting() {
+        let mut settings = HashMap::new();
+        settings.insert("key".to_string(), serde_json::json!("value"));
+
+        let rules = MiyabiRules {
+            settings,
+            ..Default::default()
+        };
+
+        let value = rules.get_setting("key");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap(), &serde_json::json!("value"));
+
+        let missing = rules.get_setting("missing");
+        assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_rules_loader_find_rules_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        // No file exists
+        assert!(loader.find_rules_file().is_none());
+
+        // Create .miyabirules
+        std::fs::write(temp_dir.path().join(".miyabirules"), "version: 1").unwrap();
+        let found = loader.find_rules_file();
+        assert!(found.is_some());
+        assert!(found.unwrap().ends_with(".miyabirules"));
+    }
+
+    #[test]
+    fn test_rules_loader_find_yaml_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        // Create .miyabirules.yaml
+        std::fs::write(temp_dir.path().join(".miyabirules.yaml"), "version: 1").unwrap();
+        let found = loader.find_rules_file();
+        assert!(found.is_some());
+        assert!(found.unwrap().ends_with(".miyabirules.yaml"));
+    }
+
+    #[test]
+    fn test_rules_loader_find_yml_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        // Create .miyabirules.yml
+        std::fs::write(temp_dir.path().join(".miyabirules.yml"), "version: 1").unwrap();
+        let found = loader.find_rules_file();
+        assert!(found.is_some());
+        assert!(found.unwrap().ends_with(".miyabirules.yml"));
+    }
+
+    #[test]
+    fn test_rules_loader_load() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        let yaml = r#"
+version: 1
+rules:
+  - name: test-rule
+    suggestion: Do something
+    severity: warning
+settings:
+  key: value
+"#;
+        std::fs::write(temp_dir.path().join(".miyabirules"), yaml).unwrap();
+
+        let rules = loader.load().unwrap().unwrap();
+        assert_eq!(rules.version, 1);
+        assert_eq!(rules.rules.len(), 1);
+        assert_eq!(rules.rules[0].name, "test-rule");
+    }
+
+    #[test]
+    fn test_rules_loader_load_or_default() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        // No file - returns default
+        let rules = loader.load_or_default().unwrap();
+        assert_eq!(rules.version, 1);
+        assert!(rules.rules.is_empty());
+    }
+
+    #[test]
+    fn test_rules_loader_parse_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = RulesLoader::new(temp_dir.path().to_path_buf());
+
+        // Invalid YAML
+        std::fs::write(temp_dir.path().join(".miyabirules"), "invalid: yaml: content:").unwrap();
+
+        let result = loader.load();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rules_error_display() {
+        let err = RulesError::FileNotFound(PathBuf::from("/test/path"));
+        assert!(err.to_string().contains("/test/path"));
+
+        let err = RulesError::ParseError("syntax error".to_string());
+        assert!(err.to_string().contains("syntax error"));
+
+        let err = RulesError::ValidationError("invalid".to_string());
+        assert!(err.to_string().contains("invalid"));
+    }
+
+    #[test]
+    fn test_miyabi_rules_serialization() {
+        let rules = MiyabiRules {
+            rules: vec![Rule {
+                name: "Test".to_string(),
+                pattern: Some("pattern".to_string()),
+                suggestion: "Suggestion".to_string(),
+                file_extensions: vec!["rs".to_string()],
+                severity: "warning".to_string(),
+                enabled: true,
+            }],
+            ..Default::default()
+        };
+
+        let yaml = serde_yaml::to_string(&rules).unwrap();
+        assert!(yaml.contains("Test"));
+        assert!(yaml.contains("pattern"));
+        assert!(yaml.contains("warning"));
+
+        let deserialized: MiyabiRules = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(deserialized, rules);
+    }
 }
