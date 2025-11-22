@@ -649,3 +649,405 @@ impl BatchApproval {
         (self.current, self.requests.len())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // RiskLevel tests
+    #[test]
+    fn test_risk_level_color() {
+        assert_eq!(RiskLevel::Low.color(), Color::Green);
+        assert_eq!(RiskLevel::Medium.color(), Color::Yellow);
+        assert_eq!(RiskLevel::High.color(), Color::Rgb(255, 165, 0));
+        assert_eq!(RiskLevel::Critical.color(), Color::Red);
+    }
+
+    #[test]
+    fn test_risk_level_label() {
+        assert_eq!(RiskLevel::Low.label(), "LOW");
+        assert_eq!(RiskLevel::Medium.label(), "MEDIUM");
+        assert_eq!(RiskLevel::High.label(), "HIGH");
+        assert_eq!(RiskLevel::Critical.label(), "CRITICAL");
+    }
+
+    #[test]
+    fn test_risk_level_icon() {
+        assert_eq!(RiskLevel::Low.icon(), "○");
+        assert_eq!(RiskLevel::Medium.icon(), "◐");
+        assert_eq!(RiskLevel::High.icon(), "●");
+        assert_eq!(RiskLevel::Critical.icon(), "⚠");
+    }
+
+    // ApprovalRequest tests
+    #[test]
+    fn test_request_creation() {
+        let request = ApprovalRequest::new("req-1", "Test Request");
+        assert_eq!(request.id, "req-1");
+        assert_eq!(request.title, "Test Request");
+        assert!(request.description.is_empty());
+        assert!(request.tool_name.is_empty());
+        assert!(request.arguments.is_empty());
+        assert_eq!(request.risk_level, RiskLevel::Medium);
+        assert!(request.details.is_empty());
+        assert!(!request.show_details);
+    }
+
+    #[test]
+    fn test_request_description() {
+        let request = ApprovalRequest::new("1", "Title")
+            .description("Test description");
+        assert_eq!(request.description, "Test description");
+    }
+
+    #[test]
+    fn test_request_tool_name() {
+        let request = ApprovalRequest::new("1", "Title")
+            .tool_name("bash");
+        assert_eq!(request.tool_name, "bash");
+    }
+
+    #[test]
+    fn test_request_arguments() {
+        let request = ApprovalRequest::new("1", "Title")
+            .arguments("echo hello");
+        assert_eq!(request.arguments, "echo hello");
+    }
+
+    #[test]
+    fn test_request_risk_level() {
+        let request = ApprovalRequest::new("1", "Title")
+            .risk_level(RiskLevel::Critical);
+        assert_eq!(request.risk_level, RiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_request_add_detail() {
+        let request = ApprovalRequest::new("1", "Title")
+            .add_detail("Detail 1")
+            .add_detail("Detail 2");
+        assert_eq!(request.details.len(), 2);
+        assert_eq!(request.details[0], "Detail 1");
+        assert_eq!(request.details[1], "Detail 2");
+    }
+
+    #[test]
+    fn test_request_details() {
+        let request = ApprovalRequest::new("1", "Title")
+            .details(vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(request.details.len(), 2);
+    }
+
+    // ApprovalOverlay tests
+    #[test]
+    fn test_overlay_creation() {
+        let overlay = ApprovalOverlay::new();
+        assert!(!overlay.is_visible());
+        assert!(overlay.current_request().is_none());
+        assert_eq!(overlay.queue_size(), 0);
+    }
+
+    #[test]
+    fn test_overlay_show() {
+        let mut overlay = ApprovalOverlay::new();
+        let request = ApprovalRequest::new("req-1", "Test");
+
+        overlay.show(request);
+        assert!(overlay.is_visible());
+        assert!(overlay.current_request().is_some());
+        assert_eq!(overlay.current_request().unwrap().id, "req-1");
+    }
+
+    #[test]
+    fn test_overlay_hide() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("1", "Test"));
+
+        overlay.hide();
+        assert!(!overlay.is_visible());
+        assert!(overlay.current_request().is_none());
+    }
+
+    #[test]
+    fn test_overlay_queue() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("1", "First"));
+        overlay.show(ApprovalRequest::new("2", "Second"));
+
+        assert_eq!(overlay.queue_size(), 1);
+        assert_eq!(overlay.current_request().unwrap().id, "1");
+
+        // Hide shows next from queue
+        overlay.hide();
+        assert!(overlay.is_visible());
+        assert_eq!(overlay.current_request().unwrap().id, "2");
+        assert_eq!(overlay.queue_size(), 0);
+    }
+
+    #[test]
+    fn test_overlay_auto_approve() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.set_auto_approve(true);
+
+        overlay.show(ApprovalRequest::new("1", "Test"));
+        assert!(!overlay.is_visible());
+    }
+
+    #[test]
+    fn test_overlay_handle_key_approve_y() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("req-1", "Test"));
+
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::empty()));
+        assert_eq!(action, ApprovalAction::Approve("req-1".to_string()));
+        assert!(!overlay.is_visible());
+    }
+
+    #[test]
+    fn test_overlay_handle_key_approve_enter() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("req-1", "Test"));
+
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, ApprovalAction::Approve("req-1".to_string()));
+    }
+
+    #[test]
+    fn test_overlay_handle_key_reject_n() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("req-1", "Test"));
+
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty()));
+        assert_eq!(action, ApprovalAction::Reject("req-1".to_string()));
+        assert!(!overlay.is_visible());
+    }
+
+    #[test]
+    fn test_overlay_handle_key_reject_esc() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("req-1", "Test"));
+
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+        assert_eq!(action, ApprovalAction::Reject("req-1".to_string()));
+    }
+
+    #[test]
+    fn test_overlay_handle_key_toggle_details() {
+        let mut overlay = ApprovalOverlay::new();
+        let request = ApprovalRequest::new("1", "Test")
+            .add_detail("Detail");
+        overlay.show(request);
+
+        assert!(!overlay.current_request().unwrap().show_details);
+
+        overlay.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::empty()));
+        assert!(overlay.current_request().unwrap().show_details);
+
+        overlay.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::empty()));
+        assert!(!overlay.current_request().unwrap().show_details);
+    }
+
+    #[test]
+    fn test_overlay_handle_key_navigation() {
+        let mut overlay = ApprovalOverlay::new();
+        let request = ApprovalRequest::new("1", "Test")
+            .add_detail("Detail");
+        overlay.show(request);
+
+        // Initially selected = 0 (Approve)
+        overlay.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::empty()));
+        // Now selected = 1 (Reject)
+
+        overlay.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::empty()));
+        // Now selected = 2 (Details)
+
+        overlay.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::empty()));
+        // Back to 1
+    }
+
+    #[test]
+    fn test_overlay_handle_key_approve_all() {
+        let mut overlay = ApprovalOverlay::new();
+        overlay.show(ApprovalRequest::new("req-1", "Test"));
+
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert_eq!(action, ApprovalAction::ApproveAll("req-1".to_string()));
+        assert!(overlay.auto_approve);
+    }
+
+    #[test]
+    fn test_overlay_handle_key_not_visible() {
+        let mut overlay = ApprovalOverlay::new();
+        let action = overlay.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::empty()));
+        assert_eq!(action, ApprovalAction::None);
+    }
+
+    // ApprovalAction tests
+    #[test]
+    fn test_approval_action_enum() {
+        let _none = ApprovalAction::None;
+        let _approve = ApprovalAction::Approve("id".to_string());
+        let _reject = ApprovalAction::Reject("id".to_string());
+        let _approve_all = ApprovalAction::ApproveAll("id".to_string());
+    }
+
+    // ApprovalBuilder tests
+    #[test]
+    fn test_builder_shell_command() {
+        let request = ApprovalBuilder::shell_command("echo hello").build();
+        assert_eq!(request.tool_name, "bash");
+        assert_eq!(request.arguments, "echo hello");
+        assert_eq!(request.risk_level, RiskLevel::Low);
+    }
+
+    #[test]
+    fn test_builder_shell_command_high_risk() {
+        let request = ApprovalBuilder::shell_command("rm -rf /tmp/test").build();
+        assert_eq!(request.risk_level, RiskLevel::High);
+
+        let request = ApprovalBuilder::shell_command("sudo apt update").build();
+        assert_eq!(request.risk_level, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_builder_shell_command_medium_risk() {
+        let request = ApprovalBuilder::shell_command("mv file1 file2").build();
+        assert_eq!(request.risk_level, RiskLevel::Medium);
+
+        let request = ApprovalBuilder::shell_command("cp file1 file2").build();
+        assert_eq!(request.risk_level, RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_builder_file_write() {
+        let request = ApprovalBuilder::file_write("/path/to/file").build();
+        assert_eq!(request.tool_name, "write");
+        assert_eq!(request.arguments, "/path/to/file");
+        assert_eq!(request.risk_level, RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_builder_file_edit() {
+        let request = ApprovalBuilder::file_edit("/path/to/file").build();
+        assert_eq!(request.tool_name, "edit");
+        assert_eq!(request.arguments, "/path/to/file");
+        assert_eq!(request.risk_level, RiskLevel::Low);
+    }
+
+    #[test]
+    fn test_builder_detail() {
+        let request = ApprovalBuilder::shell_command("ls")
+            .detail("Detail 1")
+            .detail("Detail 2")
+            .build();
+        assert_eq!(request.details.len(), 2);
+    }
+
+    #[test]
+    fn test_builder_risk() {
+        let request = ApprovalBuilder::shell_command("ls")
+            .risk(RiskLevel::Critical)
+            .build();
+        assert_eq!(request.risk_level, RiskLevel::Critical);
+    }
+
+    // BatchApproval tests
+    #[test]
+    fn test_batch_creation() {
+        let requests = vec![
+            ApprovalRequest::new("1", "First"),
+            ApprovalRequest::new("2", "Second"),
+        ];
+        let batch = BatchApproval::new(requests);
+
+        assert!(!batch.is_done());
+        assert_eq!(batch.progress(), (0, 2));
+        assert!(batch.current().is_some());
+        assert_eq!(batch.current().unwrap().id, "1");
+    }
+
+    #[test]
+    fn test_batch_approve_current() {
+        let requests = vec![
+            ApprovalRequest::new("1", "First"),
+            ApprovalRequest::new("2", "Second"),
+        ];
+        let mut batch = BatchApproval::new(requests);
+
+        assert!(batch.approve_current());
+        assert_eq!(batch.progress(), (1, 2));
+        assert_eq!(batch.current().unwrap().id, "2");
+
+        let (approved, rejected) = batch.results();
+        assert_eq!(approved, &["1".to_string()]);
+        assert!(rejected.is_empty());
+    }
+
+    #[test]
+    fn test_batch_reject_current() {
+        let requests = vec![
+            ApprovalRequest::new("1", "First"),
+            ApprovalRequest::new("2", "Second"),
+        ];
+        let mut batch = BatchApproval::new(requests);
+
+        assert!(batch.reject_current());
+        assert_eq!(batch.progress(), (1, 2));
+
+        let (approved, rejected) = batch.results();
+        assert!(approved.is_empty());
+        assert_eq!(rejected, &["1".to_string()]);
+    }
+
+    #[test]
+    fn test_batch_approve_all() {
+        let requests = vec![
+            ApprovalRequest::new("1", "First"),
+            ApprovalRequest::new("2", "Second"),
+            ApprovalRequest::new("3", "Third"),
+        ];
+        let mut batch = BatchApproval::new(requests);
+
+        batch.approve_all();
+        assert!(batch.is_done());
+
+        let (approved, rejected) = batch.results();
+        assert_eq!(approved.len(), 3);
+        assert!(rejected.is_empty());
+    }
+
+    #[test]
+    fn test_batch_is_done() {
+        let requests = vec![ApprovalRequest::new("1", "First")];
+        let mut batch = BatchApproval::new(requests);
+
+        assert!(!batch.is_done());
+        batch.approve_current();
+        assert!(batch.is_done());
+    }
+
+    #[test]
+    fn test_batch_empty() {
+        let batch = BatchApproval::new(vec![]);
+        assert!(batch.is_done());
+        assert!(batch.current().is_none());
+    }
+
+    #[test]
+    fn test_batch_mixed_approvals() {
+        let requests = vec![
+            ApprovalRequest::new("1", "First"),
+            ApprovalRequest::new("2", "Second"),
+            ApprovalRequest::new("3", "Third"),
+        ];
+        let mut batch = BatchApproval::new(requests);
+
+        batch.approve_current(); // Approve 1
+        batch.reject_current();  // Reject 2
+        batch.approve_current(); // Approve 3
+
+        let (approved, rejected) = batch.results();
+        assert_eq!(approved, &["1".to_string(), "3".to_string()]);
+        assert_eq!(rejected, &["2".to_string()]);
+    }
+}

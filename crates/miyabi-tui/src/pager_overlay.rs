@@ -262,9 +262,10 @@ impl PagerOverlay {
             }
             KeyCode::Char('?') => {
                 self.search_mode = true;
-                let mut search = SearchState::default();
-                search.forward = false;
-                self.search = Some(search);
+                self.search = Some(SearchState {
+                    forward: false,
+                    ..Default::default()
+                });
                 PagerAction::None
             }
             KeyCode::Char('n') => {
@@ -452,7 +453,7 @@ impl PagerOverlay {
             0
         };
 
-        let content_width = area.width as usize - line_num_width - 2; // -2 for scrollbar
+        let _content_width = area.width as usize - line_num_width - 2; // -2 for scrollbar
 
         let content_lines: Vec<&str> = match &self.content {
             PagerContent::Plain(s) | PagerContent::Markdown(s) => s.lines().collect(),
@@ -463,7 +464,12 @@ impl PagerOverlay {
         let mut render_lines: Vec<Line> = Vec::new();
         let visible_end = (self.scroll + area.height as usize).min(content_lines.len());
 
-        for i in self.scroll..visible_end {
+        for (i, line) in content_lines
+            .iter()
+            .enumerate()
+            .take(visible_end)
+            .skip(self.scroll)
+        {
             let mut spans = Vec::new();
 
             // Line number
@@ -473,8 +479,6 @@ impl PagerOverlay {
                     Style::default().fg(Color::Rgb(86, 95, 137)),
                 ));
             }
-
-            let line = content_lines[i];
 
             // Check for search highlights
             if let Some(search) = &self.search {
@@ -685,5 +689,399 @@ impl PagerBuilder {
     /// Build the pager
     pub fn build(self) -> PagerOverlay {
         self.pager
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // PagerContent tests
+    #[test]
+    fn test_pager_content_plain() {
+        let content = PagerContent::Plain("line1\nline2\nline3".to_string());
+        assert_eq!(content.raw(), "line1\nline2\nline3");
+        assert_eq!(content.line_count(), 3);
+    }
+
+    #[test]
+    fn test_pager_content_markdown() {
+        let content = PagerContent::Markdown("# Title\n\nParagraph".to_string());
+        assert_eq!(content.raw(), "# Title\n\nParagraph");
+        assert_eq!(content.line_count(), 3);
+    }
+
+    #[test]
+    fn test_pager_content_code() {
+        let content = PagerContent::Code {
+            content: "fn main() {}".to_string(),
+            language: "rust".to_string(),
+        };
+        assert_eq!(content.raw(), "fn main() {}");
+        assert_eq!(content.line_count(), 1);
+    }
+
+    #[test]
+    fn test_pager_content_styled() {
+        let lines = vec![
+            Line::from("Line 1"),
+            Line::from("Line 2"),
+        ];
+        let content = PagerContent::Styled(lines);
+        assert_eq!(content.raw(), "");
+        assert_eq!(content.line_count(), 2);
+    }
+
+    // PagerOverlay tests
+    #[test]
+    fn test_pager_creation() {
+        let pager = PagerOverlay::new();
+        assert!(!pager.is_visible());
+        assert_eq!(pager.scroll_position(), 0);
+    }
+
+    #[test]
+    fn test_pager_content_builder() {
+        let pager = PagerOverlay::new()
+            .content(PagerContent::Plain("test".to_string()));
+        assert_eq!(pager.content.raw(), "test");
+    }
+
+    #[test]
+    fn test_pager_title() {
+        let pager = PagerOverlay::new().title("My Pager");
+        assert_eq!(pager.title, "My Pager");
+    }
+
+    #[test]
+    fn test_pager_line_numbers() {
+        let pager = PagerOverlay::new().line_numbers(false);
+        assert!(!pager.show_line_numbers);
+    }
+
+    #[test]
+    fn test_pager_wrap() {
+        let pager = PagerOverlay::new().wrap(false);
+        assert!(!pager.wrap_lines);
+    }
+
+    #[test]
+    fn test_pager_show_hide() {
+        let mut pager = PagerOverlay::new();
+        pager.show(PagerContent::Plain("test".to_string()));
+        assert!(pager.is_visible());
+
+        pager.hide();
+        assert!(!pager.is_visible());
+    }
+
+    #[test]
+    fn test_pager_show_text() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("Hello world");
+        assert!(pager.is_visible());
+        assert_eq!(pager.content.raw(), "Hello world");
+    }
+
+    #[test]
+    fn test_pager_show_markdown() {
+        let mut pager = PagerOverlay::new();
+        pager.show_markdown("# Title");
+        assert!(matches!(pager.content, PagerContent::Markdown(_)));
+    }
+
+    #[test]
+    fn test_pager_show_code() {
+        let mut pager = PagerOverlay::new();
+        pager.show_code("fn main() {}", "rust");
+        match &pager.content {
+            PagerContent::Code { language, .. } => assert_eq!(language, "rust"),
+            _ => panic!("Expected Code content"),
+        }
+    }
+
+    #[test]
+    fn test_pager_show_resets_state() {
+        let mut pager = PagerOverlay::new();
+        pager.scroll = 10;
+        pager.h_scroll = 5;
+        pager.search_mode = true;
+
+        pager.show_text("new content");
+        assert_eq!(pager.scroll, 0);
+        assert_eq!(pager.h_scroll, 0);
+        assert!(!pager.search_mode);
+    }
+
+    #[test]
+    fn test_pager_handle_key_escape() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+
+        let action = pager.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+        assert_eq!(action, PagerAction::Close);
+        assert!(!pager.is_visible());
+    }
+
+    #[test]
+    fn test_pager_handle_key_q() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+
+        let action = pager.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty()));
+        assert_eq!(action, PagerAction::Close);
+    }
+
+    #[test]
+    fn test_pager_handle_key_scroll_down() {
+        let mut pager = PagerOverlay::new();
+        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        pager.show_text(content);
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 1);
+
+        pager.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 2);
+    }
+
+    #[test]
+    fn test_pager_handle_key_scroll_up() {
+        let mut pager = PagerOverlay::new();
+        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        pager.show_text(content);
+
+        pager.scroll = 5;
+        pager.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 4);
+
+        pager.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 3);
+    }
+
+    #[test]
+    fn test_pager_handle_key_page_down() {
+        let mut pager = PagerOverlay::new();
+        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        pager.show_text(content);
+        pager.viewport_height = 10;
+
+        pager.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 10);
+    }
+
+    #[test]
+    fn test_pager_handle_key_page_up() {
+        let mut pager = PagerOverlay::new();
+        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        pager.show_text(content);
+        pager.viewport_height = 10;
+        pager.scroll = 20;
+
+        pager.handle_key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 10);
+    }
+
+    #[test]
+    fn test_pager_handle_key_home() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        pager.scroll = 10;
+
+        pager.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 0);
+
+        pager.scroll = 10;
+        pager.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 0);
+    }
+
+    #[test]
+    fn test_pager_handle_key_end() {
+        let mut pager = PagerOverlay::new();
+        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        pager.show_text(content);
+        pager.viewport_height = 10;
+
+        pager.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::empty()));
+        assert_eq!(pager.scroll, 90);
+    }
+
+    #[test]
+    fn test_pager_handle_key_horizontal_scroll() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()));
+        assert_eq!(pager.h_scroll, 4);
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::empty()));
+        assert_eq!(pager.h_scroll, 0);
+    }
+
+    #[test]
+    fn test_pager_handle_key_toggle_wrap() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        let initial = pager.wrap_lines;
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::empty()));
+        assert_eq!(pager.wrap_lines, !initial);
+    }
+
+    #[test]
+    fn test_pager_handle_key_toggle_line_numbers() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        let initial = pager.show_line_numbers;
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::empty()));
+        assert_eq!(pager.show_line_numbers, !initial);
+    }
+
+    #[test]
+    fn test_pager_handle_key_copy() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test content");
+
+        let action = pager.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::empty()));
+        assert_eq!(action, PagerAction::Copy("test content".to_string()));
+    }
+
+    #[test]
+    fn test_pager_handle_key_search_mode() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
+        assert!(pager.search_mode);
+        assert!(pager.search.is_some());
+    }
+
+    #[test]
+    fn test_pager_handle_key_search_backward() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+        assert!(pager.search_mode);
+        assert!(!pager.search.as_ref().unwrap().forward);
+    }
+
+    #[test]
+    fn test_pager_search_input() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        pager.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
+
+        // Type search query
+        pager.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::empty()));
+
+        assert_eq!(pager.search.as_ref().unwrap().query, "ab");
+    }
+
+    #[test]
+    fn test_pager_search_backspace() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        pager.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()));
+
+        assert_eq!(pager.search.as_ref().unwrap().query, "a");
+    }
+
+    #[test]
+    fn test_pager_search_escape() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("test");
+        pager.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
+
+        pager.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+        assert!(!pager.search_mode);
+    }
+
+    #[test]
+    fn test_pager_search_enter() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("line one\nline two\nline three");
+        pager.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
+
+        pager.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::empty()));
+        pager.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+
+        assert!(!pager.search_mode);
+        assert!(!pager.search.as_ref().unwrap().matches.is_empty());
+    }
+
+    #[test]
+    fn test_pager_handle_key_not_visible() {
+        let mut pager = PagerOverlay::new();
+        let action = pager.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty()));
+        assert_eq!(action, PagerAction::None);
+    }
+
+    // PagerAction tests
+    #[test]
+    fn test_pager_action_enum() {
+        let _none = PagerAction::None;
+        let _close = PagerAction::Close;
+        let _copy = PagerAction::Copy("content".to_string());
+    }
+
+    // PagerBuilder tests
+    #[test]
+    fn test_pager_builder_help() {
+        let pager = PagerBuilder::help("Help content").build();
+        assert_eq!(pager.title, "Help");
+        assert!(!pager.show_line_numbers);
+        assert!(pager.wrap_lines);
+    }
+
+    #[test]
+    fn test_pager_builder_log() {
+        let pager = PagerBuilder::log("Log content").build();
+        assert_eq!(pager.title, "Log Viewer");
+        assert!(pager.show_line_numbers);
+        assert!(!pager.wrap_lines);
+    }
+
+    #[test]
+    fn test_pager_builder_code() {
+        let pager = PagerBuilder::code("fn main() {}", "rust").build();
+        assert_eq!(pager.title, "Code");
+        assert!(pager.show_line_numbers);
+    }
+
+    #[test]
+    fn test_pager_builder_title() {
+        let pager = PagerBuilder::help("content")
+            .title("Custom Title")
+            .build();
+        assert_eq!(pager.title, "Custom Title");
+    }
+
+    #[test]
+    fn test_pager_scroll_boundary() {
+        let mut pager = PagerOverlay::new();
+        pager.show_text("line1\nline2\nline3");
+        pager.viewport_height = 10;
+
+        // Try to scroll past end
+        for _ in 0..100 {
+            pager.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        }
+        assert!(pager.scroll <= pager.content.line_count());
+
+        // Try to scroll past start
+        for _ in 0..100 {
+            pager.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::empty()));
+        }
+        assert_eq!(pager.scroll, 0);
     }
 }

@@ -16,8 +16,6 @@ use ratatui::{
     Frame,
 };
 
-use crate::wrapping::display_width;
-
 /// Command definition
 #[derive(Debug, Clone)]
 pub struct Command {
@@ -403,9 +401,8 @@ impl CommandPopup {
                 let mut spans = vec![];
 
                 // Icon
-                let icon = if cmd.enabled { "  " } else { "  " };
                 spans.push(Span::styled(
-                    icon,
+                    "  ",
                     Style::default().fg(if cmd.enabled {
                         Color::Green
                     } else {
@@ -564,7 +561,7 @@ impl CommandBuilder {
         }
     }
 
-    pub fn add(mut self, command: Command) -> Self {
+    pub fn with_command(mut self, command: Command) -> Self {
         self.commands.push(command);
         self
     }
@@ -577,5 +574,340 @@ impl CommandBuilder {
 impl Default for CommandBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Command tests
+    #[test]
+    fn test_command_creation() {
+        let cmd = Command::new("test", "Test Command");
+        assert_eq!(cmd.name, "test");
+        assert_eq!(cmd.label, "Test Command");
+        assert!(cmd.description.is_empty());
+        assert_eq!(cmd.category, "General");
+        assert!(cmd.shortcut.is_none());
+        assert!(cmd.enabled);
+    }
+
+    #[test]
+    fn test_command_description() {
+        let cmd = Command::new("test", "Test").description("A test command");
+        assert_eq!(cmd.description, "A test command");
+    }
+
+    #[test]
+    fn test_command_category() {
+        let cmd = Command::new("test", "Test").category("Settings");
+        assert_eq!(cmd.category, "Settings");
+    }
+
+    #[test]
+    fn test_command_shortcut() {
+        let cmd = Command::new("test", "Test").shortcut("Ctrl+T");
+        assert_eq!(cmd.shortcut, Some("Ctrl+T".to_string()));
+    }
+
+    #[test]
+    fn test_command_enabled() {
+        let cmd = Command::new("test", "Test").enabled(false);
+        assert!(!cmd.enabled);
+    }
+
+    // CommandPopup tests
+    #[test]
+    fn test_popup_creation() {
+        let popup = CommandPopup::new();
+        assert!(!popup.is_visible());
+        assert!(popup.selected_command().is_none());
+    }
+
+    #[test]
+    fn test_popup_show_hide() {
+        let mut popup = CommandPopup::new();
+        popup.show();
+        assert!(popup.is_visible());
+        popup.hide();
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_popup_with_commands() {
+        let popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        assert_eq!(popup.commands.len(), 2);
+    }
+
+    #[test]
+    fn test_popup_title() {
+        let popup = CommandPopup::new().title("My Commands");
+        assert_eq!(popup.title, "My Commands");
+    }
+
+    #[test]
+    fn test_popup_placeholder() {
+        let popup = CommandPopup::new().placeholder("Search...");
+        assert_eq!(popup.placeholder, "Search...");
+    }
+
+    #[test]
+    fn test_popup_selected_command() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        popup.show();
+
+        let cmd = popup.selected_command();
+        assert!(cmd.is_some());
+        assert_eq!(cmd.unwrap().name, "cmd1");
+    }
+
+    #[test]
+    fn test_popup_handle_key_escape() {
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test")]);
+        popup.show();
+
+        let action = popup.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+        assert_eq!(action, CommandPopupAction::Cancel);
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_popup_handle_key_enter() {
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test")]);
+        popup.show();
+
+        let action = popup.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, CommandPopupAction::Execute("test".to_string()));
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_popup_handle_key_enter_disabled() {
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test").enabled(false)]);
+        popup.show();
+
+        let action = popup.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, CommandPopupAction::None);
+    }
+
+    #[test]
+    fn test_popup_handle_key_navigation_down() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        assert_eq!(popup.selected_command().unwrap().name, "cmd2");
+    }
+
+    #[test]
+    fn test_popup_handle_key_navigation_up() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::empty()));
+        assert_eq!(popup.selected_command().unwrap().name, "cmd1");
+    }
+
+    #[test]
+    fn test_popup_handle_key_tab() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::empty()));
+        assert_eq!(popup.selected_command().unwrap().name, "cmd2");
+    }
+
+    #[test]
+    fn test_popup_handle_key_home_end() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+            Command::new("cmd3", "Command 3"),
+        ]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::empty()));
+        assert_eq!(popup.selected_command().unwrap().name, "cmd3");
+
+        popup.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::empty()));
+        assert_eq!(popup.selected_command().unwrap().name, "cmd1");
+    }
+
+    #[test]
+    fn test_popup_handle_key_search() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("open", "Open File"),
+            Command::new("save", "Save File"),
+        ]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::empty()));
+
+        assert_eq!(popup.query, "sav");
+        // Should filter to only "save"
+        assert_eq!(popup.filtered.len(), 1);
+        assert_eq!(popup.selected_command().unwrap().name, "save");
+    }
+
+    #[test]
+    fn test_popup_handle_key_backspace() {
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test")]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::empty()));
+        assert_eq!(popup.query, "ab");
+
+        popup.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()));
+        assert_eq!(popup.query, "a");
+    }
+
+    #[test]
+    fn test_popup_handle_key_ctrl_u() {
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test")]);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+
+        assert!(popup.query.is_empty());
+    }
+
+    #[test]
+    fn test_popup_handle_key_not_visible() {
+        let mut popup = CommandPopup::new();
+        let action = popup.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+        assert_eq!(action, CommandPopupAction::None);
+    }
+
+    #[test]
+    fn test_popup_with_default_commands() {
+        let popup = CommandPopup::new().with_default_commands();
+        assert!(!popup.commands.is_empty());
+        assert!(popup.commands.len() >= 10);
+    }
+
+    #[test]
+    fn test_popup_show_clears_state() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("cmd1", "Command 1"),
+            Command::new("cmd2", "Command 2"),
+        ]);
+        popup.show();
+
+        // Navigate and search
+        popup.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::empty()));
+
+        // Show again should reset
+        popup.show();
+        assert!(popup.query.is_empty());
+        assert_eq!(popup.selected, 0);
+    }
+
+    // fuzzy_match tests
+    #[test]
+    fn test_fuzzy_match_exact() {
+        assert!(fuzzy_match("test", "test"));
+    }
+
+    #[test]
+    fn test_fuzzy_match_subsequence() {
+        assert!(fuzzy_match("tst", "test"));
+        assert!(fuzzy_match("oe", "open"));
+    }
+
+    #[test]
+    fn test_fuzzy_match_case_insensitive() {
+        assert!(fuzzy_match("TEST", "test"));
+        assert!(fuzzy_match("Test", "test"));
+    }
+
+    #[test]
+    fn test_fuzzy_match_no_match() {
+        assert!(!fuzzy_match("xyz", "test"));
+        assert!(!fuzzy_match("ba", "ab")); // Out of order
+    }
+
+    #[test]
+    fn test_fuzzy_match_empty_query() {
+        assert!(fuzzy_match("", "test"));
+    }
+
+    // CommandPopupAction tests
+    #[test]
+    fn test_command_popup_action_enum() {
+        let _none = CommandPopupAction::None;
+        let _execute = CommandPopupAction::Execute("test".to_string());
+        let _cancel = CommandPopupAction::Cancel;
+    }
+
+    // CommandCategory tests
+    #[test]
+    fn test_command_category_creation() {
+        let cat = CommandCategory::new("Settings", 1);
+        assert_eq!(cat.name, "Settings");
+        assert_eq!(cat.order, 1);
+    }
+
+    // CommandBuilder tests
+    #[test]
+    fn test_command_builder() {
+        let commands = CommandBuilder::new()
+            .with_command(Command::new("cmd1", "Command 1"))
+            .with_command(Command::new("cmd2", "Command 2"))
+            .build();
+
+        assert_eq!(commands.len(), 2);
+    }
+
+    #[test]
+    fn test_popup_filtering_empty() {
+        let mut popup = CommandPopup::new().commands(vec![
+            Command::new("test", "Test"),
+        ]);
+        popup.show();
+
+        // Search for something that doesn't exist
+        popup.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()));
+        popup.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()));
+
+        assert!(popup.filtered.is_empty());
+        assert!(popup.selected_command().is_none());
+    }
+
+    #[test]
+    fn test_popup_page_navigation() {
+        let commands: Vec<Command> = (0..20)
+            .map(|i| Command::new(format!("cmd{}", i), format!("Command {}", i)))
+            .collect();
+
+        let mut popup = CommandPopup::new().commands(commands);
+        popup.show();
+
+        popup.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::empty()));
+        // Should move down 10 items
+        assert!(popup.selected >= 9);
     }
 }
