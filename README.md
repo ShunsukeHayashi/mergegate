@@ -2,6 +2,25 @@
 
 A powerful terminal-based AI assistant with TUI (Terminal User Interface) built in Rust.
 
+## 60-Second Setup
+
+```bash
+# 1. Clone and build
+git clone https://github.com/ShunsukeHayashi/miyabi-cli-standalone.git
+cd miyabi-cli-standalone
+cargo build --release
+
+# 2. Set API key
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# 3. Run
+./target/release/miyabi tui
+```
+
+That's it! Start chatting with Claude in your terminal.
+
+---
+
 ## Features
 
 - **Interactive TUI** - Beautiful terminal interface with markdown rendering
@@ -409,6 +428,61 @@ Supported models:
 - `claude-sonnet-4-5-20250929` (default)
 - `claude-haiku-4-5-20251001`
 - `claude-sonnet-4-20250514`
+
+## Troubleshooting
+
+### Common Issues
+
+#### "API key not found"
+```bash
+# Check if environment variable is set
+echo $ANTHROPIC_API_KEY
+
+# Or add to config file
+vim ~/.miyabi/config.toml
+# [api]
+# api_key = "sk-ant-..."
+```
+
+#### "Device not configured" error on TUI start
+This usually means the terminal doesn't support the required features. Try:
+```bash
+# Use a different terminal emulator (iTerm2, Alacritty, etc.)
+# Or run with explicit terminal type
+TERM=xterm-256color ./target/release/miyabi tui
+```
+
+#### Build errors
+```bash
+# Make sure Rust is up to date
+rustup update
+
+# Clean and rebuild
+cargo clean
+cargo build --release
+```
+
+#### Session not saving
+```bash
+# Check permissions on sessions directory
+ls -la ~/.miyabi/sessions/
+
+# Create if missing
+mkdir -p ~/.miyabi/sessions
+```
+
+### Debug Mode
+
+For verbose logging:
+```bash
+RUST_LOG=debug ./target/release/miyabi tui
+```
+
+### Getting Help
+
+- Check `miyabi --help` for CLI options
+- Press `F1` in TUI for keybindings
+- Open an issue: https://github.com/ShunsukeHayashi/miyabi-cli-standalone/issues
 
 ## License
 
