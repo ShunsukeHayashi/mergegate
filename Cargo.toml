@@ -36,6 +36,7 @@ crossterm = { version = "0.29.0", features = ["bracketed-paste", "event-stream"]
 # Text Processing
 textwrap = "0.16"
 unicode-width = "0.2"
+pulldown-cmark = "0.12"
 
 # CLI
 clap = { version = "4", features = ["derive"] }

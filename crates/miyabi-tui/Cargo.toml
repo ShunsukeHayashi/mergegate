@@ -28,6 +28,7 @@ crossterm = { workspace = true }
 # Text Processing
 textwrap = { workspace = true }
 unicode-width = { workspace = true }
+pulldown-cmark = { workspace = true }
 
 # Async Runtime
 tokio = { workspace = true }
