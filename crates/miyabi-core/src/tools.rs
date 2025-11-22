@@ -7,7 +7,10 @@ use crate::tool::{ParameterDef, Tool, ToolError, ToolOutput, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use tracing::debug;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::process::Command;
+use tracing::{debug, warn};
 
 /// Read file tool
 ///
@@ -371,6 +374,195 @@ impl Tool for EditTool {
     }
 }
 
+/// Bash tool for executing shell commands
+///
+/// Executes commands with timeout and captures output.
+#[derive(Debug, Clone)]
+pub struct BashTool {
+    /// Working directory
+    working_dir: PathBuf,
+    /// Default timeout in seconds
+    default_timeout: u64,
+    /// Maximum output length
+    max_output_len: usize,
+}
+
+impl Default for BashTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BashTool {
+    /// Create a new bash tool
+    pub fn new() -> Self {
+        Self {
+            working_dir: std::env::current_dir().unwrap_or_default(),
+            default_timeout: 120,
+            max_output_len: 50_000,
+        }
+    }
+
+    /// Create with a specific working directory
+    pub fn with_working_dir(working_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            working_dir: working_dir.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Set default timeout
+    pub fn with_timeout(mut self, timeout: u64) -> Self {
+        self.default_timeout = timeout;
+        self
+    }
+
+    /// Check for dangerous commands
+    fn check_dangerous(&self, command: &str) -> Option<String> {
+        let dangerous = [
+            "rm -rf /",
+            "rm -rf ~",
+            "mkfs",
+            ":(){:|:&};:",
+            "dd if=/dev/zero",
+            "chmod -R 777 /",
+        ];
+
+        for pattern in dangerous {
+            if command.contains(pattern) {
+                return Some(format!("Potentially dangerous command detected: {}", pattern));
+            }
+        }
+        None
+    }
+
+    /// Truncate output if too long
+    fn truncate_output(&self, output: String) -> String {
+        if output.len() > self.max_output_len {
+            let truncated = &output[..self.max_output_len];
+            format!(
+                "{}\n\n... (output truncated, {} bytes total)",
+                truncated,
+                output.len()
+            )
+        } else {
+            output
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for BashTool {
+    fn name(&self) -> &str {
+        "bash"
+    }
+
+    fn description(&self) -> &str {
+        "Execute a bash command with timeout"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDef> {
+        vec![
+            ParameterDef::required_string("command", "The bash command to execute"),
+            ParameterDef {
+                name: "timeout".to_string(),
+                param_type: "number".to_string(),
+                description: "Timeout in seconds (default: 120)".to_string(),
+                required: false,
+                default: None,
+                enum_values: None,
+            },
+            ParameterDef::optional_string("working_dir", "Working directory for the command"),
+        ]
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<ToolOutput> {
+        let command = input
+            .get("command")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::InvalidInput("command is required".to_string()))?;
+
+        let timeout_secs = input
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(self.default_timeout);
+
+        let working_dir = input
+            .get("working_dir")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.working_dir.clone());
+
+        debug!("Executing bash command: {} (timeout: {}s)", command, timeout_secs);
+
+        // Check for dangerous commands
+        if let Some(warning) = self.check_dangerous(command) {
+            warn!("{}", warning);
+            return Err(ToolError::PermissionDenied(warning));
+        }
+
+        // Execute command
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(&working_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to spawn process: {}", e)))?;
+
+        // Wait with timeout using select
+        let timeout_duration = Duration::from_secs(timeout_secs);
+
+        tokio::select! {
+            result = child.wait_with_output() => {
+                match result {
+                    Ok(output) => {
+                        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                        let exit_code = output.status.code().unwrap_or(-1);
+
+                        let stdout = self.truncate_output(stdout);
+                        let stderr = self.truncate_output(stderr);
+
+                        let success = output.status.success();
+
+                        if success {
+                            Ok(ToolOutput::success(serde_json::json!({
+                                "stdout": stdout,
+                                "stderr": stderr,
+                                "exit_code": exit_code,
+                                "success": true
+                            })))
+                        } else {
+                            Ok(ToolOutput {
+                                success: false,
+                                content: serde_json::json!({
+                                    "stdout": stdout,
+                                    "stderr": stderr,
+                                    "exit_code": exit_code,
+                                    "success": false
+                                }),
+                                error: Some(format!("Command exited with code {}", exit_code)),
+                                duration_ms: 0,
+                            })
+                        }
+                    }
+                    Err(e) => Err(ToolError::ExecutionFailed(format!(
+                        "Failed to wait for process: {}",
+                        e
+                    ))),
+                }
+            }
+            _ = tokio::time::sleep(timeout_duration) => {
+                // Timeout occurred - process is still running but we can't kill it
+                // since wait_with_output took ownership. Return timeout error.
+                Err(ToolError::Timeout(timeout_secs * 1000))
+            }
+        }
+    }
+}
+
 /// Create a tool registry with all file tools
 pub fn create_file_tool_registry() -> crate::tool::ToolRegistry {
     let mut registry = crate::tool::ToolRegistry::new();
@@ -378,6 +570,17 @@ pub fn create_file_tool_registry() -> crate::tool::ToolRegistry {
         .register(ReadTool::new())
         .register(WriteTool::new())
         .register(EditTool::new());
+    registry
+}
+
+/// Create a tool registry with all standard tools
+pub fn create_standard_tool_registry() -> crate::tool::ToolRegistry {
+    let mut registry = crate::tool::ToolRegistry::new();
+    registry
+        .register(ReadTool::new())
+        .register(WriteTool::new())
+        .register(EditTool::new())
+        .register(BashTool::new());
     registry
 }
 
@@ -397,7 +600,7 @@ mod tests {
     #[tokio::test]
     async fn test_read_tool_basic() {
         let dir = TempDir::new().unwrap();
-        let path = create_temp_file(&dir, "test.txt", "Line 1\nLine 2\nLine 3");
+        let _path = create_temp_file(&dir, "test.txt", "Line 1\nLine 2\nLine 3");
 
         let tool = ReadTool::with_base_dir(dir.path());
         let result = tool
@@ -567,5 +770,74 @@ mod tests {
         let edit = EditTool::new();
         let schema = edit.schema();
         assert!(schema["properties"]["old_string"].is_object());
+
+        let bash = BashTool::new();
+        let schema = bash.schema();
+        assert!(schema["properties"]["command"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_bash_tool_echo() {
+        let tool = BashTool::new();
+        let result = tool
+            .execute(serde_json::json!({
+                "command": "echo 'Hello, World!'"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.success);
+        assert!(output.content["stdout"].as_str().unwrap().contains("Hello, World!"));
+    }
+
+    #[tokio::test]
+    async fn test_bash_tool_exit_code() {
+        let tool = BashTool::new();
+        let result = tool
+            .execute(serde_json::json!({
+                "command": "exit 1"
+            }))
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(!output.success);
+        assert_eq!(output.content["exit_code"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_bash_tool_dangerous_command() {
+        let tool = BashTool::new();
+        let result = tool
+            .execute(serde_json::json!({
+                "command": "rm -rf /"
+            }))
+            .await;
+
+        assert!(matches!(result, Err(ToolError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn test_bash_tool_timeout() {
+        let tool = BashTool::new().with_timeout(1);
+        let result = tool
+            .execute(serde_json::json!({
+                "command": "sleep 10",
+                "timeout": 1
+            }))
+            .await;
+
+        assert!(matches!(result, Err(ToolError::Timeout(_))));
+    }
+
+    #[test]
+    fn test_create_standard_tool_registry() {
+        let registry = create_standard_tool_registry();
+        assert_eq!(registry.len(), 4);
+        assert!(registry.contains("read"));
+        assert!(registry.contains("write"));
+        assert!(registry.contains("edit"));
+        assert!(registry.contains("bash"));
     }
 }

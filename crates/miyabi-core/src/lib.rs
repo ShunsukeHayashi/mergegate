@@ -23,5 +23,5 @@ pub use tool::{
 pub use conversation::{
     Conversation, ConversationMessage, ConversationManager, ConversationMetadata, ConversationError,
 };
-pub use tools::{ReadTool, WriteTool, EditTool, create_file_tool_registry};
+pub use tools::{ReadTool, WriteTool, EditTool, BashTool, create_file_tool_registry, create_standard_tool_registry};
 pub use token::{TokenCounter, TokenUsage, ContextManager, ContextUsage, ModelLimits};
