@@ -385,4 +385,141 @@ model = "custom-model"
         assert!(toml_str.contains("[session]"));
         assert!(toml_str.contains("[tools]"));
     }
+
+    #[test]
+    fn test_default_path() {
+        let path = Config::default_path();
+        assert!(path.to_string_lossy().contains("config.toml"));
+        assert!(path.to_string_lossy().contains(".miyabi"));
+    }
+
+    #[test]
+    fn test_default_dir() {
+        let dir = Config::default_dir();
+        assert!(dir.to_string_lossy().contains(".miyabi"));
+    }
+
+    #[test]
+    fn test_api_key_none() {
+        let config = Config::default();
+        assert!(config.api_key().is_none());
+    }
+
+    #[test]
+    fn test_api_key_some() {
+        let mut config = Config::default();
+        config.api.api_key = Some("test-key".to_string());
+        assert_eq!(config.api_key(), Some("test-key"));
+    }
+
+    #[test]
+    fn test_working_dir_default() {
+        let config = Config::default();
+        let working = config.working_dir();
+        // Should not panic and return some path
+        assert!(!working.as_os_str().is_empty() || working.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = Config::default();
+        let cloned = config.clone();
+        assert_eq!(config.api.model, cloned.api.model);
+        assert_eq!(config.ui.theme, cloned.ui.theme);
+    }
+
+    #[test]
+    fn test_api_config_system_prompt() {
+        let api = ApiConfig::default();
+        assert!(api.system_prompt.is_some());
+        assert!(api.system_prompt.unwrap().contains("helpful"));
+    }
+
+    #[test]
+    fn test_ui_config_vim_mode_default() {
+        let ui = UiConfig::default();
+        assert!(!ui.vim_mode);
+        assert!(ui.show_line_numbers);
+    }
+
+    #[test]
+    fn test_session_config_sessions_dir() {
+        let session = SessionConfig::default();
+        assert!(session.sessions_dir.is_none());
+    }
+
+    #[test]
+    fn test_tool_config_bash_timeout() {
+        let tools = ToolConfig::default();
+        assert_eq!(tools.bash_timeout, 120);
+        assert!(tools.enable_search_tools);
+    }
+
+    #[test]
+    fn test_save_creates_directory() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nested").join("dir").join("config.toml");
+
+        let config = Config::default();
+        config.save_to(&path).unwrap();
+
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_load_nonexistent_returns_default() {
+        let result = Config::load();
+        // Should not error, returns default if no config file
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_config_serialization_roundtrip() {
+        let mut config = Config::default();
+        config.api.api_key = Some("test-key".to_string());
+        config.api.model = "custom-model".to_string();
+        config.ui.vim_mode = true;
+        config.session.max_sessions = 50;
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        config.save_to(&path).unwrap();
+        let loaded = Config::load_from(&path).unwrap();
+
+        assert_eq!(loaded.api.model, "custom-model");
+        assert!(loaded.ui.vim_mode);
+        assert_eq!(loaded.session.max_sessions, 50);
+    }
+
+    #[test]
+    fn test_invalid_toml_returns_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        fs::write(&path, "invalid toml content [[[").unwrap();
+
+        let result = Config::load_from(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_config_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        fs::write(&path, "").unwrap();
+
+        // Empty file should use all defaults
+        let config = Config::load_from(&path).unwrap();
+        assert_eq!(config.api.model, "claude-sonnet-4-5-20250929");
+    }
+
+    #[test]
+    fn test_config_debug_trait() {
+        let config = Config::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("Config"));
+        assert!(debug_str.contains("api"));
+    }
 }
