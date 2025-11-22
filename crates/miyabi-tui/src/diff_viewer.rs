@@ -3,7 +3,7 @@
 //! This module provides an enhanced diff visualization with proper colors,
 //! line numbers, and indicators for a professional git diff display.
 
-use crate::diff_render::{DiffRender, DiffLine, DiffLineType};
+use crate::diff_render::{DiffLine, DiffLineType, DiffRender};
 use crate::markdown_stream::ScrollState;
 use crate::syntax::{normalize_language, SyntaxHighlighter};
 use ratatui::{
@@ -585,10 +585,7 @@ mod tests {
             DiffViewer::extract_extension("app.js"),
             Some("js".to_string())
         );
-        assert_eq!(
-            DiffViewer::extract_extension("no_extension"),
-            None
-        );
+        assert_eq!(DiffViewer::extract_extension("no_extension"), None);
         assert_eq!(
             DiffViewer::extract_extension("/path/to/file.py"),
             Some("py".to_string())
@@ -743,7 +740,7 @@ mod tests {
 
         viewer.scroll_to_bottom();
         let percentage = viewer.scroll_percentage();
-        assert!(percentage >= 0.0 && percentage <= 1.0);
+        assert!((0.0..=1.0).contains(&percentage));
     }
 
     #[test]

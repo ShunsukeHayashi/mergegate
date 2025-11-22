@@ -5,6 +5,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     prelude::*,
+    style::Modifier,
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 use std::time::Instant;
@@ -16,11 +17,12 @@ use crate::{
     help::{HelpAction, HelpViewer},
     history_cell::HistoryCell,
     notification::{Alert, AlertAction, Notification, NotificationCenter, NotificationPanelAction},
-    pager_overlay::{PagerAction, PagerOverlay, PagerContent},
+    pager_overlay::{PagerAction, PagerContent, PagerOverlay},
     resume_picker::{ResumePicker, ResumePickerAction, SessionEntry},
     shimmer::Spinner,
     ui::{colors, Breadcrumb, StatusBar, StatusItem},
 };
+use miyabi_core::anthropic::DEFAULT_MODEL;
 
 /// Focus area in the main view
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +94,8 @@ pub enum ViewAction {
     OpenFile(String),
     /// Copy to clipboard
     Copy(String),
+    /// Toggle agent mode
+    ToggleAgentMode,
 }
 
 /// Layout configuration
@@ -118,7 +122,7 @@ impl Default for LayoutConfig {
             sidebar_width: 25,
             show_status_bar: true,
             show_breadcrumb: true,
-            input_height: 3,
+            input_height: 5,
             min_history_height: 10,
         }
     }
@@ -142,6 +146,8 @@ pub struct MainView {
     pub history_scroll: usize,
     /// Maximum scroll position
     pub max_scroll: usize,
+    /// Auto-follow history (stick to latest messages unless user scrolls)
+    pub history_follow_latest: bool,
     /// Notification center
     pub notifications: NotificationCenter,
     /// Command popup
@@ -170,6 +176,8 @@ pub struct MainView {
     pub sidebar_items: Vec<String>,
     /// Selected sidebar item
     pub sidebar_selected: usize,
+    /// Mode indicator (e.g., "🤖 AGENT")
+    pub mode_indicator: String,
 }
 
 impl Default for MainView {
@@ -190,9 +198,10 @@ impl MainView {
             history: Vec::new(),
             history_scroll: 0,
             max_scroll: 0,
+            history_follow_latest: true,
             notifications: NotificationCenter::new(),
-            command_popup: CommandPopup::new(),
-            help_viewer: HelpViewer::new(),
+            command_popup: CommandPopup::new().with_default_commands(),
+            help_viewer: HelpViewer::with_defaults(),
             approval_overlay: ApprovalOverlay::new(),
             pager_overlay: PagerOverlay::new(),
             session_picker: ResumePicker::new(),
@@ -201,10 +210,11 @@ impl MainView {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|_| "~".to_string()),
             session_name: "New Session".to_string(),
-            model_name: "claude-sonnet-4-20250514".to_string(),
+            model_name: DEFAULT_MODEL.to_string(),
             tokens_used: 0,
             last_activity: Instant::now(),
             sidebar_items: Vec::new(),
+            mode_indicator: String::new(),
             sidebar_selected: 0,
         }
     }
@@ -236,6 +246,7 @@ impl MainView {
     /// Show help viewer
     pub fn show_help(&mut self) {
         self.overlay = ActiveOverlay::Help;
+        self.help_viewer.show();
     }
 
     /// Show approval dialog
@@ -304,6 +315,11 @@ impl MainView {
         };
     }
 
+    /// Set mode indicator text
+    pub fn set_mode_indicator(&mut self, indicator: &str) {
+        self.mode_indicator = indicator.to_string();
+    }
+
     /// Handle keyboard input
     pub fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
         self.last_activity = Instant::now();
@@ -342,6 +358,10 @@ impl MainView {
                 self.show_notifications();
                 return ViewAction::None;
             }
+            // Toggle agent mode
+            (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
+                return ViewAction::ToggleAgentMode;
+            }
             // Escape
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 if self.mode == AppMode::Streaming {
@@ -362,85 +382,70 @@ impl MainView {
     /// Handle overlay keyboard input
     fn handle_overlay_key(&mut self, key: KeyEvent) -> ViewAction {
         match self.overlay {
-            ActiveOverlay::CommandPalette => {
-                match self.command_popup.handle_key(key) {
-                    CommandPopupAction::Execute(cmd) => {
-                        self.close_overlay();
-                        return ViewAction::ExecuteCommand(cmd);
-                    }
-                    CommandPopupAction::Cancel => {
-                        self.close_overlay();
-                    }
-                    _ => {}
+            ActiveOverlay::CommandPalette => match self.command_popup.handle_key(key) {
+                CommandPopupAction::Execute(cmd) => {
+                    self.close_overlay();
+                    return ViewAction::ExecuteCommand(cmd);
                 }
-            }
-            ActiveOverlay::Help => {
-                match self.help_viewer.handle_key(key) {
-                    HelpAction::Close => {
-                        self.close_overlay();
-                    }
-                    _ => {}
+                CommandPopupAction::Cancel => {
+                    self.close_overlay();
                 }
-            }
-            ActiveOverlay::Approval => {
-                match self.approval_overlay.handle_key(key) {
-                    ApprovalAction::Approve(id) | ApprovalAction::ApproveAll(id) => {
-                        self.close_overlay();
-                        return ViewAction::Approve {
-                            request_id: id,
-                            approved: true,
-                        };
-                    }
-                    ApprovalAction::Reject(id) => {
-                        self.close_overlay();
-                        return ViewAction::Approve {
-                            request_id: id,
-                            approved: false,
-                        };
-                    }
-                    _ => {}
+                _ => {}
+            },
+            ActiveOverlay::Help => if self.help_viewer.handle_key(key) == HelpAction::Close {
+                self.close_overlay();
+            },
+            ActiveOverlay::Approval => match self.approval_overlay.handle_key(key) {
+                ApprovalAction::Approve(id) | ApprovalAction::ApproveAll(id) => {
+                    self.close_overlay();
+                    return ViewAction::Approve {
+                        request_id: id,
+                        approved: true,
+                    };
                 }
-            }
-            ActiveOverlay::Pager => {
-                match self.pager_overlay.handle_key(key) {
-                    PagerAction::Close => {
-                        self.close_overlay();
-                    }
-                    PagerAction::Copy(content) => {
-                        return ViewAction::Copy(content);
-                    }
-                    _ => {}
+                ApprovalAction::Reject(id) => {
+                    self.close_overlay();
+                    return ViewAction::Approve {
+                        request_id: id,
+                        approved: false,
+                    };
                 }
-            }
-            ActiveOverlay::SessionPicker => {
-                match self.session_picker.handle_key(key) {
-                    ResumePickerAction::Select(session_id) => {
-                        self.close_overlay();
-                        return ViewAction::ResumeSession(session_id);
-                    }
-                    ResumePickerAction::Cancel => {
-                        self.close_overlay();
-                    }
-                    _ => {}
+                _ => {}
+            },
+            ActiveOverlay::Pager => match self.pager_overlay.handle_key(key) {
+                PagerAction::Close => {
+                    self.close_overlay();
                 }
-            }
-            ActiveOverlay::Notifications => {
-                match self.notifications.panel.handle_key(key) {
-                    NotificationPanelAction::Close => {
-                        self.close_overlay();
-                    }
-                    NotificationPanelAction::Dismiss(id) => {
-                        self.notifications.panel.dismiss(&id);
-                    }
-                    NotificationPanelAction::DismissAll => {
-                        self.notifications.panel.dismiss_all();
-                    }
-                    NotificationPanelAction::MarkAllRead => {
-                        self.notifications.panel.mark_all_read();
-                    }
-                    _ => {}
+                PagerAction::Copy(content) => {
+                    return ViewAction::Copy(content);
                 }
-            }
+                _ => {}
+            },
+            ActiveOverlay::SessionPicker => match self.session_picker.handle_key(key) {
+                ResumePickerAction::Select(session_id) => {
+                    self.close_overlay();
+                    return ViewAction::ResumeSession(session_id);
+                }
+                ResumePickerAction::Cancel => {
+                    self.close_overlay();
+                }
+                _ => {}
+            },
+            ActiveOverlay::Notifications => match self.notifications.panel.handle_key(key) {
+                NotificationPanelAction::Close => {
+                    self.close_overlay();
+                }
+                NotificationPanelAction::Dismiss(id) => {
+                    self.notifications.panel.dismiss(&id);
+                }
+                NotificationPanelAction::DismissAll => {
+                    self.notifications.panel.dismiss_all();
+                }
+                NotificationPanelAction::MarkAllRead => {
+                    self.notifications.panel.mark_all_read();
+                }
+                _ => {}
+            },
             ActiveOverlay::Alert => {
                 if let Some(ref mut alert) = self.notifications.alert {
                     match alert.handle_key(key) {
@@ -486,31 +491,42 @@ impl MainView {
 
     /// Handle history navigation keys
     fn handle_history_key(&mut self, key: KeyEvent) -> ViewAction {
+        let mut moved = false;
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.history_scroll = self.history_scroll.saturating_sub(1);
+                moved = true;
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if self.history_scroll < self.max_scroll {
                     self.history_scroll += 1;
+                    moved = true;
                 }
             }
             KeyCode::PageUp => {
                 self.history_scroll = self.history_scroll.saturating_sub(10);
+                moved = true;
             }
             KeyCode::PageDown => {
                 self.history_scroll = (self.history_scroll + 10).min(self.max_scroll);
+                moved = true;
             }
             KeyCode::Home | KeyCode::Char('g') => {
                 self.history_scroll = 0;
+                moved = true;
             }
             KeyCode::End | KeyCode::Char('G') => {
                 self.history_scroll = self.max_scroll;
+                moved = true;
             }
             KeyCode::Tab | KeyCode::Char('i') => {
                 self.focus = FocusArea::Chat;
             }
             _ => {}
+        }
+        if moved {
+            // Disable auto-follow when the user scrolls away; re-enable when they return to the bottom.
+            self.history_follow_latest = self.history_scroll >= self.max_scroll;
         }
         ViewAction::None
     }
@@ -633,7 +649,8 @@ impl MainView {
         frame.render_widget(block, area);
 
         // Render sidebar items
-        let items: Vec<Line> = self.sidebar_items
+        let items: Vec<Line> = self
+            .sidebar_items
             .iter()
             .enumerate()
             .map(|(i, item)| {
@@ -660,13 +677,13 @@ impl MainView {
 
     /// Render message history
     fn render_history(&mut self, frame: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(if self.focus == FocusArea::History {
+        let block = Block::default().borders(Borders::ALL).border_style(
+            if self.focus == FocusArea::History {
                 Style::default().fg(colors::CYAN)
             } else {
                 Style::default().fg(colors::BORDER)
-            });
+            },
+        );
 
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -704,13 +721,13 @@ impl MainView {
         let visible_lines = inner.height as usize;
         self.max_scroll = total_lines.saturating_sub(visible_lines);
 
+        if self.history_follow_latest {
+            self.history_scroll = self.max_scroll;
+        }
+
         // Apply scroll
         let start = self.history_scroll.min(self.max_scroll);
-        let visible: Vec<Line> = lines
-            .into_iter()
-            .skip(start)
-            .take(visible_lines)
-            .collect();
+        let visible: Vec<Line> = lines.into_iter().skip(start).take(visible_lines).collect();
 
         let paragraph = Paragraph::new(visible);
         frame.render_widget(paragraph, inner);
@@ -721,13 +738,8 @@ impl MainView {
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(Some("↑"))
                 .end_symbol(Some("↓"));
-            let mut scrollbar_state = ScrollbarState::new(total_lines)
-                .position(start);
-            frame.render_stateful_widget(
-                scrollbar,
-                area,
-                &mut scrollbar_state,
-            );
+            let mut scrollbar_state = ScrollbarState::new(total_lines).position(start);
+            frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
         }
     }
 
@@ -736,7 +748,8 @@ impl MainView {
         let is_focused = self.focus == FocusArea::Chat;
 
         // Update focused state for the composer
-        self.chat.set_focused(is_focused && self.mode == AppMode::Normal);
+        self.chat
+            .set_focused(is_focused && self.mode == AppMode::Normal);
 
         // Use ChatComposer's built-in render which handles cursor display
         self.chat.render(frame, area);
@@ -744,11 +757,20 @@ impl MainView {
 
     /// Render status bar
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
-        let mut status_bar = StatusBar::new()
-            .left(
-                StatusItem::new(self.model_name.clone())
-                    .style(Style::default().fg(colors::CYAN)),
+        let mut status_bar = StatusBar::new().left(
+            StatusItem::new(self.model_name.clone()).style(Style::default().fg(colors::CYAN)),
+        );
+
+        // Mode indicator (e.g., AGENT)
+        if !self.mode_indicator.is_empty() {
+            status_bar = status_bar.left(
+                StatusItem::new(self.mode_indicator.clone()).style(
+                    Style::default()
+                        .fg(colors::MAGENTA)
+                        .add_modifier(Modifier::BOLD),
+                ),
             );
+        }
 
         // Token count
         if self.tokens_used > 0 {
@@ -762,8 +784,7 @@ impl MainView {
         let unread = self.notifications.unread_count();
         if unread > 0 {
             status_bar = status_bar.left(
-                StatusItem::new(format!("{}N", unread))
-                    .style(Style::default().fg(colors::YELLOW)),
+                StatusItem::new(format!("{}N", unread)).style(Style::default().fg(colors::YELLOW)),
             );
         }
 
@@ -774,15 +795,14 @@ impl MainView {
             AppMode::WaitingApproval => "APPROVAL",
             AppMode::Loading => "LOADING",
         };
-        status_bar = status_bar.right(
-            StatusItem::new(mode_str)
-                .style(Style::default().fg(match self.mode {
-                    AppMode::Normal => colors::GREEN,
-                    AppMode::Streaming => colors::YELLOW,
-                    AppMode::WaitingApproval => colors::ORANGE,
-                    AppMode::Loading => colors::CYAN,
-                })),
-        );
+        status_bar = status_bar.right(StatusItem::new(mode_str).style(Style::default().fg(
+            match self.mode {
+                AppMode::Normal => colors::GREEN,
+                AppMode::Streaming => colors::YELLOW,
+                AppMode::WaitingApproval => colors::ORANGE,
+                AppMode::Loading => colors::CYAN,
+            },
+        )));
 
         status_bar.render(frame, area);
     }
@@ -812,7 +832,9 @@ impl MainView {
             }
             ActiveOverlay::Notifications => {
                 let popup_area = centered_rect(60, 70, area);
-                self.notifications.panel.render(popup_area, frame.buffer_mut());
+                self.notifications
+                    .panel
+                    .render(popup_area, frame.buffer_mut());
             }
             ActiveOverlay::Alert => {
                 if let Some(ref alert) = self.notifications.alert {

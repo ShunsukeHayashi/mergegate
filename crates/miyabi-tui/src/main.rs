@@ -2,12 +2,12 @@
 //!
 //! A premium terminal interface following OpenAI Codex patterns.
 
-use miyabi_tui::App;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use miyabi_tui::App;
 use ratatui::prelude::*;
 use std::io;
 

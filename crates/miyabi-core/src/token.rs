@@ -3,7 +3,7 @@
 //! This module provides token estimation and context window management
 //! for Claude API conversations.
 
-use crate::anthropic::{ContentBlock, Message};
+use crate::anthropic::{ContentBlock, Message, DEFAULT_MODEL};
 use crate::conversation::{Conversation, ConversationMessage};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,18 @@ pub struct ModelLimits {
 }
 
 impl ModelLimits {
+    /// Claude 4.5 Sonnet limits
+    pub const CLAUDE_4_5_SONNET: Self = Self {
+        context_window: 200_000,
+        max_output: 4_096,
+    };
+
+    /// Claude 4.5 Haiku limits
+    pub const CLAUDE_4_5_HAIKU: Self = Self {
+        context_window: 200_000,
+        max_output: 4_096,
+    };
+
     /// Claude 3 Opus limits
     pub const CLAUDE_3_OPUS: Self = Self {
         context_window: 200_000,
@@ -37,9 +49,15 @@ impl ModelLimits {
 
     /// Get limits for a model name
     pub fn for_model(model: &str) -> Self {
-        if model.contains("opus") {
+        let lower = model.to_lowercase();
+
+        if lower.contains("sonnet-4-5") {
+            Self::CLAUDE_4_5_SONNET
+        } else if lower.contains("haiku-4-5") {
+            Self::CLAUDE_4_5_HAIKU
+        } else if lower.contains("opus") {
             Self::CLAUDE_3_OPUS
-        } else if model.contains("haiku") {
+        } else if lower.contains("haiku") {
             Self::CLAUDE_3_HAIKU
         } else {
             Self::CLAUDE_3_SONNET
@@ -94,10 +112,7 @@ impl Default for TokenCounter {
 impl TokenCounter {
     /// Create a new token counter with default settings
     pub fn new() -> Self {
-        Self {
-            limits: ModelLimits::CLAUDE_3_SONNET,
-            chars_per_token: 4.0,
-        }
+        Self::with_model(DEFAULT_MODEL)
     }
 
     /// Create with specific model limits
@@ -121,9 +136,7 @@ impl TokenCounter {
                 let input_str = serde_json::to_string(input).unwrap_or_default();
                 self.estimate_text(name) + self.estimate_text(&input_str) + 20
             }
-            ContentBlock::ToolResult { content, .. } => {
-                self.estimate_text(content) + 20
-            }
+            ContentBlock::ToolResult { content, .. } => self.estimate_text(content) + 20,
         }
     }
 
@@ -324,7 +337,7 @@ mod tests {
 
         // ~4 chars per token
         let tokens = counter.estimate_text("Hello, World!"); // 13 chars
-        assert!(tokens >= 3 && tokens <= 5);
+        assert!((3..=5).contains(&tokens));
     }
 
     #[test]
@@ -334,13 +347,18 @@ mod tests {
 
         let limits = ModelLimits::for_model("claude-3-sonnet");
         assert_eq!(limits.context_window, 200_000);
+
+        let limits = ModelLimits::for_model("claude-sonnet-4-5-20250929");
+        assert_eq!(limits.context_window, 200_000);
+
+        let limits = ModelLimits::for_model("claude-haiku-4-5-20251001");
+        assert_eq!(limits.context_window, 200_000);
     }
 
     #[test]
     fn test_conversation_estimation() {
         let counter = TokenCounter::new();
-        let mut conv = Conversation::new()
-            .with_system_prompt("You are a helpful assistant");
+        let mut conv = Conversation::new().with_system_prompt("You are a helpful assistant");
 
         conv.add_user_message("Hello");
         conv.add_assistant_message("Hi there!");
@@ -352,8 +370,7 @@ mod tests {
     #[test]
     fn test_within_limits() {
         let counter = TokenCounter::new();
-        let conv = Conversation::new()
-            .with_system_prompt("Test");
+        let conv = Conversation::new().with_system_prompt("Test");
 
         assert!(counter.within_limits(&conv));
     }
@@ -378,13 +395,20 @@ mod tests {
         // Add messages that will exceed the limit
         for i in 0..10 {
             // Each message is roughly 30+ tokens
-            conv.add_user_message(format!("This is message number {} with substantial content that uses many tokens", i));
+            conv.add_user_message(format!(
+                "This is message number {} with substantial content that uses many tokens",
+                i
+            ));
         }
 
         let initial = conv.message_count();
         let removed = manager.prune(&mut conv);
 
-        assert!(removed > 0, "Expected messages to be removed, tokens: {}", manager.estimate_tokens(&conv));
+        assert!(
+            removed > 0,
+            "Expected messages to be removed, tokens: {}",
+            manager.estimate_tokens(&conv)
+        );
         assert!(conv.message_count() < initial);
     }
 

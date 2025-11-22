@@ -2,6 +2,9 @@
 //!
 //! Shared UI components and utilities for the TUI.
 
+pub mod theme;
+pub mod widgets;
+
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -43,8 +46,8 @@ pub mod colors {
 
 /// Common UI styles
 pub mod styles {
-    use ratatui::style::{Modifier, Style};
     use super::colors;
+    use ratatui::style::{Modifier, Style};
 
     /// Default text style
     pub fn default() -> Style {
@@ -313,7 +316,9 @@ impl Modal {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(colors::CYAN).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(colors::CYAN)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(colors::BORDER_FOCUS));
@@ -832,12 +837,12 @@ impl EmptyState {
     /// Render the empty state
     pub fn render(&self, frame: &mut Frame, area: Rect) {
         let mut lines = vec![
-            Line::from(Span::styled(&self.icon, Style::default().fg(colors::FG_GUTTER))),
-            Line::from(""),
             Line::from(Span::styled(
-                &self.title,
-                styles::bold(),
+                &self.icon,
+                Style::default().fg(colors::FG_GUTTER),
             )),
+            Line::from(""),
+            Line::from(Span::styled(&self.title, styles::bold())),
         ];
 
         if !self.description.is_empty() {
@@ -1164,8 +1169,8 @@ mod tests {
 
     #[test]
     fn test_modal_navigation() {
-        let mut modal = Modal::new("Test")
-            .buttons(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        let mut modal =
+            Modal::new("Test").buttons(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
 
         assert_eq!(modal.selected(), 0);
         modal.next();
@@ -1463,9 +1468,7 @@ mod tests {
 
     #[test]
     fn test_key_hints_hint() {
-        let hints = KeyHints::new()
-            .hint("Esc", "Close")
-            .hint("Enter", "Submit");
+        let hints = KeyHints::new().hint("Esc", "Close").hint("Enter", "Submit");
         assert_eq!(hints.hints.len(), 2);
     }
 

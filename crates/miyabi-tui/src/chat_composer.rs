@@ -41,8 +41,10 @@ pub enum VimMode {
 
 /// Keybinding style preference
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum KeybindingStyle {
     /// Standard keybindings
+    #[default]
     Standard,
     /// Vim-style keybindings
     Vim,
@@ -50,20 +52,12 @@ pub enum KeybindingStyle {
     Emacs,
 }
 
-impl Default for KeybindingStyle {
-    fn default() -> Self {
-        KeybindingStyle::Standard
-    }
-}
 
 /// Edit operation for undo/redo
 #[derive(Debug, Clone)]
 pub enum EditOperation {
     /// Insert text at position
-    Insert {
-        pos: CursorPos,
-        text: String,
-    },
+    Insert { pos: CursorPos, text: String },
     /// Delete text range
     Delete {
         start: CursorPos,
@@ -276,7 +270,7 @@ pub struct VimRegisters {
     /// Named registers (a-z)
     named: [String; 26],
     /// Small delete register
-    small_delete: String,
+    _small_delete: String,
     /// Numbered registers (0-9)
     numbered: [String; 10],
     /// Last search register
@@ -421,7 +415,7 @@ pub struct ChatComposer {
     /// Auto-indent on newline
     auto_indent: bool,
     /// Bracket matching
-    bracket_matching: bool,
+    _bracket_matching: bool,
     /// Last matched bracket position
     matched_bracket: Option<CursorPos>,
 }
@@ -456,7 +450,7 @@ impl ChatComposer {
             show_line_numbers: false,
             highlight_current_line: true,
             auto_indent: true,
-            bracket_matching: true,
+            _bracket_matching: true,
             matched_bracket: None,
         }
     }
@@ -736,7 +730,8 @@ impl ChatComposer {
         if self.show_suggestions {
             match key.code {
                 KeyCode::Tab | KeyCode::Down => {
-                    self.suggestion_index = (self.suggestion_index + 1) % self.suggestions.len().max(1);
+                    self.suggestion_index =
+                        (self.suggestion_index + 1) % self.suggestions.len().max(1);
                     return ComposerAction::None;
                 }
                 KeyCode::Up => {
@@ -839,9 +834,7 @@ impl ChatComposer {
                 }
                 ComposerAction::None
             }
-            KeyCode::Esc => {
-                ComposerAction::Cancel
-            }
+            KeyCode::Esc => ComposerAction::Cancel,
             _ => ComposerAction::None,
         }
     }
@@ -958,8 +951,10 @@ impl ChatComposer {
     fn backspace(&mut self) {
         if self.cursor.col > 0 {
             // Compute byte indices before mutable borrow
-            let byte_idx = self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col - 1);
-            let next_byte_idx = self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col);
+            let byte_idx =
+                self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col - 1);
+            let next_byte_idx =
+                self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col);
             self.lines[self.cursor.line].replace_range(byte_idx..next_byte_idx, "");
             self.cursor.col -= 1;
         } else if self.cursor.line > 0 {
@@ -983,7 +978,8 @@ impl ChatComposer {
         if self.cursor.col < char_count {
             // Compute byte indices before mutable borrow
             let byte_idx = self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col);
-            let next_byte_idx = self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col + 1);
+            let next_byte_idx =
+                self.char_to_byte_index(&self.lines[self.cursor.line], self.cursor.col + 1);
             self.lines[self.cursor.line].replace_range(byte_idx..next_byte_idx, "");
         } else if self.cursor.line < self.lines.len() - 1 {
             // Merge with next line
@@ -1205,8 +1201,15 @@ impl ChatComposer {
         if let Some(cmd) = input.strip_prefix('/') {
             // Built-in commands
             let commands = vec![
-                "help", "clear", "history", "exit", "quit",
-                "model", "temperature", "tools", "context",
+                "help",
+                "clear",
+                "history",
+                "exit",
+                "quit",
+                "model",
+                "temperature",
+                "tools",
+                "context",
             ];
 
             self.suggestions = commands
@@ -1248,7 +1251,10 @@ impl ChatComposer {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(border_color))
-            .title(Span::styled(title, Style::default().fg(Color::Rgb(192, 202, 245))));
+            .title(Span::styled(
+                title,
+                Style::default().fg(Color::Rgb(192, 202, 245)),
+            ));
 
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -1268,7 +1274,10 @@ impl ChatComposer {
             let mode_indicator = self.get_mode_indicator();
             lines.push(Line::from(vec![
                 Span::styled(mode_indicator, Style::default().fg(Color::Cyan)),
-                Span::styled(&self.placeholder, Style::default().fg(Color::Rgb(86, 95, 137))),
+                Span::styled(
+                    &self.placeholder,
+                    Style::default().fg(Color::Rgb(86, 95, 137)),
+                ),
             ]));
         } else if self.mode == InputMode::Search {
             // Show search prompt
@@ -1278,19 +1287,22 @@ impl ChatComposer {
                 "?"
             };
             lines.push(Line::from(vec![
-                Span::styled(search_prefix, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    search_prefix,
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(&self.search.query, Style::default().fg(Color::White)),
                 Span::styled("█", Style::default().fg(Color::Yellow)),
             ]));
 
             // Show match info
             if let Some(info) = self.search_info() {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  {} matches", info),
-                        Style::default().fg(Color::Rgb(86, 95, 137)),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  {} matches", info),
+                    Style::default().fg(Color::Rgb(86, 95, 137)),
+                )]));
             }
         } else {
             for (i, line) in self.lines.iter().enumerate() {
@@ -1332,8 +1344,7 @@ impl ChatComposer {
             }
         }
 
-        let paragraph = Paragraph::new(lines)
-            .scroll((self.scroll_offset as u16, 0));
+        let paragraph = Paragraph::new(lines).scroll((self.scroll_offset as u16, 0));
         frame.render_widget(paragraph, inner);
 
         // Render mode line at bottom
@@ -1422,9 +1433,8 @@ impl ChatComposer {
             let char_style = self.get_char_style(line_idx, current_pos, chars[current_pos]);
 
             // Check if this is cursor position
-            let is_cursor = line_idx == self.cursor.line
-                && current_pos == self.cursor.col
-                && self.focused;
+            let is_cursor =
+                line_idx == self.cursor.line && current_pos == self.cursor.col && self.focused;
 
             let style = if is_cursor {
                 Style::default().bg(Color::Cyan).fg(Color::Black)
@@ -1469,43 +1479,37 @@ impl ChatComposer {
                 return Style::default().bg(Color::Rgb(68, 71, 90)).fg(Color::Cyan);
             }
         }
-        if line_idx == self.cursor.line && col == self.cursor.col {
-            if matches!(ch, '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>') {
-                return Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+        if line_idx == self.cursor.line && col == self.cursor.col
+            && matches!(ch, '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>') {
+                return Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD);
             }
-        }
 
         // Basic syntax highlighting
         match ch {
             // Brackets
-            '(' | ')' | '[' | ']' | '{' | '}' => {
-                Style::default().fg(Color::Rgb(189, 147, 249))
-            }
+            '(' | ')' | '[' | ']' | '{' | '}' => Style::default().fg(Color::Rgb(189, 147, 249)),
             // Operators
             '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | '&' | '|' | '^' | '%' => {
                 Style::default().fg(Color::Rgb(255, 121, 198))
             }
             // Punctuation
-            '.' | ',' | ':' | ';' | '@' | '#' => {
-                Style::default().fg(Color::Rgb(139, 233, 253))
-            }
+            '.' | ',' | ':' | ';' | '@' | '#' => Style::default().fg(Color::Rgb(139, 233, 253)),
             // Quotes
-            '"' | '\'' | '`' => {
-                Style::default().fg(Color::Rgb(241, 250, 140))
-            }
+            '"' | '\'' | '`' => Style::default().fg(Color::Rgb(241, 250, 140)),
             // Numbers
-            c if c.is_ascii_digit() => {
-                Style::default().fg(Color::Rgb(189, 147, 249))
-            }
+            c if c.is_ascii_digit() => Style::default().fg(Color::Rgb(189, 147, 249)),
             // Default
-            _ => Style::default().fg(Color::Rgb(248, 248, 242))
+            _ => Style::default().fg(Color::Rgb(248, 248, 242)),
         }
     }
 
     /// Check if position is in selection
     fn is_in_selection(&self, line: usize, col: usize, sel: &Selection) -> bool {
         let (start, end) = if sel.start.line < sel.end.line
-            || (sel.start.line == sel.end.line && sel.start.col <= sel.end.col) {
+            || (sel.start.line == sel.end.line && sel.start.col <= sel.end.col)
+        {
             (sel.start, sel.end)
         } else {
             (sel.end, sel.start)
@@ -1549,11 +1553,7 @@ impl ChatComposer {
         };
 
         // Position info
-        let pos_info = format!(
-            "{}:{} ",
-            self.cursor.line + 1,
-            self.cursor.col + 1
-        );
+        let pos_info = format!("{}:{} ", self.cursor.line + 1, self.cursor.col + 1);
 
         // Command buffer display
         let cmd_display = if !self.vim_command_buffer.is_empty() {
@@ -1565,7 +1565,10 @@ impl ChatComposer {
         };
 
         let status = Line::from(vec![
-            Span::styled(mode_text, Style::default().fg(mode_color).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                mode_text,
+                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(cmd_display, Style::default().fg(Color::Yellow)),
             Span::raw(" "),
             Span::styled(pos_info, Style::default().fg(Color::Rgb(86, 95, 137))),
@@ -1577,7 +1580,9 @@ impl ChatComposer {
     /// Render rich suggestions with descriptions
     fn render_rich_suggestions(&self, frame: &mut Frame, area: Rect) {
         let popup_height = (self.rich_suggestions.len() + 2).min(12) as u16;
-        let popup_width = self.rich_suggestions.iter()
+        let popup_width = self
+            .rich_suggestions
+            .iter()
             .map(|s| {
                 let desc_len = s.description.as_ref().map(|d| d.len()).unwrap_or(0);
                 s.text.len() + desc_len + 10
@@ -1595,7 +1600,8 @@ impl ChatComposer {
 
         frame.render_widget(Clear, popup_area);
 
-        let items: Vec<Line> = self.rich_suggestions
+        let items: Vec<Line> = self
+            .rich_suggestions
             .iter()
             .enumerate()
             .map(|(i, s)| {
@@ -1620,8 +1626,17 @@ impl ChatComposer {
                     Span::styled(icon, base_style.fg(Color::Cyan)),
                     Span::styled(
                         &s.text,
-                        base_style.fg(if is_selected { Color::White } else { Color::Rgb(248, 248, 242) })
-                            .add_modifier(if is_selected { Modifier::BOLD } else { Modifier::empty() }),
+                        base_style
+                            .fg(if is_selected {
+                                Color::White
+                            } else {
+                                Color::Rgb(248, 248, 242)
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                 ];
 
@@ -1637,13 +1652,12 @@ impl ChatComposer {
             .collect();
 
         let title = format!(" Suggestions ({}) ", self.rich_suggestions.len());
-        let popup = Paragraph::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Rgb(98, 114, 164)))
-                    .title(Span::styled(title, Style::default().fg(Color::Cyan))),
-            );
+        let popup = Paragraph::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(98, 114, 164)))
+                .title(Span::styled(title, Style::default().fg(Color::Cyan))),
+        );
 
         frame.render_widget(popup, popup_area);
     }
@@ -1651,11 +1665,14 @@ impl ChatComposer {
     /// Render suggestions popup
     fn render_suggestions(&self, frame: &mut Frame, area: Rect) {
         let popup_height = (self.suggestions.len() + 2).min(10) as u16;
-        let popup_width = self.suggestions.iter()
+        let popup_width = self
+            .suggestions
+            .iter()
             .map(|s| display_width(s))
             .max()
             .unwrap_or(20)
-            .max(20) as u16 + 4;
+            .max(20) as u16
+            + 4;
 
         let popup_area = Rect {
             x: area.x + 2,
@@ -1666,12 +1683,15 @@ impl ChatComposer {
 
         frame.render_widget(Clear, popup_area);
 
-        let items: Vec<Line> = self.suggestions
+        let items: Vec<Line> = self
+            .suggestions
             .iter()
             .enumerate()
             .map(|(i, s)| {
                 let style = if i == self.suggestion_index {
-                    Style::default().bg(Color::Rgb(86, 95, 137)).fg(Color::White)
+                    Style::default()
+                        .bg(Color::Rgb(86, 95, 137))
+                        .fg(Color::White)
                 } else {
                     Style::default().fg(Color::Rgb(192, 202, 245))
                 };
@@ -1679,13 +1699,12 @@ impl ChatComposer {
             })
             .collect();
 
-        let popup = Paragraph::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .title(" Commands "),
-            );
+        let popup = Paragraph::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(" Commands "),
+        );
 
         frame.render_widget(popup, popup_area);
     }
@@ -1743,7 +1762,9 @@ impl ChatComposer {
                     }
                 }
             }
-            EditOperation::Replace { start, old_text, .. } => {
+            EditOperation::Replace {
+                start, old_text, ..
+            } => {
                 // Undo replace by replacing with old text
                 self.cursor = *start;
                 self.set_input(old_text);
@@ -1773,12 +1794,15 @@ impl ChatComposer {
             EditOperation::Delete { start, end, .. } => {
                 self.cursor = *start;
                 // Delete from start to end
-                while self.cursor.line < end.line ||
-                      (self.cursor.line == end.line && self.cursor.col < end.col) {
+                while self.cursor.line < end.line
+                    || (self.cursor.line == end.line && self.cursor.col < end.col)
+                {
                     self.delete();
                 }
             }
-            EditOperation::Replace { start, new_text, .. } => {
+            EditOperation::Replace {
+                start, new_text, ..
+            } => {
                 self.cursor = *start;
                 self.set_input(new_text);
             }
@@ -1829,8 +1853,9 @@ impl ChatComposer {
 
     /// Get selected text
     fn get_selected_text(&self, sel: &Selection) -> String {
-        let (start, end) = if sel.start.line < sel.end.line ||
-            (sel.start.line == sel.end.line && sel.start.col <= sel.end.col) {
+        let (start, end) = if sel.start.line < sel.end.line
+            || (sel.start.line == sel.end.line && sel.start.col <= sel.end.col)
+        {
             (sel.start, sel.end)
         } else {
             (sel.end, sel.start)
@@ -1862,8 +1887,9 @@ impl ChatComposer {
 
     /// Delete selected text
     fn delete_selection(&mut self, sel: &Selection) {
-        let (start, end) = if sel.start.line < sel.end.line ||
-            (sel.start.line == sel.end.line && sel.start.col <= sel.end.col) {
+        let (start, end) = if sel.start.line < sel.end.line
+            || (sel.start.line == sel.end.line && sel.start.col <= sel.end.col)
+        {
             (sel.start, sel.end)
         } else {
             (sel.end, sel.start)
@@ -1943,10 +1969,13 @@ impl ChatComposer {
             KeyCode::Char('V') => {
                 self.vim_mode = VimMode::VisualLine;
                 self.selection = Some(Selection {
-                    start: CursorPos { line: self.cursor.line, col: 0 },
+                    start: CursorPos {
+                        line: self.cursor.line,
+                        col: 0,
+                    },
                     end: CursorPos {
                         line: self.cursor.line,
-                        col: self.current_line().chars().count()
+                        col: self.current_line().chars().count(),
                     },
                 });
             }
@@ -1991,9 +2020,7 @@ impl ChatComposer {
             KeyCode::Char('^') => {
                 // First non-whitespace
                 let line = self.current_line();
-                self.cursor.col = line.chars()
-                    .position(|c| !c.is_whitespace())
-                    .unwrap_or(0);
+                self.cursor.col = line.chars().position(|c| !c.is_whitespace()).unwrap_or(0);
             }
             KeyCode::Char('g') => {
                 // gg - go to beginning
@@ -2205,8 +2232,14 @@ impl ChatComposer {
                 let col_end = col_start + query.chars().count();
 
                 self.search.matches.push((
-                    CursorPos { line: line_idx, col: col_start },
-                    CursorPos { line: line_idx, col: col_end },
+                    CursorPos {
+                        line: line_idx,
+                        col: col_start,
+                    },
+                    CursorPos {
+                        line: line_idx,
+                        col: col_end,
+                    },
                 ));
 
                 start += pos + 1;
@@ -2347,7 +2380,12 @@ impl ChatComposer {
     }
 
     /// Add rich suggestion
-    pub fn add_suggestion(&mut self, text: impl Into<String>, category: SuggestionCategory, description: Option<String>) {
+    pub fn add_suggestion(
+        &mut self,
+        text: impl Into<String>,
+        category: SuggestionCategory,
+        description: Option<String>,
+    ) {
         self.rich_suggestions.push(Suggestion {
             text: text.into(),
             description,
@@ -2364,15 +2402,14 @@ impl ChatComposer {
     }
 
     /// Get auto-indent string for new line
+    #[allow(dead_code)]
     fn get_auto_indent(&self) -> String {
         if !self.auto_indent {
             return String::new();
         }
 
         let line = &self.lines[self.cursor.line];
-        let indent: String = line.chars()
-            .take_while(|c| c.is_whitespace())
-            .collect();
+        let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
 
         // Check for additional indent after { or :
         if let Some(last_char) = line.trim_end().chars().last() {

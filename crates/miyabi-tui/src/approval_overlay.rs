@@ -249,12 +249,19 @@ impl ApprovalOverlay {
             }
 
             // Navigation
-            KeyCode::Left | KeyCode::Char('h') | KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+            KeyCode::Left | KeyCode::Char('h') | KeyCode::Tab
+                if key.modifiers.contains(KeyModifiers::SHIFT) =>
+            {
                 self.selected = self.selected.saturating_sub(1);
                 ApprovalAction::None
             }
             KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
-                let max = if self.request.as_ref().map(|r| !r.details.is_empty()).unwrap_or(false) {
+                let max = if self
+                    .request
+                    .as_ref()
+                    .map(|r| !r.details.is_empty())
+                    .unwrap_or(false)
+                {
                     2
                 } else {
                     1
@@ -324,10 +331,10 @@ impl ApprovalOverlay {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),  // Risk indicator
-                Constraint::Length(3),  // Title
-                Constraint::Min(4),     // Content
-                Constraint::Length(3),  // Buttons
+                Constraint::Length(2), // Risk indicator
+                Constraint::Length(3), // Title
+                Constraint::Min(4),    // Content
+                Constraint::Length(3), // Buttons
             ])
             .split(inner);
 
@@ -392,9 +399,10 @@ impl ApprovalOverlay {
 
         // Arguments
         if !request.arguments.is_empty() {
-            lines.push(Line::from(vec![
-                Span::styled("Command: ", Style::default().fg(Color::Rgb(86, 95, 137))),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "Command: ",
+                Style::default().fg(Color::Rgb(86, 95, 137)),
+            )]));
 
             // Wrap long arguments
             let arg_lines: Vec<&str> = request.arguments.lines().collect();
@@ -526,11 +534,14 @@ impl ApprovalBuilder {
         };
 
         Self {
-            request: ApprovalRequest::new(uuid::Uuid::new_v4().to_string(), "Execute Shell Command")
-                .tool_name("bash")
-                .arguments(&cmd)
-                .risk_level(risk)
-                .description("The AI wants to run a shell command"),
+            request: ApprovalRequest::new(
+                uuid::Uuid::new_v4().to_string(),
+                "Execute Shell Command",
+            )
+            .tool_name("bash")
+            .arguments(&cmd)
+            .risk_level(risk)
+            .description("The AI wants to run a shell command"),
         }
     }
 
@@ -695,29 +706,25 @@ mod tests {
 
     #[test]
     fn test_request_description() {
-        let request = ApprovalRequest::new("1", "Title")
-            .description("Test description");
+        let request = ApprovalRequest::new("1", "Title").description("Test description");
         assert_eq!(request.description, "Test description");
     }
 
     #[test]
     fn test_request_tool_name() {
-        let request = ApprovalRequest::new("1", "Title")
-            .tool_name("bash");
+        let request = ApprovalRequest::new("1", "Title").tool_name("bash");
         assert_eq!(request.tool_name, "bash");
     }
 
     #[test]
     fn test_request_arguments() {
-        let request = ApprovalRequest::new("1", "Title")
-            .arguments("echo hello");
+        let request = ApprovalRequest::new("1", "Title").arguments("echo hello");
         assert_eq!(request.arguments, "echo hello");
     }
 
     #[test]
     fn test_request_risk_level() {
-        let request = ApprovalRequest::new("1", "Title")
-            .risk_level(RiskLevel::Critical);
+        let request = ApprovalRequest::new("1", "Title").risk_level(RiskLevel::Critical);
         assert_eq!(request.risk_level, RiskLevel::Critical);
     }
 
@@ -733,8 +740,8 @@ mod tests {
 
     #[test]
     fn test_request_details() {
-        let request = ApprovalRequest::new("1", "Title")
-            .details(vec!["A".to_string(), "B".to_string()]);
+        let request =
+            ApprovalRequest::new("1", "Title").details(vec!["A".to_string(), "B".to_string()]);
         assert_eq!(request.details.len(), 2);
     }
 
@@ -834,8 +841,7 @@ mod tests {
     #[test]
     fn test_overlay_handle_key_toggle_details() {
         let mut overlay = ApprovalOverlay::new();
-        let request = ApprovalRequest::new("1", "Test")
-            .add_detail("Detail");
+        let request = ApprovalRequest::new("1", "Test").add_detail("Detail");
         overlay.show(request);
 
         assert!(!overlay.current_request().unwrap().show_details);
@@ -850,8 +856,7 @@ mod tests {
     #[test]
     fn test_overlay_handle_key_navigation() {
         let mut overlay = ApprovalOverlay::new();
-        let request = ApprovalRequest::new("1", "Test")
-            .add_detail("Detail");
+        let request = ApprovalRequest::new("1", "Test").add_detail("Detail");
         overlay.show(request);
 
         // Initially selected = 0 (Approve)
@@ -1043,7 +1048,7 @@ mod tests {
         let mut batch = BatchApproval::new(requests);
 
         batch.approve_current(); // Approve 1
-        batch.reject_current();  // Reject 2
+        batch.reject_current(); // Reject 2
         batch.approve_current(); // Approve 3
 
         let (approved, rejected) = batch.results();

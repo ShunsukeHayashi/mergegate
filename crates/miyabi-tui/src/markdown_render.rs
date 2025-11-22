@@ -133,7 +133,10 @@ impl MarkdownRenderer {
         if let Some(stripped) = trimmed.strip_prefix("> ") {
             return Line::from(vec![
                 Span::styled("  > ", self.styles.blockquote),
-                Span::styled(stripped.to_string(), Style::default().fg(Color::Rgb(192, 202, 245))),
+                Span::styled(
+                    stripped.to_string(),
+                    Style::default().fg(Color::Rgb(192, 202, 245)),
+                ),
             ]);
         }
 
@@ -174,7 +177,11 @@ impl MarkdownRenderer {
                     if !current.is_empty() {
                         spans.push(Span::styled(
                             current.clone(),
-                            if in_code { self.styles.code } else { Style::default().fg(Color::Rgb(192, 202, 245)) },
+                            if in_code {
+                                self.styles.code
+                            } else {
+                                Style::default().fg(Color::Rgb(192, 202, 245))
+                            },
                         ));
                         current.clear();
                     }

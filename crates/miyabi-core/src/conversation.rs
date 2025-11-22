@@ -3,7 +3,7 @@
 //! This module provides conversation management for maintaining context
 //! across multiple interactions with the Claude API.
 
-use crate::anthropic::{Message, Role, ContentBlock};
+use crate::anthropic::{ContentBlock, Message, Role};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -407,8 +407,7 @@ mod tests {
 
     #[test]
     fn test_system_prompt() {
-        let conv = Conversation::new()
-            .with_system_prompt("You are a helpful assistant");
+        let conv = Conversation::new().with_system_prompt("You are a helpful assistant");
 
         assert_eq!(
             conv.get_system_prompt(),

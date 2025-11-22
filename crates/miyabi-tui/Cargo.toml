@@ -20,6 +20,7 @@ path = "src/lib.rs"
 [dependencies]
 # Workspace dependencies
 miyabi-core = { path = "../miyabi-core" }
+arboard = { version = "3", optional = true }
 
 # TUI Framework
 ratatui = { workspace = true }
@@ -47,3 +48,6 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 once_cell = { workspace = true }
 uuid = { workspace = true }
+
+[features]
+clipboard = ["arboard"]

@@ -121,6 +121,13 @@
 - [ ] System prompts
 - [ ] Tool definitions
 
+### 6.3 Model Coverage & Options
+- [ ] Add model presets for `claude-sonnet-4-5-20250929` and `claude-haiku-4-5-20251001`
+- [ ] Surface model selection via config/CLI flag
+- [ ] Update token/context limits for 4.5 models (context + max output)
+- [ ] Handle new stop reason `model_context_window_exceeded`
+- [ ] Toggle Extended Thinking (`thinking` param) with sensible defaults
+
 ---
 
 ## Phase 7: Tool Execution

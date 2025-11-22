@@ -3,7 +3,7 @@
 //! This module provides incremental parsing of markdown content using pulldown-cmark,
 //! with caching for efficient re-rendering during streaming.
 
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, CodeBlockKind};
+use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -205,10 +205,8 @@ impl EventRenderer {
                 } else {
                     format!("{}- ", indent)
                 };
-                self.current_spans.push(Span::styled(
-                    marker,
-                    Style::default().fg(Color::Yellow),
-                ));
+                self.current_spans
+                    .push(Span::styled(marker, Style::default().fg(Color::Yellow)));
             }
             Tag::Emphasis => {
                 self.push_style(Style::default().add_modifier(Modifier::ITALIC));
@@ -220,14 +218,16 @@ impl EventRenderer {
                 self.push_style(Style::default().add_modifier(Modifier::CROSSED_OUT));
             }
             Tag::BlockQuote(_) => {
-                self.current_spans.push(Span::styled(
-                    "│ ",
-                    Style::default().fg(Color::DarkGray),
-                ));
+                self.current_spans
+                    .push(Span::styled("│ ", Style::default().fg(Color::DarkGray)));
                 self.push_style(Style::default().fg(Color::Gray));
             }
             Tag::Link { .. } => {
-                self.push_style(Style::default().fg(Color::Blue).add_modifier(Modifier::UNDERLINED));
+                self.push_style(
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(Modifier::UNDERLINED),
+                );
             }
             _ => {}
         }
@@ -280,7 +280,8 @@ impl EventRenderer {
             }
         } else {
             let style = self.current_style();
-            self.current_spans.push(Span::styled(text.to_string(), style));
+            self.current_spans
+                .push(Span::styled(text.to_string(), style));
         }
     }
 

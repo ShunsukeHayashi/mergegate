@@ -15,7 +15,7 @@ use tracing::{debug, error, warn};
 const API_BASE_URL: &str = "https://api.anthropic.com";
 
 /// Default model to use
-pub const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+pub const DEFAULT_MODEL: &str = "claude-sonnet-4-5-20250929";
 
 /// Maximum retry attempts for transient errors
 const MAX_RETRIES: u32 = 3;
@@ -127,9 +127,18 @@ pub enum Role {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
-    Text { text: String },
-    ToolUse { id: String, name: String, input: serde_json::Value },
-    ToolResult { tool_use_id: String, content: String },
+    Text {
+        text: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+    },
 }
 
 /// A message in a conversation
@@ -177,6 +186,8 @@ pub struct MessagesRequest {
     pub tools: Option<Vec<Tool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
     pub stream: bool,
 }
 
@@ -188,6 +199,7 @@ pub enum StopReason {
     MaxTokens,
     StopSequence,
     ToolUse,
+    ModelContextWindowExceeded,
 }
 
 /// Usage statistics
@@ -216,7 +228,10 @@ pub enum StreamEvent {
     /// Message started
     MessageStart { message: MessagesResponse },
     /// Content block started
-    ContentBlockStart { index: usize, content_block: ContentBlock },
+    ContentBlockStart {
+        index: usize,
+        content_block: ContentBlock,
+    },
     /// Text delta in content
     ContentBlockDelta { index: usize, delta: TextDelta },
     /// Content block finished
@@ -252,6 +267,7 @@ pub struct AnthropicClient {
     api_key: String,
     model: String,
     max_tokens: u32,
+    thinking: bool,
 }
 
 impl AnthropicClient {
@@ -274,6 +290,7 @@ impl AnthropicClient {
             api_key,
             model: DEFAULT_MODEL.to_string(),
             max_tokens: 4096,
+            thinking: false,
         })
     }
 
@@ -289,6 +306,12 @@ impl AnthropicClient {
         self
     }
 
+    /// Enable or disable extended thinking
+    pub fn with_thinking(mut self, thinking: bool) -> Self {
+        self.thinking = thinking;
+        self
+    }
+
     /// Build request headers
     fn build_headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
@@ -298,10 +321,7 @@ impl AnthropicClient {
             HeaderValue::from_str(&self.api_key)
                 .map_err(|_| AnthropicError::ConfigError("Invalid API key format".to_string()))?,
         );
-        headers.insert(
-            "anthropic-version",
-            HeaderValue::from_static("2023-06-01"),
-        );
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
         Ok(headers)
     }
 
@@ -320,6 +340,7 @@ impl AnthropicClient {
             system,
             tools,
             temperature,
+            thinking: self.thinking.then_some(true),
             stream: false,
         };
 
@@ -356,7 +377,7 @@ impl AnthropicClient {
         }
 
         Err(last_error.unwrap_or(AnthropicError::StreamError(
-            "Max retries exceeded".to_string()
+            "Max retries exceeded".to_string(),
         )))
     }
 
@@ -441,6 +462,7 @@ impl AnthropicClient {
             system,
             tools,
             temperature,
+            thinking: self.thinking.then_some(true),
             stream: true,
         };
 
@@ -465,29 +487,35 @@ impl AnthropicClient {
 
         let stream = response.bytes_stream();
 
-        Ok(Box::pin(stream.scan(String::new(), |buffer, chunk| {
-            let result = match chunk {
-                Ok(bytes) => {
-                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+        Ok(Box::pin(
+            stream
+                .scan(String::new(), |buffer, chunk| {
+                    let result = match chunk {
+                        Ok(bytes) => {
+                            buffer.push_str(&String::from_utf8_lossy(&bytes));
 
-                    let mut events = Vec::new();
+                            let mut events = Vec::new();
 
-                    // Parse SSE events from buffer
-                    while let Some(event_end) = buffer.find("\n\n") {
-                        let event_data = buffer[..event_end].to_string();
-                        *buffer = buffer[event_end + 2..].to_string();
+                            // Parse SSE events from buffer
+                            while let Some(event_end) = buffer.find("\n\n") {
+                                let event_data = buffer[..event_end].to_string();
+                                *buffer = buffer[event_end + 2..].to_string();
 
-                        if let Some(event) = parse_sse_event(&event_data) {
-                            events.push(Ok(event));
+                                if let Some(event) = parse_sse_event(&event_data) {
+                                    events.push(Ok(event));
+                                }
+                            }
+
+                            Some(futures::stream::iter(events))
                         }
-                    }
-
-                    Some(futures::stream::iter(events))
-                }
-                Err(e) => Some(futures::stream::iter(vec![Err(AnthropicError::NetworkError(e))])),
-            };
-            async move { result }
-        }).flatten()))
+                        Err(e) => Some(futures::stream::iter(vec![Err(
+                            AnthropicError::NetworkError(e),
+                        )])),
+                    };
+                    async move { result }
+                })
+                .flatten(),
+        ))
     }
 }
 
@@ -510,14 +538,19 @@ fn parse_sse_event(event_data: &str) -> Option<StreamEvent> {
     match event_type.as_str() {
         "message_start" => {
             let parsed: serde_json::Value = serde_json::from_str(&data).ok()?;
-            let message: MessagesResponse = serde_json::from_value(parsed.get("message")?.clone()).ok()?;
+            let message: MessagesResponse =
+                serde_json::from_value(parsed.get("message")?.clone()).ok()?;
             Some(StreamEvent::MessageStart { message })
         }
         "content_block_start" => {
             let parsed: serde_json::Value = serde_json::from_str(&data).ok()?;
             let index = parsed.get("index")?.as_u64()? as usize;
-            let content_block: ContentBlock = serde_json::from_value(parsed.get("content_block")?.clone()).ok()?;
-            Some(StreamEvent::ContentBlockStart { index, content_block })
+            let content_block: ContentBlock =
+                serde_json::from_value(parsed.get("content_block")?.clone()).ok()?;
+            Some(StreamEvent::ContentBlockStart {
+                index,
+                content_block,
+            })
         }
         "content_block_delta" => {
             let parsed: serde_json::Value = serde_json::from_str(&data).ok()?;
@@ -677,7 +710,9 @@ mod tests {
         let auth_err = AnthropicError::AuthError("invalid key".to_string());
         assert!(auth_err.to_string().contains("invalid key"));
 
-        let rate_err = AnthropicError::RateLimited { retry_after_ms: 5000 };
+        let rate_err = AnthropicError::RateLimited {
+            retry_after_ms: 5000,
+        };
         assert!(rate_err.to_string().contains("5000"));
 
         let api_err = AnthropicError::ApiError {

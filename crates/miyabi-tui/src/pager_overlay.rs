@@ -12,7 +12,9 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
+    widgets::{
+        Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
+    },
     Frame,
 };
 
@@ -328,7 +330,10 @@ impl PagerOverlay {
 
     /// Scroll down
     fn scroll_down(&mut self, lines: usize) {
-        let max_scroll = self.content.line_count().saturating_sub(self.viewport_height);
+        let max_scroll = self
+            .content
+            .line_count()
+            .saturating_sub(self.viewport_height);
         self.scroll = (self.scroll + lines).min(max_scroll);
     }
 
@@ -339,7 +344,10 @@ impl PagerOverlay {
 
     /// Scroll to end
     fn scroll_to_end(&mut self) {
-        let max_scroll = self.content.line_count().saturating_sub(self.viewport_height);
+        let max_scroll = self
+            .content
+            .line_count()
+            .saturating_sub(self.viewport_height);
         self.scroll = max_scroll;
     }
 
@@ -364,7 +372,9 @@ impl PagerOverlay {
             let mut start = 0;
             while let Some(pos) = line_lower[start..].find(&query) {
                 let absolute_pos = start + pos;
-                search.matches.push((line_idx, absolute_pos, absolute_pos + query.len()));
+                search
+                    .matches
+                    .push((line_idx, absolute_pos, absolute_pos + query.len()));
                 start = absolute_pos + 1;
             }
         }
@@ -424,7 +434,9 @@ impl PagerOverlay {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
@@ -564,11 +576,7 @@ impl PagerOverlay {
 
         // Search mode
         if self.search_mode {
-            let query = self
-                .search
-                .as_ref()
-                .map(|s| s.query.as_str())
-                .unwrap_or("");
+            let query = self.search.as_ref().map(|s| s.query.as_str()).unwrap_or("");
             let direction = self
                 .search
                 .as_ref()
@@ -603,7 +611,11 @@ impl PagerOverlay {
             if let Some(search) = &self.search {
                 if !search.matches.is_empty() {
                     spans.push(Span::styled(
-                        format!(" Match {}/{} ", search.current_match + 1, search.matches.len()),
+                        format!(
+                            " Match {}/{} ",
+                            search.current_match + 1,
+                            search.matches.len()
+                        ),
                         Style::default().fg(Color::Yellow),
                     ));
                 }
@@ -723,10 +735,7 @@ mod tests {
 
     #[test]
     fn test_pager_content_styled() {
-        let lines = vec![
-            Line::from("Line 1"),
-            Line::from("Line 2"),
-        ];
+        let lines = vec![Line::from("Line 1"), Line::from("Line 2")];
         let content = PagerContent::Styled(lines);
         assert_eq!(content.raw(), "");
         assert_eq!(content.line_count(), 2);
@@ -742,8 +751,7 @@ mod tests {
 
     #[test]
     fn test_pager_content_builder() {
-        let pager = PagerOverlay::new()
-            .content(PagerContent::Plain("test".to_string()));
+        let pager = PagerOverlay::new().content(PagerContent::Plain("test".to_string()));
         assert_eq!(pager.content.raw(), "test");
     }
 
@@ -835,7 +843,10 @@ mod tests {
     #[test]
     fn test_pager_handle_key_scroll_down() {
         let mut pager = PagerOverlay::new();
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         pager.show_text(content);
 
         pager.handle_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty()));
@@ -848,7 +859,10 @@ mod tests {
     #[test]
     fn test_pager_handle_key_scroll_up() {
         let mut pager = PagerOverlay::new();
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         pager.show_text(content);
 
         pager.scroll = 5;
@@ -862,7 +876,10 @@ mod tests {
     #[test]
     fn test_pager_handle_key_page_down() {
         let mut pager = PagerOverlay::new();
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         pager.show_text(content);
         pager.viewport_height = 10;
 
@@ -873,7 +890,10 @@ mod tests {
     #[test]
     fn test_pager_handle_key_page_up() {
         let mut pager = PagerOverlay::new();
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         pager.show_text(content);
         pager.viewport_height = 10;
         pager.scroll = 20;
@@ -899,7 +919,10 @@ mod tests {
     #[test]
     fn test_pager_handle_key_end() {
         let mut pager = PagerOverlay::new();
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         pager.show_text(content);
         pager.viewport_height = 10;
 
@@ -1060,9 +1083,7 @@ mod tests {
 
     #[test]
     fn test_pager_builder_title() {
-        let pager = PagerBuilder::help("content")
-            .title("Custom Title")
-            .build();
+        let pager = PagerBuilder::help("content").title("Custom Title").build();
         assert_eq!(pager.title, "Custom Title");
     }
 

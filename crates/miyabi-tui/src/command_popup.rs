@@ -145,7 +145,9 @@ impl CommandPopup {
 
     /// Get selected command
     pub fn selected_command(&self) -> Option<&Command> {
-        self.filtered.get(self.selected).map(|&idx| &self.commands[idx])
+        self.filtered
+            .get(self.selected)
+            .map(|&idx| &self.commands[idx])
     }
 
     /// Handle key event
@@ -331,7 +333,9 @@ impl CommandPopup {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
@@ -364,7 +368,10 @@ impl CommandPopup {
         let content = if self.query.is_empty() {
             Line::from(vec![
                 Span::styled("› ", Style::default().fg(Color::Cyan)),
-                Span::styled(&self.placeholder, Style::default().fg(Color::Rgb(86, 95, 137))),
+                Span::styled(
+                    &self.placeholder,
+                    Style::default().fg(Color::Rgb(86, 95, 137)),
+                ),
             ])
         } else {
             Line::from(vec![
@@ -469,6 +476,12 @@ impl CommandPopup {
                 .category("Chat"),
             Command::new("model", "Change Model")
                 .description("Select AI model")
+                .category("Settings"),
+            Command::new("thinking:on", "Extended Thinking On")
+                .description("Enable Claude Extended Thinking")
+                .category("Settings"),
+            Command::new("thinking:off", "Extended Thinking Off")
+                .description("Disable Claude Extended Thinking")
                 .category("Settings"),
             Command::new("temperature", "Temperature")
                 .description("Adjust response creativity")
@@ -690,7 +703,8 @@ mod tests {
 
     #[test]
     fn test_popup_handle_key_enter_disabled() {
-        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test").enabled(false)]);
+        let mut popup =
+            CommandPopup::new().commands(vec![Command::new("test", "Test").enabled(false)]);
         popup.show();
 
         let action = popup.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
@@ -883,9 +897,7 @@ mod tests {
 
     #[test]
     fn test_popup_filtering_empty() {
-        let mut popup = CommandPopup::new().commands(vec![
-            Command::new("test", "Test"),
-        ]);
+        let mut popup = CommandPopup::new().commands(vec![Command::new("test", "Test")]);
         popup.show();
 
         // Search for something that doesn't exist

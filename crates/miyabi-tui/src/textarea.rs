@@ -48,7 +48,10 @@ impl TextRange {
         if start <= end {
             Self { start, end }
         } else {
-            Self { start: end, end: start }
+            Self {
+                start: end,
+                end: start,
+            }
         }
     }
 
@@ -762,7 +765,11 @@ impl TextArea {
                     ));
                     self.cursor = self.offset_to_pos(*pos + text.len());
                 }
-                EditOp::Replace { pos, old_text, new_text } => {
+                EditOp::Replace {
+                    pos,
+                    old_text,
+                    new_text,
+                } => {
                     let full_text = self.get_text();
                     self.set_text(&format!(
                         "{}{}{}",
@@ -801,7 +808,11 @@ impl TextArea {
                     ));
                     self.cursor = cursor;
                 }
-                EditOp::Replace { pos, old_text, new_text } => {
+                EditOp::Replace {
+                    pos,
+                    old_text,
+                    new_text,
+                } => {
                     let full_text = self.get_text();
                     self.set_text(&format!(
                         "{}{}{}",

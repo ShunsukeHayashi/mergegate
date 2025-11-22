@@ -189,7 +189,10 @@ pub enum NotificationPanelAction {
     /// Dismiss all notifications
     DismissAll,
     /// Execute action on notification
-    ExecuteAction { notification_id: String, action_id: String },
+    ExecuteAction {
+        notification_id: String,
+        action_id: String,
+    },
     /// Mark all as read
     MarkAllRead,
 }
@@ -424,26 +427,21 @@ impl NotificationPanel {
 
                 let header = format!(
                     "{} {} {} - {}",
-                    read_indicator,
-                    icon,
-                    notification.title,
-                    age
+                    read_indicator, icon, notification.title, age
                 );
 
-                let mut lines = vec![
-                    Line::from(Span::styled(
-                        header,
-                        Style::default()
-                            .fg(notification.priority.color())
-                            .add_modifier(if is_selected {
-                                Modifier::BOLD
-                            } else if notification.read {
-                                Modifier::DIM
-                            } else {
-                                Modifier::empty()
-                            }),
-                    )),
-                ];
+                let mut lines = vec![Line::from(Span::styled(
+                    header,
+                    Style::default()
+                        .fg(notification.priority.color())
+                        .add_modifier(if is_selected {
+                            Modifier::BOLD
+                        } else if notification.read {
+                            Modifier::DIM
+                        } else {
+                            Modifier::empty()
+                        }),
+                ))];
 
                 // Add message (truncated)
                 let msg = if notification.message.len() > 60 {
@@ -453,13 +451,13 @@ impl NotificationPanel {
                 };
                 lines.push(Line::from(Span::styled(
                     msg,
-                    Style::default().fg(colors::FG).add_modifier(
-                        if notification.read {
+                    Style::default()
+                        .fg(colors::FG)
+                        .add_modifier(if notification.read {
                             Modifier::DIM
                         } else {
                             Modifier::empty()
-                        },
-                    ),
+                        }),
                 )));
 
                 // Add actions if selected
@@ -485,8 +483,7 @@ impl NotificationPanel {
             })
             .collect();
 
-        let list = List::new(items)
-            .highlight_style(Style::default().bg(colors::SELECTION));
+        let list = List::new(items).highlight_style(Style::default().bg(colors::SELECTION));
 
         // Render with state
         ratatui::widgets::StatefulWidget::render(list, inner, buf, &mut self.list_state);
@@ -601,7 +598,10 @@ impl Banner {
                 let filled = (progress * progress_area.width as f64) as u16;
 
                 for x in progress_area.x..progress_area.x + filled {
-                    if let Some(cell) = buf.cell_mut(Position { x, y: progress_area.y }) {
+                    if let Some(cell) = buf.cell_mut(Position {
+                        x,
+                        y: progress_area.y,
+                    }) {
                         cell.set_bg(colors::GREEN);
                     }
                 }
@@ -918,26 +918,17 @@ impl NotificationCenter {
 
     /// Convenience method for info notification
     pub fn info(&mut self, title: impl Into<String>, message: impl Into<String>) {
-        self.notify(
-            Notification::new(title, message)
-                .with_priority(NotificationPriority::Low)
-        );
+        self.notify(Notification::new(title, message).with_priority(NotificationPriority::Low));
     }
 
     /// Convenience method for success notification
     pub fn success(&mut self, title: impl Into<String>, message: impl Into<String>) {
-        self.notify(
-            Notification::new(title, message)
-                .with_priority(NotificationPriority::Normal)
-        );
+        self.notify(Notification::new(title, message).with_priority(NotificationPriority::Normal));
     }
 
     /// Convenience method for warning notification
     pub fn warning(&mut self, title: impl Into<String>, message: impl Into<String>) {
-        self.notify(
-            Notification::new(title, message)
-                .with_priority(NotificationPriority::High)
-        );
+        self.notify(Notification::new(title, message).with_priority(NotificationPriority::High));
     }
 
     /// Convenience method for error notification
@@ -945,7 +936,7 @@ impl NotificationCenter {
         self.notify(
             Notification::new(title, message)
                 .with_priority(NotificationPriority::Critical)
-                .with_duration(None) // Errors persist until dismissed
+                .with_duration(None), // Errors persist until dismissed
         );
     }
 }
@@ -991,26 +982,24 @@ mod tests {
 
     #[test]
     fn test_notification_with_priority() {
-        let notification = Notification::new("Title", "Message")
-            .with_priority(NotificationPriority::Critical);
+        let notification =
+            Notification::new("Title", "Message").with_priority(NotificationPriority::Critical);
         assert_eq!(notification.priority, NotificationPriority::Critical);
     }
 
     #[test]
     fn test_notification_with_source() {
-        let notification = Notification::new("Title", "Message")
-            .with_source("system");
+        let notification = Notification::new("Title", "Message").with_source("system");
         assert_eq!(notification.source, Some("system".to_string()));
     }
 
     #[test]
     fn test_notification_with_duration() {
-        let notification = Notification::new("Title", "Message")
-            .with_duration(Some(Duration::from_secs(10)));
+        let notification =
+            Notification::new("Title", "Message").with_duration(Some(Duration::from_secs(10)));
         assert_eq!(notification.duration, Some(Duration::from_secs(10)));
 
-        let persistent = Notification::new("Title", "Message")
-            .with_duration(None);
+        let persistent = Notification::new("Title", "Message").with_duration(None);
         assert_eq!(persistent.duration, None);
     }
 
@@ -1025,14 +1014,13 @@ mod tests {
     #[test]
     fn test_notification_is_expired() {
         // Short duration notification
-        let notification = Notification::new("Title", "Message")
-            .with_duration(Some(Duration::from_millis(1)));
+        let notification =
+            Notification::new("Title", "Message").with_duration(Some(Duration::from_millis(1)));
         std::thread::sleep(Duration::from_millis(5));
         assert!(notification.is_expired());
 
         // Persistent notification never expires
-        let persistent = Notification::new("Title", "Message")
-            .with_duration(None);
+        let persistent = Notification::new("Title", "Message").with_duration(None);
         assert!(!persistent.is_expired());
     }
 
@@ -1138,8 +1126,7 @@ mod tests {
     fn test_panel_cleanup_expired() {
         let mut panel = NotificationPanel::new();
         panel.push(
-            Notification::new("Test", "Message")
-                .with_duration(Some(Duration::from_millis(1)))
+            Notification::new("Test", "Message").with_duration(Some(Duration::from_millis(1))),
         );
 
         std::thread::sleep(Duration::from_millis(5));
@@ -1409,9 +1396,8 @@ mod tests {
 
     #[test]
     fn test_alert_handle_key_enter() {
-        let mut alert = Alert::new("Title", "Message").with_buttons(vec![
-            AlertButton::new("ok", "OK"),
-        ]);
+        let mut alert =
+            Alert::new("Title", "Message").with_buttons(vec![AlertButton::new("ok", "OK")]);
 
         let action = alert.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
         assert!(matches!(action, AlertAction::ButtonPressed(ref id) if id == "ok"));
@@ -1466,8 +1452,7 @@ mod tests {
         let mut center = NotificationCenter::new();
         center.show_banner(Banner::new("Test").with_duration(Duration::from_millis(1)));
         center.notify(
-            Notification::new("Test", "Message")
-                .with_duration(Some(Duration::from_millis(1)))
+            Notification::new("Test", "Message").with_duration(Some(Duration::from_millis(1))),
         );
 
         std::thread::sleep(Duration::from_millis(5));

@@ -23,6 +23,8 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 regex = { workspace = true }
+dirs = "5"
+toml = "0.8"
 
 [dev-dependencies]
 tempfile = "3"

@@ -5,6 +5,12 @@ version: "0.1.0"
 # GitHub settings (use environment variables for sensitive data)
 # github_token: ${{ GITHUB_TOKEN }}
 
+# LLM Configuration
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+  api_key: ${{ ANTHROPIC_API_KEY }}
+
 # Agent settings
 agents:
   enabled: true

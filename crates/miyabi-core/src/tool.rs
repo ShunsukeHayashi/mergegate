@@ -267,7 +267,10 @@ pub trait Tool: Send + Sync {
         for param in params {
             let mut prop = serde_json::Map::new();
             prop.insert("type".to_string(), Value::String(param.param_type.clone()));
-            prop.insert("description".to_string(), Value::String(param.description.clone()));
+            prop.insert(
+                "description".to_string(),
+                Value::String(param.description.clone()),
+            );
 
             if let Some(default) = param.default {
                 prop.insert("default".to_string(), default);
@@ -633,7 +636,10 @@ impl ExecutionHistory {
 
     /// Get records for a tool
     pub fn by_tool(&self, tool_name: &str) -> Vec<&ExecutionRecord> {
-        self.records.iter().filter(|r| r.tool_name == tool_name).collect()
+        self.records
+            .iter()
+            .filter(|r| r.tool_name == tool_name)
+            .collect()
     }
 
     /// Total execution count
@@ -643,20 +649,23 @@ impl ExecutionHistory {
 
     /// Success count
     pub fn success_count(&self) -> usize {
-        self.records.iter().filter(|r| r.status == ExecutionStatus::Completed).count()
+        self.records
+            .iter()
+            .filter(|r| r.status == ExecutionStatus::Completed)
+            .count()
     }
 
     /// Failure count
     pub fn failure_count(&self) -> usize {
-        self.records.iter().filter(|r| r.status == ExecutionStatus::Failed).count()
+        self.records
+            .iter()
+            .filter(|r| r.status == ExecutionStatus::Failed)
+            .count()
     }
 
     /// Average execution time (for completed executions)
     pub fn average_duration_ms(&self) -> Option<f64> {
-        let durations: Vec<u64> = self.records
-            .iter()
-            .filter_map(|r| r.duration_ms)
-            .collect();
+        let durations: Vec<u64> = self.records.iter().filter_map(|r| r.duration_ms).collect();
 
         if durations.is_empty() {
             None
@@ -685,7 +694,11 @@ pub enum ExecutionEvent {
     /// Execution started
     Started { call_id: String },
     /// Progress update
-    Progress { call_id: String, progress: f32, message: String },
+    Progress {
+        call_id: String,
+        progress: f32,
+        message: String,
+    },
     /// Output chunk (for streaming)
     OutputChunk { call_id: String, chunk: String },
     /// Execution completed
@@ -712,10 +725,7 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     /// Create a new executor
-    pub fn new(
-        registry: Arc<ToolRegistry>,
-        event_tx: mpsc::Sender<ExecutionEvent>,
-    ) -> Self {
+    pub fn new(registry: Arc<ToolRegistry>, event_tx: mpsc::Sender<ExecutionEvent>) -> Self {
         Self {
             registry,
             history: Arc::new(RwLock::new(ExecutionHistory::new())),
@@ -747,17 +757,23 @@ impl ToolExecutor {
         self.history.write().await.add(record);
 
         // Emit queued event
-        let _ = self.event_tx.send(ExecutionEvent::Queued {
-            call_id: call_id.clone(),
-            tool_name: tool_name.clone(),
-        }).await;
+        let _ = self
+            .event_tx
+            .send(ExecutionEvent::Queued {
+                call_id: call_id.clone(),
+                tool_name: tool_name.clone(),
+            })
+            .await;
 
         // Check approval requirement
         if call.requires_approval {
-            let _ = self.event_tx.send(ExecutionEvent::AwaitingApproval {
-                call_id: call_id.clone(),
-                tool_name: tool_name.clone(),
-            }).await;
+            let _ = self
+                .event_tx
+                .send(ExecutionEvent::AwaitingApproval {
+                    call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                })
+                .await;
 
             if let Some(record) = self.history.write().await.get_mut(&call_id) {
                 record.status = ExecutionStatus::AwaitingApproval;
@@ -765,9 +781,12 @@ impl ToolExecutor {
 
             // In a real implementation, we would wait for approval here
             // For now, we auto-approve
-            let _ = self.event_tx.send(ExecutionEvent::Approved {
-                call_id: call_id.clone(),
-            }).await;
+            let _ = self
+                .event_tx
+                .send(ExecutionEvent::Approved {
+                    call_id: call_id.clone(),
+                })
+                .await;
         }
 
         // Mark as running
@@ -775,15 +794,19 @@ impl ToolExecutor {
             record.start();
         }
 
-        let _ = self.event_tx.send(ExecutionEvent::Started {
-            call_id: call_id.clone(),
-        }).await;
+        let _ = self
+            .event_tx
+            .send(ExecutionEvent::Started {
+                call_id: call_id.clone(),
+            })
+            .await;
 
         // Execute with timeout
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(self.default_timeout_ms),
-            self.registry.execute(&call.name, call.input)
-        ).await;
+            self.registry.execute(&call.name, call.input),
+        )
+        .await;
 
         match result {
             Ok(Ok(output)) => {
@@ -792,10 +815,13 @@ impl ToolExecutor {
                     record.complete(output.clone());
                 }
 
-                let _ = self.event_tx.send(ExecutionEvent::Completed {
-                    call_id,
-                    output: output.clone(),
-                }).await;
+                let _ = self
+                    .event_tx
+                    .send(ExecutionEvent::Completed {
+                        call_id,
+                        output: output.clone(),
+                    })
+                    .await;
 
                 Ok(output)
             }
@@ -806,10 +832,13 @@ impl ToolExecutor {
                     record.fail(&error_msg);
                 }
 
-                let _ = self.event_tx.send(ExecutionEvent::Failed {
-                    call_id,
-                    error: error_msg,
-                }).await;
+                let _ = self
+                    .event_tx
+                    .send(ExecutionEvent::Failed {
+                        call_id,
+                        error: error_msg,
+                    })
+                    .await;
 
                 Err(e)
             }
@@ -822,10 +851,13 @@ impl ToolExecutor {
                     record.completed_at = Some(Utc::now());
                 }
 
-                let _ = self.event_tx.send(ExecutionEvent::Failed {
-                    call_id,
-                    error: error_msg.clone(),
-                }).await;
+                let _ = self
+                    .event_tx
+                    .send(ExecutionEvent::Failed {
+                        call_id,
+                        error: error_msg.clone(),
+                    })
+                    .await;
 
                 Err(ToolError::Timeout(self.default_timeout_ms))
             }
@@ -839,9 +871,7 @@ impl ToolExecutor {
         let results = stream::iter(calls)
             .map(|call| {
                 let executor = self.clone_inner();
-                async move {
-                    executor.execute(call).await
-                }
+                async move { executor.execute(call).await }
             })
             .buffer_unordered(self.max_concurrent)
             .collect::<Vec<_>>()
@@ -851,7 +881,10 @@ impl ToolExecutor {
     }
 
     /// Execute calls respecting dependencies (DAG execution)
-    pub async fn execute_dag(&self, calls: Vec<ToolCall>) -> HashMap<String, ToolResult<ToolOutput>> {
+    pub async fn execute_dag(
+        &self,
+        calls: Vec<ToolCall>,
+    ) -> HashMap<String, ToolResult<ToolOutput>> {
         let mut results: HashMap<String, ToolResult<ToolOutput>> = HashMap::new();
         let mut completed: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut remaining: Vec<ToolCall> = calls;
@@ -860,9 +893,7 @@ impl ToolExecutor {
             // Find calls with satisfied dependencies
             let (ready, not_ready): (Vec<_>, Vec<_>) = remaining
                 .into_iter()
-                .partition(|call| {
-                    call.dependencies.iter().all(|dep| completed.contains(dep))
-                });
+                .partition(|call| call.dependencies.iter().all(|dep| completed.contains(dep)));
 
             if ready.is_empty() && !not_ready.is_empty() {
                 // Circular dependency or missing dependency
@@ -871,8 +902,8 @@ impl ToolExecutor {
                     results.insert(
                         call.id.clone(),
                         Err(ToolError::ExecutionFailed(
-                            "Unresolved dependencies".to_string()
-                        ))
+                            "Unresolved dependencies".to_string(),
+                        )),
                     );
                 }
                 break;
@@ -1130,7 +1161,10 @@ mod tests {
 
         assert_eq!(schema["type"], "object");
         assert!(schema["properties"]["message"].is_object());
-        assert!(schema["required"].as_array().unwrap().contains(&Value::String("message".to_string())));
+        assert!(schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::String("message".to_string())));
     }
 
     #[tokio::test]
@@ -1152,9 +1186,7 @@ mod tests {
     async fn test_tool_not_found() {
         let registry = ToolRegistry::new();
 
-        let result = registry
-            .execute("missing", serde_json::json!({}))
-            .await;
+        let result = registry.execute("missing", serde_json::json!({})).await;
 
         assert!(matches!(result, Err(ToolError::NotFound(_))));
     }
@@ -1206,12 +1238,15 @@ mod tests {
 
     #[test]
     fn test_parameter_def_builders() {
-        let param = ParameterDef::required_string("test", "Test parameter")
-            .with_default("default_value");
+        let param =
+            ParameterDef::required_string("test", "Test parameter").with_default("default_value");
 
         assert_eq!(param.name, "test");
         assert!(!param.required); // Setting default makes it optional
-        assert_eq!(param.default, Some(Value::String("default_value".to_string())));
+        assert_eq!(
+            param.default,
+            Some(Value::String("default_value".to_string()))
+        );
     }
 
     #[test]

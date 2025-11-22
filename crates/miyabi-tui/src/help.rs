@@ -218,7 +218,8 @@ impl HelpViewer {
                     HelpAction::None
                 }
                 KeyCode::Tab => {
-                    self.selected_category = (self.selected_category + 1) % self.categories.len().max(1);
+                    self.selected_category =
+                        (self.selected_category + 1) % self.categories.len().max(1);
                     self.selected_binding = 0;
                     self.update_filtered();
                     HelpAction::None
@@ -343,7 +344,9 @@ impl HelpViewer {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
@@ -355,10 +358,10 @@ impl HelpViewer {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Tabs
-                Constraint::Length(3),  // Search
-                Constraint::Min(1),     // Content
-                Constraint::Length(1),  // Status
+                Constraint::Length(3), // Tabs
+                Constraint::Length(3), // Search
+                Constraint::Min(1),    // Content
+                Constraint::Length(1), // Status
             ])
             .split(inner);
 
@@ -531,10 +534,7 @@ impl HelpViewer {
                 " a: Show all ",
                 Style::default().fg(Color::Rgb(86, 95, 137)),
             ),
-            Span::styled(
-                " q: Close ",
-                Style::default().fg(Color::Rgb(86, 95, 137)),
-            ),
+            Span::styled(" q: Close ", Style::default().fg(Color::Rgb(86, 95, 137))),
         ]);
 
         let paragraph = Paragraph::new(status);
@@ -700,7 +700,9 @@ impl CheatSheet {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
@@ -867,10 +869,7 @@ impl QuickRef {
             .iter()
             .map(|(key, desc)| {
                 Line::from(vec![
-                    Span::styled(
-                        format!("{:>8}", key),
-                        Style::default().fg(Color::Cyan),
-                    ),
+                    Span::styled(format!("{:>8}", key), Style::default().fg(Color::Cyan)),
                     Span::raw("  "),
                     Span::styled(desc, Style::default().fg(Color::Rgb(192, 202, 245))),
                 ])
@@ -957,10 +956,8 @@ mod tests {
 
     #[test]
     fn test_viewer_categories() {
-        let viewer = HelpViewer::new().categories(vec![
-            HelpCategory::new("Cat1"),
-            HelpCategory::new("Cat2"),
-        ]);
+        let viewer = HelpViewer::new()
+            .categories(vec![HelpCategory::new("Cat1"), HelpCategory::new("Cat2")]);
         assert_eq!(viewer.categories.len(), 2);
     }
 
@@ -989,7 +986,7 @@ mod tests {
     #[test]
     fn test_viewer_show_resets_state() {
         let mut viewer = HelpViewer::new().categories(vec![
-            HelpCategory::new("Cat").binding(KeyBinding::new("a", "Action")),
+            HelpCategory::new("Cat").binding(KeyBinding::new("a", "Action"))
         ]);
         viewer.show();
         viewer.selected_binding = 5;
@@ -1085,13 +1082,12 @@ mod tests {
 
     #[test]
     fn test_viewer_handle_key_navigation() {
-        let mut viewer = HelpViewer::new().categories(vec![
-            HelpCategory::new("Cat").bindings(vec![
+        let mut viewer =
+            HelpViewer::new().categories(vec![HelpCategory::new("Cat").bindings(vec![
                 KeyBinding::new("a", "Action A"),
                 KeyBinding::new("b", "Action B"),
                 KeyBinding::new("c", "Action C"),
-            ]),
-        ]);
+            ])]);
         viewer.show();
 
         viewer.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
@@ -1109,13 +1105,12 @@ mod tests {
 
     #[test]
     fn test_viewer_handle_key_home_end() {
-        let mut viewer = HelpViewer::new().categories(vec![
-            HelpCategory::new("Cat").bindings(vec![
+        let mut viewer =
+            HelpViewer::new().categories(vec![HelpCategory::new("Cat").bindings(vec![
                 KeyBinding::new("a", "A"),
                 KeyBinding::new("b", "B"),
                 KeyBinding::new("c", "C"),
-            ]),
-        ]);
+            ])]);
         viewer.show();
 
         viewer.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::empty()));
@@ -1177,13 +1172,12 @@ mod tests {
 
     #[test]
     fn test_viewer_filtering() {
-        let mut viewer = HelpViewer::new().categories(vec![
-            HelpCategory::new("Cat").bindings(vec![
+        let mut viewer =
+            HelpViewer::new().categories(vec![HelpCategory::new("Cat").bindings(vec![
                 KeyBinding::new("a", "Alpha"),
                 KeyBinding::new("b", "Beta"),
                 KeyBinding::new("c", "Copy"),
-            ]),
-        ]);
+            ])]);
         viewer.show();
         assert_eq!(viewer.filtered.len(), 3);
 
@@ -1214,9 +1208,7 @@ mod tests {
 
     #[test]
     fn test_cheat_section_item() {
-        let section = CheatSection::new("Nav")
-            .item("j", "Down")
-            .item("k", "Up");
+        let section = CheatSection::new("Nav").item("j", "Down").item("k", "Up");
         assert_eq!(section.items.len(), 2);
     }
 
@@ -1253,9 +1245,7 @@ mod tests {
 
     #[test]
     fn test_quickref_item() {
-        let qr = QuickRef::new()
-            .item("q", "Quit")
-            .item("?", "Help");
+        let qr = QuickRef::new().item("q", "Quit").item("?", "Help");
         assert_eq!(qr.items.len(), 2);
     }
 

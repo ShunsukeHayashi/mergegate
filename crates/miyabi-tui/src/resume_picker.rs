@@ -228,7 +228,9 @@ impl ResumePicker {
 
     /// Get selected session
     pub fn selected_session(&self) -> Option<&SessionEntry> {
-        self.filtered.get(self.selected).map(|&idx| &self.sessions[idx])
+        self.filtered
+            .get(self.selected)
+            .map(|&idx| &self.sessions[idx])
     }
 
     /// Set sort order
@@ -303,7 +305,9 @@ impl ResumePicker {
                 }
                 ResumePickerAction::None
             }
-            KeyCode::Delete | KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Delete | KeyCode::Char('x')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
                 if let Some(session) = self.selected_session() {
                     let id = session.id.clone();
                     ResumePickerAction::Delete(id)
@@ -379,18 +383,16 @@ impl ResumePicker {
     /// Sort sessions
     fn sort_sessions(&mut self) {
         // Pinned items always first
-        self.sessions.sort_by(|a, b| {
-            match (a.pinned, b.pinned) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => match self.sort_order {
-                    SessionSortOrder::RecentFirst => b.updated_at.cmp(&a.updated_at),
-                    SessionSortOrder::OldestFirst => a.updated_at.cmp(&b.updated_at),
-                    SessionSortOrder::Alphabetical => a.title.cmp(&b.title),
-                    SessionSortOrder::MessageCount => b.message_count.cmp(&a.message_count),
-                    SessionSortOrder::TokenUsage => b.tokens_used.cmp(&a.tokens_used),
-                },
-            }
+        self.sessions.sort_by(|a, b| match (a.pinned, b.pinned) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => match self.sort_order {
+                SessionSortOrder::RecentFirst => b.updated_at.cmp(&a.updated_at),
+                SessionSortOrder::OldestFirst => a.updated_at.cmp(&b.updated_at),
+                SessionSortOrder::Alphabetical => a.title.cmp(&b.title),
+                SessionSortOrder::MessageCount => b.message_count.cmp(&a.message_count),
+                SessionSortOrder::TokenUsage => b.tokens_used.cmp(&a.tokens_used),
+            },
         });
     }
 
@@ -408,7 +410,10 @@ impl ResumePicker {
                 .filter(|(_, session)| {
                     session.title.to_lowercase().contains(&query)
                         || session.preview.to_lowercase().contains(&query)
-                        || session.tags.iter().any(|t| t.to_lowercase().contains(&query))
+                        || session
+                            .tags
+                            .iter()
+                            .any(|t| t.to_lowercase().contains(&query))
                 })
                 .map(|(i, _)| i)
                 .collect();
@@ -444,7 +449,9 @@ impl ResumePicker {
         let block = Block::default()
             .title(Span::styled(
                 format!(" {} ", self.title),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
@@ -646,7 +653,11 @@ impl ResumePicker {
         lines.push(Line::from(vec![
             Span::styled("Created: ", Style::default().fg(Color::Rgb(86, 95, 137))),
             Span::styled(
-                session.created_at.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string(),
+                session
+                    .created_at
+                    .with_timezone(&Local)
+                    .format("%Y-%m-%d %H:%M")
+                    .to_string(),
                 Style::default().fg(Color::Rgb(169, 177, 214)),
             ),
         ]));
@@ -835,7 +846,8 @@ mod tests {
 
     #[test]
     fn test_session_entry_tags() {
-        let entry = SessionEntry::new("id1", "Test").tags(vec!["rust".to_string(), "cli".to_string()]);
+        let entry =
+            SessionEntry::new("id1", "Test").tags(vec!["rust".to_string(), "cli".to_string()]);
         assert_eq!(entry.tags.len(), 2);
         assert_eq!(entry.tags[0], "rust");
     }
@@ -952,8 +964,10 @@ mod tests {
     fn test_picker_selected_session() {
         let now = Utc::now();
         let sessions = vec![
-            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
-            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+            SessionEntry::new("1", "Session 1")
+                .timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("2", "Session 2")
+                .timestamps(now - Duration::hours(1), now - Duration::hours(1)),
         ];
         let mut picker = ResumePicker::new().sessions(sessions);
         picker.show();
@@ -1025,9 +1039,12 @@ mod tests {
     fn test_picker_handle_key_navigation() {
         let now = Utc::now();
         let sessions = vec![
-            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(3), now - Duration::hours(3)),
-            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
-            SessionEntry::new("3", "Session 3").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+            SessionEntry::new("1", "Session 1")
+                .timestamps(now - Duration::hours(3), now - Duration::hours(3)),
+            SessionEntry::new("2", "Session 2")
+                .timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("3", "Session 3")
+                .timestamps(now - Duration::hours(1), now - Duration::hours(1)),
         ];
         let mut picker = ResumePicker::new().sessions(sessions);
         picker.show();
@@ -1045,8 +1062,10 @@ mod tests {
     fn test_picker_handle_key_tab() {
         let now = Utc::now();
         let sessions = vec![
-            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
-            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+            SessionEntry::new("1", "Session 1")
+                .timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("2", "Session 2")
+                .timestamps(now - Duration::hours(1), now - Duration::hours(1)),
         ];
         let mut picker = ResumePicker::new().sessions(sessions);
         picker.show();
@@ -1060,9 +1079,12 @@ mod tests {
     fn test_picker_handle_key_home_end() {
         let now = Utc::now();
         let sessions = vec![
-            SessionEntry::new("1", "Session 1").timestamps(now - Duration::hours(3), now - Duration::hours(3)),
-            SessionEntry::new("2", "Session 2").timestamps(now - Duration::hours(2), now - Duration::hours(2)),
-            SessionEntry::new("3", "Session 3").timestamps(now - Duration::hours(1), now - Duration::hours(1)),
+            SessionEntry::new("1", "Session 1")
+                .timestamps(now - Duration::hours(3), now - Duration::hours(3)),
+            SessionEntry::new("2", "Session 2")
+                .timestamps(now - Duration::hours(2), now - Duration::hours(2)),
+            SessionEntry::new("3", "Session 3")
+                .timestamps(now - Duration::hours(1), now - Duration::hours(1)),
         ];
         let mut picker = ResumePicker::new().sessions(sessions);
         picker.show();

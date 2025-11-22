@@ -206,10 +206,7 @@ impl SkeletonLoader {
                 // Pulse effect: entire bar pulses
                 let intensity = (progress * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5;
                 let color = blend_colors(self.base_color, self.highlight_color, intensity);
-                vec![Span::styled(
-                    "█".repeat(width),
-                    Style::default().fg(color),
-                )]
+                vec![Span::styled("█".repeat(width), Style::default().fg(color))]
             }
             ShimmerEffect::Gradient => {
                 // Gradient sweep
@@ -234,10 +231,7 @@ impl SkeletonLoader {
                     self.highlight_color,
                     (progress * std::f64::consts::PI).sin(),
                 );
-                vec![Span::styled(
-                    "─".repeat(width),
-                    Style::default().fg(color),
-                )]
+                vec![Span::styled("─".repeat(width), Style::default().fg(color))]
             }
         };
 
@@ -636,7 +630,13 @@ fn blend_colors(a: Color, b: Color, t: f64) -> Color {
             let b = (b1 as f64 * (1.0 - t) + b2 as f64 * t) as u8;
             Color::Rgb(r, g, b)
         }
-        _ => if t < 0.5 { a } else { b },
+        _ => {
+            if t < 0.5 {
+                a
+            } else {
+                b
+            }
+        }
     }
 }
 
@@ -658,7 +658,10 @@ pub enum LoadingState {
 impl LoadingState {
     /// Check if loading
     pub fn is_loading(&self) -> bool {
-        matches!(self, LoadingState::Loading(_) | LoadingState::Progress { .. })
+        matches!(
+            self,
+            LoadingState::Loading(_) | LoadingState::Progress { .. }
+        )
     }
 
     /// Check if complete
@@ -818,7 +821,7 @@ mod tests {
     fn test_shimmer_state_progress() {
         let state = ShimmerState::new();
         let progress = state.progress();
-        assert!(progress >= 0.0 && progress <= 1.0);
+        assert!((0.0..=1.0).contains(&progress));
     }
 
     #[test]
@@ -1036,11 +1039,7 @@ mod tests {
 
     #[test]
     fn test_blend_colors_rgb() {
-        let result = blend_colors(
-            Color::Rgb(0, 0, 0),
-            Color::Rgb(255, 255, 255),
-            0.5,
-        );
+        let result = blend_colors(Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255), 0.5);
         assert!(matches!(result, Color::Rgb(127, 127, 127)));
     }
 

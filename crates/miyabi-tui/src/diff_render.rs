@@ -100,8 +100,16 @@ impl DiffRender {
 
                 // Parse file paths
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                let old_path = parts.get(2).unwrap_or(&"").trim_start_matches("a/").to_string();
-                let new_path = parts.get(3).unwrap_or(&"").trim_start_matches("b/").to_string();
+                let old_path = parts
+                    .get(2)
+                    .unwrap_or(&"")
+                    .trim_start_matches("a/")
+                    .to_string();
+                let new_path = parts
+                    .get(3)
+                    .unwrap_or(&"")
+                    .trim_start_matches("b/")
+                    .to_string();
 
                 current_file = Some(FileDiff {
                     old_path,
@@ -126,7 +134,9 @@ impl DiffRender {
                 }
 
                 // Parse hunk header
-                if let Some((old_start, old_count, new_start, new_count, header)) = parse_hunk_header(line) {
+                if let Some((old_start, old_count, new_start, new_count, header)) =
+                    parse_hunk_header(line)
+                {
                     old_line_num = old_start;
                     new_line_num = new_start;
 
@@ -202,7 +212,8 @@ impl DiffRender {
 
     /// Get total number of lines
     pub fn line_count(&self) -> usize {
-        self.files.iter()
+        self.files
+            .iter()
             .flat_map(|f| &f.hunks)
             .map(|h| h.lines.len())
             .sum()
@@ -247,22 +258,10 @@ impl DiffRender {
     /// Render a single diff line
     fn render_line(&self, diff_line: &DiffLine) -> Line<'static> {
         let (prefix, style) = match diff_line.line_type {
-            DiffLineType::Addition => (
-                "+",
-                Style::default().fg(Color::Green),
-            ),
-            DiffLineType::Deletion => (
-                "-",
-                Style::default().fg(Color::Red),
-            ),
-            DiffLineType::Context => (
-                " ",
-                Style::default(),
-            ),
-            DiffLineType::HunkHeader => (
-                "",
-                Style::default().fg(Color::Cyan),
-            ),
+            DiffLineType::Addition => ("+", Style::default().fg(Color::Green)),
+            DiffLineType::Deletion => ("-", Style::default().fg(Color::Red)),
+            DiffLineType::Context => (" ", Style::default()),
+            DiffLineType::HunkHeader => ("", Style::default().fg(Color::Cyan)),
             DiffLineType::FileHeader => (
                 "",
                 Style::default()

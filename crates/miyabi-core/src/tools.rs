@@ -54,9 +54,9 @@ impl ReadTool {
         };
 
         // Security check: prevent path traversal
-        let canonical = resolved.canonicalize().map_err(|e| {
-            ToolError::ExecutionFailed(format!("Cannot resolve path: {}", e))
-        })?;
+        let canonical = resolved
+            .canonicalize()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Cannot resolve path: {}", e)))?;
 
         // Ensure path is within allowed boundaries
         if !canonical.starts_with(&self.base_dir) && !canonical.is_absolute() {
@@ -107,17 +107,17 @@ impl Tool for ReadTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidInput("path is required".to_string()))?;
 
-        let offset = input
-            .get("offset")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1) as usize;
+        let offset = input.get("offset").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
 
         let limit = input
             .get("limit")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
 
-        debug!("Reading file: {} (offset: {}, limit: {:?})", path, offset, limit);
+        debug!(
+            "Reading file: {} (offset: {}, limit: {:?})",
+            path, offset, limit
+        );
 
         let resolved = self.resolve_path(path)?;
         let content = std::fs::read_to_string(&resolved)
@@ -339,10 +339,7 @@ impl Tool for EditTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        debug!(
-            "Editing file: {} (replace_all: {})",
-            path, replace_all
-        );
+        debug!("Editing file: {} (replace_all: {})", path, replace_all);
 
         let resolved = self.resolve_path(path)?;
         let content = std::fs::read_to_string(&resolved)
@@ -432,7 +429,10 @@ impl BashTool {
 
         for pattern in dangerous {
             if command.contains(pattern) {
-                return Some(format!("Potentially dangerous command detected: {}", pattern));
+                return Some(format!(
+                    "Potentially dangerous command detected: {}",
+                    pattern
+                ));
             }
         }
         None
@@ -495,7 +495,10 @@ impl Tool for BashTool {
             .map(PathBuf::from)
             .unwrap_or_else(|| self.working_dir.clone());
 
-        debug!("Executing bash command: {} (timeout: {}s)", command, timeout_secs);
+        debug!(
+            "Executing bash command: {} (timeout: {}s)",
+            command, timeout_secs
+        );
 
         // Check for dangerous commands
         if let Some(warning) = self.check_dangerous(command) {
@@ -612,7 +615,10 @@ impl Tool for GlobTool {
 
     fn parameters(&self) -> Vec<ParameterDef> {
         vec![
-            ParameterDef::required_string("pattern", "Glob pattern to match (e.g., **/*.rs, src/**/*.ts)"),
+            ParameterDef::required_string(
+                "pattern",
+                "Glob pattern to match (e.g., **/*.rs, src/**/*.ts)",
+            ),
             ParameterDef::optional_string("path", "Base directory to search in"),
         ]
     }
@@ -639,9 +645,8 @@ impl Tool for GlobTool {
         };
 
         // Execute glob
-        let entries = glob(&full_pattern).map_err(|e| {
-            ToolError::InvalidInput(format!("Invalid glob pattern: {}", e))
-        })?;
+        let entries = glob(&full_pattern)
+            .map_err(|e| ToolError::InvalidInput(format!("Invalid glob pattern: {}", e)))?;
 
         let mut matches = Vec::new();
         for entry in entries {
@@ -750,7 +755,10 @@ impl Tool for GrepTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        debug!("Grep search: {} in {} (case_insensitive: {})", pattern, path, case_insensitive);
+        debug!(
+            "Grep search: {} in {} (case_insensitive: {})",
+            pattern, path, case_insensitive
+        );
 
         // Build regex
         let regex_pattern = if case_insensitive {
@@ -759,9 +767,8 @@ impl Tool for GrepTool {
             pattern.to_string()
         };
 
-        let regex = Regex::new(&regex_pattern).map_err(|e| {
-            ToolError::InvalidInput(format!("Invalid regex pattern: {}", e))
-        })?;
+        let regex = Regex::new(&regex_pattern)
+            .map_err(|e| ToolError::InvalidInput(format!("Invalid regex pattern: {}", e)))?;
 
         let search_path = if Path::new(path).is_absolute() {
             PathBuf::from(path)
@@ -900,7 +907,10 @@ mod tests {
     #[tokio::test]
     async fn test_read_tool_offset_limit() {
         let dir = TempDir::new().unwrap();
-        let content = (1..=10).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (1..=10)
+            .map(|i| format!("Line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         create_temp_file(&dir, "test.txt", &content);
 
         let tool = ReadTool::with_base_dir(dir.path());
@@ -1180,7 +1190,10 @@ mod tests {
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.success);
-        assert!(output.content["stdout"].as_str().unwrap().contains("Hello, World!"));
+        assert!(output.content["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("Hello, World!"));
     }
 
     #[tokio::test]

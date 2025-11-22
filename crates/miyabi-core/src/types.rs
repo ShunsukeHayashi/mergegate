@@ -1,7 +1,7 @@
 //! Core types for Miyabi
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Message role in a conversation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,7 +56,11 @@ impl ChatMessage {
         }
     }
 
-    pub fn tool(name: impl Into<String>, content: impl Into<String>, call_id: impl Into<String>) -> Self {
+    pub fn tool(
+        name: impl Into<String>,
+        content: impl Into<String>,
+        call_id: impl Into<String>,
+    ) -> Self {
         Self {
             role: Role::Tool,
             content: content.into(),

@@ -11,28 +11,28 @@
 //! - Link and image handling
 //! - Blockquotes with visual indicators
 
+use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };
-use pulldown_cmark::{Parser, Event, Tag, TagEnd, CodeBlockKind, Options};
 use unicode_width::UnicodeWidthStr;
 
 /// Color palette - Tokyo Night theme
 mod colors {
     use ratatui::style::Color;
 
-    pub const HEADING_1: Color = Color::Rgb(122, 162, 247);    // Blue
-    pub const HEADING_2: Color = Color::Rgb(125, 207, 255);    // Cyan
-    pub const HEADING_3: Color = Color::Rgb(187, 154, 247);    // Purple
-    pub const CODE_BG: Color = Color::Rgb(36, 40, 59);         // Dark background
-    pub const CODE_FG: Color = Color::Rgb(169, 177, 214);      // Light gray
-    pub const LINK: Color = Color::Rgb(125, 207, 255);         // Cyan
-    pub const EMPHASIS: Color = Color::Rgb(224, 175, 104);     // Yellow
-    pub const STRONG: Color = Color::Rgb(247, 118, 142);       // Red/Pink
-    pub const BLOCKQUOTE: Color = Color::Rgb(115, 218, 202);   // Teal
-    pub const LIST_MARKER: Color = Color::Rgb(158, 206, 106);  // Green
-    pub const TABLE_BORDER: Color = Color::Rgb(86, 95, 137);   // Dim
+    pub const HEADING_1: Color = Color::Rgb(122, 162, 247); // Blue
+    pub const HEADING_2: Color = Color::Rgb(125, 207, 255); // Cyan
+    pub const HEADING_3: Color = Color::Rgb(187, 154, 247); // Purple
+    pub const CODE_BG: Color = Color::Rgb(36, 40, 59); // Dark background
+    pub const CODE_FG: Color = Color::Rgb(169, 177, 214); // Light gray
+    pub const LINK: Color = Color::Rgb(125, 207, 255); // Cyan
+    pub const EMPHASIS: Color = Color::Rgb(224, 175, 104); // Yellow
+    pub const STRONG: Color = Color::Rgb(247, 118, 142); // Red/Pink
+    pub const BLOCKQUOTE: Color = Color::Rgb(115, 218, 202); // Teal
+    pub const LIST_MARKER: Color = Color::Rgb(158, 206, 106); // Green
+    pub const TABLE_BORDER: Color = Color::Rgb(86, 95, 137); // Dim
     pub const STRIKETHROUGH: Color = Color::Rgb(169, 177, 214); // Gray
     pub const HORIZONTAL_RULE: Color = Color::Rgb(86, 95, 137); // Dim
 }
@@ -64,7 +64,9 @@ impl InlineStyle {
             style = style.add_modifier(Modifier::ITALIC).fg(colors::EMPHASIS);
         }
         if self.strikethrough {
-            style = style.add_modifier(Modifier::CROSSED_OUT).fg(colors::STRIKETHROUGH);
+            style = style
+                .add_modifier(Modifier::CROSSED_OUT)
+                .fg(colors::STRIKETHROUGH);
         }
         if self.code {
             style = style.bg(colors::CODE_BG).fg(colors::CODE_FG);
@@ -115,7 +117,8 @@ pub struct TableState {
 impl TableState {
     /// Finish current cell
     pub fn finish_cell(&mut self) {
-        let alignment = self.alignments
+        let alignment = self
+            .alignments
             .get(self.current_row.len())
             .copied()
             .unwrap_or_default();
@@ -147,7 +150,8 @@ impl TableState {
         let mut lines = Vec::new();
 
         // Calculate column widths
-        let mut widths: Vec<usize> = self.headers
+        let mut widths: Vec<usize> = self
+            .headers
             .iter()
             .map(|c| c.content.width().max(3))
             .collect();
@@ -162,11 +166,15 @@ impl TableState {
 
         // Render header
         let border_style = Style::default().fg(colors::TABLE_BORDER);
-        let header_style = Style::default().fg(colors::HEADING_2).add_modifier(Modifier::BOLD);
+        let header_style = Style::default()
+            .fg(colors::HEADING_2)
+            .add_modifier(Modifier::BOLD);
 
         // Top border
-        let top_border = format!("┌{}┐",
-            widths.iter()
+        let top_border = format!(
+            "┌{}┐",
+            widths
+                .iter()
                 .map(|w| "─".repeat(*w + 2))
                 .collect::<Vec<_>>()
                 .join("┬")
@@ -174,7 +182,8 @@ impl TableState {
         lines.push(Line::from(Span::styled(top_border, border_style)));
 
         // Header row
-        let header_cells: Vec<String> = self.headers
+        let header_cells: Vec<String> = self
+            .headers
             .iter()
             .enumerate()
             .map(|(i, cell)| {
@@ -194,8 +203,10 @@ impl TableState {
         lines.push(Line::from(header_spans));
 
         // Header/body separator
-        let separator = format!("├{}┤",
-            widths.iter()
+        let separator = format!(
+            "├{}┤",
+            widths
+                .iter()
                 .map(|w| "─".repeat(*w + 2))
                 .collect::<Vec<_>>()
                 .join("┼")
@@ -229,8 +240,10 @@ impl TableState {
         }
 
         // Bottom border
-        let bottom_border = format!("└{}┘",
-            widths.iter()
+        let bottom_border = format!(
+            "└{}┘",
+            widths
+                .iter()
                 .map(|w| "─".repeat(*w + 2))
                 .collect::<Vec<_>>()
                 .join("┴")
@@ -276,7 +289,8 @@ impl ParseContext {
         }
 
         let style = self.inline_style.to_style();
-        self.current_spans.push(Span::styled(text.to_string(), style));
+        self.current_spans
+            .push(Span::styled(text.to_string(), style));
     }
 
     /// Finish current line
@@ -285,20 +299,22 @@ impl ParseContext {
             // Add blockquote prefix if needed
             if self.in_blockquote {
                 let prefix = "│ ".repeat(self.blockquote_depth);
-                let mut spans = vec![
-                    Span::styled(prefix, Style::default().fg(colors::BLOCKQUOTE))
-                ];
+                let mut spans = vec![Span::styled(
+                    prefix,
+                    Style::default().fg(colors::BLOCKQUOTE),
+                )];
                 spans.extend(std::mem::take(&mut self.current_spans));
                 self.lines.push(Line::from(spans));
             } else {
-                self.lines.push(Line::from(std::mem::take(&mut self.current_spans)));
+                self.lines
+                    .push(Line::from(std::mem::take(&mut self.current_spans)));
             }
         } else if self.in_blockquote {
             // Empty blockquote line
             let prefix = "│ ".repeat(self.blockquote_depth);
             self.lines.push(Line::from(Span::styled(
                 prefix,
-                Style::default().fg(colors::BLOCKQUOTE)
+                Style::default().fg(colors::BLOCKQUOTE),
             )));
         }
     }
@@ -312,11 +328,19 @@ impl ParseContext {
     /// Get list marker for current depth
     pub fn get_list_marker(&self) -> String {
         if let Some(num) = self.list_number {
-            format!("{}{}. ", "  ".repeat(self.list_depth.saturating_sub(1)), num)
+            format!(
+                "{}{}. ",
+                "  ".repeat(self.list_depth.saturating_sub(1)),
+                num
+            )
         } else {
             let markers = ['•', '◦', '▪', '▸'];
             let marker = markers[(self.list_depth.saturating_sub(1)) % markers.len()];
-            format!("{}{} ", "  ".repeat(self.list_depth.saturating_sub(1)), marker)
+            format!(
+                "{}{} ",
+                "  ".repeat(self.list_depth.saturating_sub(1)),
+                marker
+            )
         }
     }
 }
@@ -560,10 +584,7 @@ impl MarkdownStream {
         let content = self.buffer.content();
         let line_count = content.lines().count();
         let last_line_len = content.lines().last().map(|l| l.len()).unwrap_or(0);
-        self.cursor = CursorPosition::new(
-            line_count.saturating_sub(1),
-            last_line_len,
-        );
+        self.cursor = CursorPosition::new(line_count.saturating_sub(1), last_line_len);
     }
 
     /// Mark stream as complete
@@ -685,9 +706,8 @@ impl MarkdownStream {
         }
 
         // Configure pulldown-cmark options
-        let options = Options::ENABLE_TABLES
-            | Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_TASKLISTS;
+        let options =
+            Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
 
         let parser = Parser::new_ext(&content, options);
         let mut ctx = ParseContext::default();
@@ -700,15 +720,15 @@ impl MarkdownStream {
                         Tag::Heading { level, .. } => {
                             ctx.finish_line();
                             let style = match level {
-                                pulldown_cmark::HeadingLevel::H1 => {
-                                    Style::default().fg(colors::HEADING_1).add_modifier(Modifier::BOLD)
-                                }
-                                pulldown_cmark::HeadingLevel::H2 => {
-                                    Style::default().fg(colors::HEADING_2).add_modifier(Modifier::BOLD)
-                                }
-                                pulldown_cmark::HeadingLevel::H3 => {
-                                    Style::default().fg(colors::HEADING_3).add_modifier(Modifier::BOLD)
-                                }
+                                pulldown_cmark::HeadingLevel::H1 => Style::default()
+                                    .fg(colors::HEADING_1)
+                                    .add_modifier(Modifier::BOLD),
+                                pulldown_cmark::HeadingLevel::H2 => Style::default()
+                                    .fg(colors::HEADING_2)
+                                    .add_modifier(Modifier::BOLD),
+                                pulldown_cmark::HeadingLevel::H3 => Style::default()
+                                    .fg(colors::HEADING_3)
+                                    .add_modifier(Modifier::BOLD),
                                 _ => Style::default().add_modifier(Modifier::BOLD),
                             };
                             let prefix = match level {
@@ -719,7 +739,8 @@ impl MarkdownStream {
                                 pulldown_cmark::HeadingLevel::H5 => "##### ",
                                 pulldown_cmark::HeadingLevel::H6 => "###### ",
                             };
-                            ctx.current_spans.push(Span::styled(prefix.to_string(), style));
+                            ctx.current_spans
+                                .push(Span::styled(prefix.to_string(), style));
                         }
                         Tag::Paragraph => {
                             ctx.finish_line();
@@ -767,16 +788,18 @@ impl MarkdownStream {
                         }
                         Tag::Table(alignments) => {
                             ctx.finish_line();
-                            let mut table = TableState::default();
-                            table.alignments = alignments
-                                .into_iter()
-                                .map(|a| match a {
-                                    pulldown_cmark::Alignment::Left => Alignment::Left,
-                                    pulldown_cmark::Alignment::Center => Alignment::Center,
-                                    pulldown_cmark::Alignment::Right => Alignment::Right,
-                                    pulldown_cmark::Alignment::None => Alignment::Left,
-                                })
-                                .collect();
+                            let table = TableState {
+                                alignments: alignments
+                                    .into_iter()
+                                    .map(|a| match a {
+                                        pulldown_cmark::Alignment::Left => Alignment::Left,
+                                        pulldown_cmark::Alignment::Center => Alignment::Center,
+                                        pulldown_cmark::Alignment::Right => Alignment::Right,
+                                        pulldown_cmark::Alignment::None => Alignment::Left,
+                                    })
+                                    .collect(),
+                                ..Default::default()
+                            };
                             ctx.table = Some(table);
                         }
                         Tag::TableHead => {
@@ -801,7 +824,9 @@ impl MarkdownStream {
                         Tag::Image { dest_url, .. } => {
                             ctx.current_spans.push(Span::styled(
                                 format!("[image: {}]", dest_url),
-                                Style::default().fg(colors::LINK).add_modifier(Modifier::DIM),
+                                Style::default()
+                                    .fg(colors::LINK)
+                                    .add_modifier(Modifier::DIM),
                             ));
                         }
                         _ => {}
@@ -881,7 +906,9 @@ impl MarkdownStream {
                             if let Some(url) = ctx.inline_style.link_url.take() {
                                 ctx.current_spans.push(Span::styled(
                                     format!(" ({})", url),
-                                    Style::default().fg(colors::TABLE_BORDER).add_modifier(Modifier::DIM),
+                                    Style::default()
+                                        .fg(colors::TABLE_BORDER)
+                                        .add_modifier(Modifier::DIM),
                                 ));
                             }
                         }
@@ -968,25 +995,121 @@ fn highlight_code_line(line: &str, _language: &str) -> Line<'static> {
     let mut string_char = '"';
 
     let keywords = [
-        "fn", "let", "mut", "const", "pub", "mod", "use", "struct", "enum", "impl",
-        "trait", "where", "if", "else", "match", "for", "while", "loop", "return",
-        "break", "continue", "async", "await", "self", "Self", "true", "false",
-        "Some", "None", "Ok", "Err", "type", "static", "extern", "crate", "super",
+        "fn",
+        "let",
+        "mut",
+        "const",
+        "pub",
+        "mod",
+        "use",
+        "struct",
+        "enum",
+        "impl",
+        "trait",
+        "where",
+        "if",
+        "else",
+        "match",
+        "for",
+        "while",
+        "loop",
+        "return",
+        "break",
+        "continue",
+        "async",
+        "await",
+        "self",
+        "Self",
+        "true",
+        "false",
+        "Some",
+        "None",
+        "Ok",
+        "Err",
+        "type",
+        "static",
+        "extern",
+        "crate",
+        "super",
         // TypeScript/JavaScript
-        "function", "class", "interface", "extends", "import", "export", "default",
-        "new", "this", "try", "catch", "throw", "finally", "typeof", "instanceof",
+        "function",
+        "class",
+        "interface",
+        "extends",
+        "import",
+        "export",
+        "default",
+        "new",
+        "this",
+        "try",
+        "catch",
+        "throw",
+        "finally",
+        "typeof",
+        "instanceof",
         // Python
-        "def", "class", "import", "from", "as", "pass", "raise", "with", "yield",
-        "lambda", "global", "nonlocal", "assert", "del", "in", "is", "not", "and", "or",
+        "def",
+        "class",
+        "import",
+        "from",
+        "as",
+        "pass",
+        "raise",
+        "with",
+        "yield",
+        "lambda",
+        "global",
+        "nonlocal",
+        "assert",
+        "del",
+        "in",
+        "is",
+        "not",
+        "and",
+        "or",
     ];
 
     let types = [
-        "String", "Vec", "Option", "Result", "Box", "Rc", "Arc", "HashMap", "HashSet",
-        "bool", "char", "str", "i8", "i16", "i32", "i64", "i128", "isize",
-        "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64",
+        "String",
+        "Vec",
+        "Option",
+        "Result",
+        "Box",
+        "Rc",
+        "Arc",
+        "HashMap",
+        "HashSet",
+        "bool",
+        "char",
+        "str",
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "i128",
+        "isize",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "u128",
+        "usize",
+        "f32",
+        "f64",
         // TypeScript
-        "number", "string", "boolean", "void", "null", "undefined", "any", "never",
-        "Array", "Promise", "Map", "Set", "Object",
+        "number",
+        "string",
+        "boolean",
+        "void",
+        "null",
+        "undefined",
+        "any",
+        "never",
+        "Array",
+        "Promise",
+        "Map",
+        "Set",
+        "Object",
     ];
 
     for ch in line.chars() {
@@ -1024,9 +1147,7 @@ fn highlight_code_line(line: &str, _language: &str) -> Line<'static> {
                 '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | '&' | '|' | '^' | '%' => {
                     Style::default().fg(Color::Rgb(255, 121, 198)) // Pink
                 }
-                ':' | ';' | ',' | '.' => {
-                    Style::default().fg(colors::TABLE_BORDER)
-                }
+                ':' | ';' | ',' | '.' => Style::default().fg(colors::TABLE_BORDER),
                 '#' => {
                     Style::default().fg(Color::Rgb(255, 184, 108)) // Orange (attributes)
                 }
@@ -1053,10 +1174,14 @@ fn highlight_code_line(line: &str, _language: &str) -> Line<'static> {
 fn get_word_style(word: &str, keywords: &[&str], types: &[&str]) -> Style {
     if keywords.contains(&word) {
         Style::default().fg(Color::Rgb(255, 121, 198)) // Pink - keywords
-    } else if types.contains(&word) {
-        Style::default().fg(Color::Rgb(139, 233, 253)) // Cyan - types
-    } else if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-        Style::default().fg(Color::Rgb(139, 233, 253)) // Cyan - types (PascalCase)
+    } else if types.contains(&word)
+        || word
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+    {
+        Style::default().fg(Color::Rgb(139, 233, 253)) // Cyan - types or PascalCase
     } else if word.chars().all(|c| c.is_ascii_digit() || c == '.') {
         Style::default().fg(Color::Rgb(189, 147, 249)) // Purple - numbers
     } else {
@@ -1205,7 +1330,11 @@ mod tests {
 
         // Markdown renders paragraphs with blank lines between them
         let line_count = stream.line_count();
-        assert!(line_count >= 5, "Expected at least 5 lines, got {}", line_count);
+        assert!(
+            line_count >= 5,
+            "Expected at least 5 lines, got {}",
+            line_count
+        );
         assert!(stream.scroll().can_scroll_down());
 
         stream.scroll_down(2);
@@ -1234,13 +1363,20 @@ mod tests {
 
         // Markdown renders paragraphs (at least 5 lines with blank lines)
         let initial_count = lines.len();
-        assert!(initial_count >= 5, "Expected at least 5 lines, got {}", initial_count);
+        assert!(
+            initial_count >= 5,
+            "Expected at least 5 lines, got {}",
+            initial_count
+        );
 
         // Add more content
         stream.push_str("\n\nLine 6");
         let lines = stream.render();
 
         // Should have more lines now
-        assert!(lines.len() > initial_count, "Expected more lines after adding content");
+        assert!(
+            lines.len() > initial_count,
+            "Expected more lines after adding content"
+        );
     }
 }
