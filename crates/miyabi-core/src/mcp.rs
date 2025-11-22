@@ -404,4 +404,263 @@ mod tests {
         assert!(!manager.is_running("test"));
         assert_eq!(manager.list_servers().len(), 0);
     }
+
+    #[test]
+    fn test_mcp_server_config_defaults() {
+        let yaml = r#"
+name: test-server
+command: node
+"#;
+        let config: McpServerConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.name, "test-server");
+        assert_eq!(config.command, "node");
+        assert!(config.args.is_empty());
+        assert!(config.env.is_empty());
+        assert!(config.auto_start); // default_true
+    }
+
+    #[test]
+    fn test_mcp_server_config_full() {
+        let config = McpServerConfig {
+            name: "filesystem".to_string(),
+            command: "npx".to_string(),
+            args: vec!["-y".to_string(), "@anthropic/mcp-server-filesystem".to_string()],
+            env: {
+                let mut env = HashMap::new();
+                env.insert("HOME".to_string(), "/tmp".to_string());
+                env
+            },
+            auto_start: false,
+        };
+
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        assert!(yaml.contains("filesystem"));
+        assert!(yaml.contains("npx"));
+        assert!(yaml.contains("-y"));
+        assert!(yaml.contains("HOME"));
+        assert!(yaml.contains("auto_start: false"));
+    }
+
+    #[test]
+    fn test_mcp_config_default() {
+        let config = McpConfig::default();
+        assert!(config.servers.is_empty());
+    }
+
+    #[test]
+    fn test_mcp_config_multiple_servers() {
+        let config = McpConfig {
+            servers: vec![
+                McpServerConfig {
+                    name: "server1".to_string(),
+                    command: "cmd1".to_string(),
+                    args: vec![],
+                    env: HashMap::new(),
+                    auto_start: true,
+                },
+                McpServerConfig {
+                    name: "server2".to_string(),
+                    command: "cmd2".to_string(),
+                    args: vec!["arg1".to_string()],
+                    env: HashMap::new(),
+                    auto_start: false,
+                },
+            ],
+        };
+
+        assert_eq!(config.servers.len(), 2);
+        assert_eq!(config.servers[0].name, "server1");
+        assert_eq!(config.servers[1].name, "server2");
+    }
+
+    #[test]
+    fn test_mcp_config_save_and_load() {
+        use tempfile::TempDir;
+
+        let config = McpConfig {
+            servers: vec![McpServerConfig {
+                name: "test".to_string(),
+                command: "test-cmd".to_string(),
+                args: vec!["--flag".to_string()],
+                env: HashMap::new(),
+                auto_start: true,
+            }],
+        };
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("mcp.yml");
+
+        config.save(&path).unwrap();
+        assert!(path.exists());
+
+        let loaded = McpConfig::load(&path).unwrap();
+        assert_eq!(loaded.servers.len(), 1);
+        assert_eq!(loaded.servers[0].name, "test");
+        assert_eq!(loaded.servers[0].command, "test-cmd");
+    }
+
+    #[test]
+    fn test_mcp_request_with_params() {
+        let request = McpRequest {
+            jsonrpc: "2.0".to_string(),
+            id: 42,
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "name": "read_file",
+                "arguments": {
+                    "path": "/tmp/test.txt"
+                }
+            })),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("tools/call"));
+        assert!(json.contains("read_file"));
+        assert!(json.contains("/tmp/test.txt"));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn test_mcp_response_success() {
+        let json = r#"{
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"tools": []}
+        }"#;
+
+        let response: McpResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, 1);
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_mcp_response_error() {
+        let json = r#"{
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {
+                "code": -32600,
+                "message": "Invalid Request"
+            }
+        }"#;
+
+        let response: McpResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.id, 2);
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32600);
+        assert_eq!(error.message, "Invalid Request");
+    }
+
+    #[test]
+    fn test_mcp_error_with_data() {
+        let json = r#"{
+            "code": -32602,
+            "message": "Invalid params",
+            "data": {"expected": "string", "got": "number"}
+        }"#;
+
+        let error: McpError = serde_json::from_str(json).unwrap();
+        assert_eq!(error.code, -32602);
+        assert_eq!(error.message, "Invalid params");
+        assert!(error.data.is_some());
+    }
+
+    #[test]
+    fn test_mcp_tool_deserialization() {
+        let json = r#"{
+            "name": "read_file",
+            "description": "Read contents of a file",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"}
+                },
+                "required": ["path"]
+            }
+        }"#;
+
+        let tool: McpTool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.name, "read_file");
+        assert_eq!(tool.description, "Read contents of a file");
+        assert!(tool.input_schema.is_some());
+    }
+
+    #[test]
+    fn test_mcp_tool_minimal() {
+        let json = r#"{
+            "name": "simple_tool",
+            "description": "A simple tool"
+        }"#;
+
+        let tool: McpTool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.name, "simple_tool");
+        assert!(tool.input_schema.is_none());
+    }
+
+    #[test]
+    fn test_mcp_manager_new() {
+        let manager = McpManager::new();
+        assert!(manager.list_servers().is_empty());
+    }
+
+    #[test]
+    fn test_mcp_manager_default() {
+        let manager = McpManager::default();
+        assert!(manager.list_servers().is_empty());
+    }
+
+    #[test]
+    fn test_mcp_manager_is_running() {
+        let config = McpConfig {
+            servers: vec![
+                McpServerConfig {
+                    name: "server1".to_string(),
+                    command: "cmd".to_string(),
+                    args: vec![],
+                    env: HashMap::new(),
+                    auto_start: false,
+                },
+            ],
+        };
+
+        let manager = McpManager::with_config(config);
+        assert!(!manager.is_running("server1"));
+        assert!(!manager.is_running("nonexistent"));
+    }
+
+    #[test]
+    fn test_mcp_config_deserialization() {
+        let yaml = r#"
+servers:
+  - name: filesystem
+    command: npx
+    args:
+      - "-y"
+      - "@anthropic/mcp-server-filesystem"
+    env:
+      ALLOWED_DIRS: /tmp
+    auto_start: true
+  - name: github
+    command: npx
+    args:
+      - "@anthropic/mcp-server-github"
+    auto_start: false
+"#;
+
+        let config: McpConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.servers.len(), 2);
+        assert_eq!(config.servers[0].name, "filesystem");
+        assert!(config.servers[0].auto_start);
+        assert_eq!(config.servers[1].name, "github");
+        assert!(!config.servers[1].auto_start);
+    }
+
+    #[test]
+    fn test_default_true_function() {
+        assert!(default_true());
+    }
 }
