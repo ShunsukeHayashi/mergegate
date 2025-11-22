@@ -11,16 +11,15 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use crate::wrapping::display_width;
-
 /// Operation for undo/redo
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum EditOp {
     Insert {
         pos: usize,
@@ -488,10 +487,11 @@ impl TextArea {
 
         let byte_idx = self.cursor_byte_index();
         let deleted = self.lines[self.cursor.line][..byte_idx].to_string();
+        let undo_pos = self.cursor_offset() - deleted.chars().count();
         self.lines[self.cursor.line] = self.lines[self.cursor.line][byte_idx..].to_string();
 
         self.push_undo(EditOp::Delete {
-            pos: self.cursor_offset() - deleted.len(),
+            pos: undo_pos,
             text: deleted,
         });
 
@@ -989,4 +989,319 @@ pub enum TextAreaAction {
     Changed,
     /// Submit (Ctrl+Enter typically)
     Submit,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_textarea_creation() {
+        let textarea = TextArea::new();
+        assert!(textarea.is_empty());
+        assert_eq!(textarea.line_count(), 1);
+    }
+
+    #[test]
+    fn test_text_range() {
+        let range = TextRange::new(5, 10);
+        assert_eq!(range.start, 5);
+        assert_eq!(range.end, 10);
+        assert_eq!(range.len(), 5);
+        assert!(!range.is_empty());
+
+        // Reversed order should normalize
+        let range2 = TextRange::new(10, 5);
+        assert_eq!(range2.start, 5);
+        assert_eq!(range2.end, 10);
+
+        let empty_range = TextRange::new(5, 5);
+        assert!(empty_range.is_empty());
+    }
+
+    #[test]
+    fn test_text_cursor() {
+        let cursor = TextCursor { line: 2, col: 5 };
+        assert_eq!(cursor.line, 2);
+        assert_eq!(cursor.col, 5);
+
+        let default_cursor = TextCursor::default();
+        assert_eq!(default_cursor.line, 0);
+        assert_eq!(default_cursor.col, 0);
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = TextAreaConfig::default();
+        assert!(config.show_line_numbers);
+        assert_eq!(config.tab_width, 4);
+        assert!(config.soft_wrap);
+        assert!(!config.syntax_highlight);
+        assert_eq!(config.max_undo, 100);
+    }
+
+    #[test]
+    fn test_insert_char() {
+        let mut textarea = TextArea::new();
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "a");
+    }
+
+    #[test]
+    fn test_insert_multiple_chars() {
+        let mut textarea = TextArea::new();
+        for c in "hello".chars() {
+            textarea.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(textarea.get_text(), "hello");
+    }
+
+    #[test]
+    fn test_backspace() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("ab");
+        textarea.cursor = TextCursor { line: 0, col: 2 };
+        textarea.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "a");
+    }
+
+    #[test]
+    fn test_delete() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("ab");
+        textarea.cursor = TextCursor { line: 0, col: 0 };
+        textarea.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "b");
+    }
+
+    #[test]
+    fn test_newline() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("ab");
+        textarea.cursor = TextCursor { line: 0, col: 1 };
+        textarea.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "a\nb");
+        assert_eq!(textarea.line_count(), 2);
+    }
+
+    #[test]
+    fn test_cursor_movement() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+        textarea.cursor = TextCursor { line: 0, col: 2 };
+
+        // Move left
+        textarea.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.col, 1);
+
+        // Move right
+        textarea.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.col, 2);
+
+        // Home
+        textarea.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.col, 0);
+
+        // End
+        textarea.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.col, 5);
+    }
+
+    #[test]
+    fn test_multiline_cursor_movement() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("line1\nline2");
+        textarea.cursor = TextCursor { line: 0, col: 5 };
+
+        // Move down
+        textarea.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.line, 1);
+
+        // Move up
+        textarea.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(textarea.cursor.line, 0);
+    }
+
+    #[test]
+    fn test_word_movement() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello world");
+        textarea.cursor = TextCursor { line: 0, col: 0 };
+
+        // Move word right (Ctrl+Right)
+        textarea.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL));
+        assert!(textarea.cursor.col > 0);
+    }
+
+    #[test]
+    fn test_select_all() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        let selection = textarea.selection();
+        assert!(selection.is_some());
+        let range = selection.unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 5);
+    }
+
+    #[test]
+    fn test_copy_paste() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+
+        // Manually set clipboard and paste
+        textarea.clipboard = "world".to_string();
+        textarea.cursor = TextCursor { line: 0, col: 5 };
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+
+        assert_eq!(textarea.get_text(), "helloworld");
+    }
+
+    #[test]
+    fn test_cut() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+
+        // Select all
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        // Check selection exists
+        assert!(textarea.selection().is_some());
+
+        // Cut - this should clear the selection
+        textarea.cut();
+
+        assert!(textarea.is_empty());
+        assert_eq!(textarea.clipboard, "hello");
+    }
+
+    #[test]
+    fn test_undo_redo() {
+        let mut textarea = TextArea::new();
+
+        // Insert text
+        for c in "hello".chars() {
+            textarea.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(textarea.get_text(), "hello");
+
+        // Undo
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL));
+        assert_ne!(textarea.get_text(), "hello");
+
+        // Redo
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_delete_word_backward() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello world");
+        textarea.cursor = TextCursor { line: 0, col: 11 };
+
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL));
+        assert_eq!(textarea.get_text(), "hello ");
+    }
+
+    #[test]
+    fn test_delete_to_line_end() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello world");
+        textarea.cursor = TextCursor { line: 0, col: 5 };
+
+        textarea.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        assert_eq!(textarea.get_text(), "hello");
+    }
+
+    #[test]
+    fn test_delete_to_line_start() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+        textarea.cursor = TextCursor { line: 0, col: 3 };
+
+        // Use the internal method directly to test functionality
+        textarea.delete_to_line_start();
+        assert_eq!(textarea.get_text(), "lo");
+        assert_eq!(textarea.cursor.col, 0);
+    }
+
+    #[test]
+    fn test_tab_insertion() {
+        let mut textarea = TextArea::new();
+        textarea.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "    "); // Default 4 spaces
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("hello");
+        textarea.clear();
+        assert!(textarea.is_empty());
+    }
+
+    #[test]
+    fn test_set_text() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("line1\nline2\nline3");
+        assert_eq!(textarea.line_count(), 3);
+        assert_eq!(textarea.get_text(), "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn test_placeholder() {
+        let textarea = TextArea::new().placeholder("Enter text...");
+        assert_eq!(textarea.config.placeholder, "Enter text...");
+    }
+
+    #[test]
+    fn test_unicode_support() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("日本語");
+        assert_eq!(textarea.get_text(), "日本語");
+    }
+
+    #[test]
+    fn test_focused_state() {
+        let mut textarea = TextArea::new();
+        assert!(textarea.focused);
+        textarea.set_focused(false);
+        assert!(!textarea.focused);
+    }
+
+    #[test]
+    fn test_viewport() {
+        let mut textarea = TextArea::new();
+        textarea.set_viewport(100, 50);
+        assert_eq!(textarea.viewport, (100, 50));
+    }
+
+    #[test]
+    fn test_textarea_action_enum() {
+        assert_ne!(TextAreaAction::None, TextAreaAction::Changed);
+        assert_ne!(TextAreaAction::Changed, TextAreaAction::Submit);
+    }
+
+    #[test]
+    fn test_backspace_merge_lines() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("line1\nline2");
+        textarea.cursor = TextCursor { line: 1, col: 0 };
+
+        textarea.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "line1line2");
+        assert_eq!(textarea.line_count(), 1);
+    }
+
+    #[test]
+    fn test_delete_merge_lines() {
+        let mut textarea = TextArea::new();
+        textarea.set_text("line1\nline2");
+        textarea.cursor = TextCursor { line: 0, col: 5 };
+
+        textarea.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+        assert_eq!(textarea.get_text(), "line1line2");
+    }
 }
