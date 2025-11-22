@@ -78,6 +78,95 @@ impl ToolOutput {
         self.duration_ms = ms;
         self
     }
+
+    /// Format output for display
+    pub fn format_display(&self) -> String {
+        if self.success {
+            self.format_success()
+        } else {
+            self.format_error()
+        }
+    }
+
+    /// Format successful output
+    fn format_success(&self) -> String {
+        match &self.content {
+            Value::String(s) => s.clone(),
+            Value::Object(obj) => {
+                // Pretty print JSON object
+                serde_json::to_string_pretty(&obj).unwrap_or_else(|_| format!("{:?}", obj))
+            }
+            Value::Array(arr) => {
+                serde_json::to_string_pretty(&arr).unwrap_or_else(|_| format!("{:?}", arr))
+            }
+            Value::Null => "Success (no output)".to_string(),
+            other => other.to_string(),
+        }
+    }
+
+    /// Format error output
+    fn format_error(&self) -> String {
+        self.error
+            .clone()
+            .unwrap_or_else(|| "Unknown error".to_string())
+    }
+
+    /// Get a truncated summary of the output
+    pub fn summary(&self, max_len: usize) -> String {
+        let full = self.format_display();
+        if full.len() <= max_len {
+            full
+        } else {
+            format!("{}...", &full[..max_len.saturating_sub(3)])
+        }
+    }
+
+    /// Get the content as a string if possible
+    pub fn as_text(&self) -> Option<String> {
+        match &self.content {
+            Value::String(s) => Some(s.clone()),
+            Value::Object(obj) => {
+                // Check for common text fields
+                obj.get("content")
+                    .or_else(|| obj.get("text"))
+                    .or_else(|| obj.get("output"))
+                    .or_else(|| obj.get("stdout"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    /// Format duration for display
+    pub fn format_duration(&self) -> String {
+        if self.duration_ms < 1000 {
+            format!("{}ms", self.duration_ms)
+        } else {
+            format!("{:.2}s", self.duration_ms as f64 / 1000.0)
+        }
+    }
+
+    /// Get status indicator
+    pub fn status_indicator(&self) -> &'static str {
+        if self.success {
+            "✓"
+        } else {
+            "✗"
+        }
+    }
+
+    /// Check if the output contains an error code
+    pub fn has_error_code(&self) -> bool {
+        if let Value::Object(obj) = &self.content {
+            obj.get("exit_code")
+                .and_then(|v| v.as_i64())
+                .map(|code| code != 0)
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    }
 }
 
 /// Parameter definition for tool input schema
@@ -558,5 +647,102 @@ mod tests {
         let failure = ToolOutput::failure("error");
         assert!(!failure.success);
         assert_eq!(failure.error, Some("error".to_string()));
+    }
+
+    #[test]
+    fn test_output_format_display_string() {
+        let output = ToolOutput::success("Hello, world!");
+        assert_eq!(output.format_display(), "Hello, world!");
+    }
+
+    #[test]
+    fn test_output_format_display_object() {
+        let output = ToolOutput::success(serde_json::json!({
+            "key": "value"
+        }));
+        let display = output.format_display();
+        assert!(display.contains("key"));
+        assert!(display.contains("value"));
+    }
+
+    #[test]
+    fn test_output_format_display_error() {
+        let output = ToolOutput::failure("Something went wrong");
+        assert_eq!(output.format_display(), "Something went wrong");
+    }
+
+    #[test]
+    fn test_output_summary_truncation() {
+        let output = ToolOutput::success("This is a very long string that should be truncated");
+        let summary = output.summary(20);
+        assert_eq!(summary.len(), 20);
+        assert!(summary.ends_with("..."));
+    }
+
+    #[test]
+    fn test_output_summary_no_truncation() {
+        let output = ToolOutput::success("Short");
+        let summary = output.summary(20);
+        assert_eq!(summary, "Short");
+    }
+
+    #[test]
+    fn test_output_as_text() {
+        // String content
+        let output = ToolOutput::success("text content");
+        assert_eq!(output.as_text(), Some("text content".to_string()));
+
+        // Object with content field
+        let output = ToolOutput::success(serde_json::json!({
+            "content": "nested text"
+        }));
+        assert_eq!(output.as_text(), Some("nested text".to_string()));
+
+        // Object with stdout field
+        let output = ToolOutput::success(serde_json::json!({
+            "stdout": "command output"
+        }));
+        assert_eq!(output.as_text(), Some("command output".to_string()));
+
+        // Array (no text)
+        let output = ToolOutput::success(serde_json::json!([1, 2, 3]));
+        assert_eq!(output.as_text(), None);
+    }
+
+    #[test]
+    fn test_output_format_duration() {
+        let output = ToolOutput::success("").with_duration(500);
+        assert_eq!(output.format_duration(), "500ms");
+
+        let output = ToolOutput::success("").with_duration(1500);
+        assert_eq!(output.format_duration(), "1.50s");
+
+        let output = ToolOutput::success("").with_duration(60000);
+        assert_eq!(output.format_duration(), "60.00s");
+    }
+
+    #[test]
+    fn test_output_status_indicator() {
+        let success = ToolOutput::success("");
+        assert_eq!(success.status_indicator(), "✓");
+
+        let failure = ToolOutput::failure("error");
+        assert_eq!(failure.status_indicator(), "✗");
+    }
+
+    #[test]
+    fn test_output_has_error_code() {
+        let output = ToolOutput::success(serde_json::json!({
+            "exit_code": 0
+        }));
+        assert!(!output.has_error_code());
+
+        let output = ToolOutput::success(serde_json::json!({
+            "exit_code": 1
+        }));
+        assert!(output.has_error_code());
+
+        let output = ToolOutput::success("no exit code");
+        assert!(!output.has_error_code());
     }
 }
