@@ -1,130 +1,219 @@
-# miyabi-cli-standalone
+# Miyabi CLI
 
-Autonomous development powered by **Miyabi** - AI-driven development framework.
+A powerful terminal-based AI assistant with TUI (Terminal User Interface) built in Rust.
 
-## Getting Started
+## Features
+
+- **Interactive TUI** - Beautiful terminal interface with markdown rendering
+- **Chat Mode** - Conversational AI assistant
+- **Agent Mode** - Autonomous task execution with tool approval
+- **Session Management** - Persist and resume conversations
+- **Configurable** - TOML-based configuration
+- **Extended Thinking** - Support for Claude 4.5+ extended thinking
+
+## Installation
 
 ### Prerequisites
 
-```bash
-# Set environment variables
-cp .env.example .env
-# Edit .env and add your tokens
-```
+- Rust 1.70+
+- Anthropic API key
 
-### Installation
+### Build from Source
 
 ```bash
-npm install
+git clone https://github.com/ShunsukeHayashi/miyabi-cli-standalone.git
+cd miyabi-cli-standalone
+cargo build --release
 ```
 
-### Development
+Binary will be at `target/release/miyabi`.
+
+## Quick Start
+
+### 1. Generate Config
 
 ```bash
-npm run dev          # Run development server
-npm run build        # Build project
-npm test             # Run tests
-npm run typecheck    # Check types
-npm run lint         # Lint code
+./target/release/miyabi init
 ```
+
+This creates `~/.miyabi/config.toml`.
+
+### 2. Set API Key
+
+Edit `~/.miyabi/config.toml`:
+
+```toml
+[api]
+api_key = "sk-ant-..."
+```
+
+Or use environment variable:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### 3. Launch TUI
+
+```bash
+./target/release/miyabi tui
+# or simply
+./target/release/miyabi
+```
+
+## Usage
+
+### CLI Commands
+
+```bash
+miyabi                    # Start TUI (default)
+miyabi tui                # Start TUI explicitly
+miyabi status             # Show status
+miyabi init               # Generate default config
+miyabi sessions           # List sessions
+miyabi sessions -d <id>   # Delete session
+miyabi sessions -e <id>   # Export session to JSON
+miyabi version            # Show version info
+miyabi agent <prompt>     # Run autonomous agent
+```
+
+### CLI Options
+
+```bash
+miyabi --model claude-sonnet-4-5-20250929    # Override model
+miyabi --max-tokens 16384                     # Override max tokens
+miyabi --thinking                             # Enable extended thinking
+miyabi --config /path/to/config.toml          # Custom config
+miyabi --session <id>                         # Resume session
+```
+
+### TUI Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Send message |
+| `Ctrl+P` | Command palette |
+| `F1` | Help |
+| `Esc` | Close overlay / Cancel |
+| `Ctrl+C` | Quit |
+| `j/k` | Scroll down/up |
+| `Page Up/Down` | Page scroll |
+
+## Configuration
+
+Config file: `~/.miyabi/config.toml`
+
+```toml
+[api]
+api_key = "sk-ant-..."                        # Anthropic API key
+model = "claude-sonnet-4-5-20250929"          # Model to use
+max_tokens = 8192                             # Max response tokens
+thinking = false                              # Extended thinking
+system_prompt = "You are a helpful assistant" # System prompt
+timeout_secs = 120                            # Request timeout
+max_retries = 3                               # Retry attempts
+
+[ui]
+show_sidebar = false      # Show sidebar
+show_status_bar = true    # Show status bar
+show_breadcrumb = true    # Show breadcrumb
+theme = "tokyo-night"     # Color theme
+vim_mode = false          # Vim keybindings
+show_line_numbers = true  # Line numbers in code
+
+[session]
+auto_save = true          # Auto-save sessions
+auto_save_interval = 30   # Save interval (seconds)
+max_sessions = 100        # Max stored sessions
+
+[tools]
+enable_bash = true        # Enable bash tool
+enable_file_tools = true  # Enable file read/write
+enable_search_tools = true # Enable glob/grep
+auto_approve_low_risk = false # Auto-approve safe tools
+bash_timeout = 120        # Bash command timeout
+```
+
+### Environment Variables
+
+Override config with environment variables:
+
+```bash
+ANTHROPIC_API_KEY=...     # API key
+MIYABI_MODEL=...          # Model name
+MIYABI_MAX_TOKENS=...     # Max tokens
+MIYABI_THINKING=true      # Enable thinking
+```
+
+## Agent Mode
+
+Run autonomous tasks with tool execution:
+
+```bash
+# Basic usage
+miyabi agent "Create a hello world Python script"
+
+# With options
+miyabi agent "Refactor the utils module" \
+  --max-iterations 20 \
+  --auto-approve \
+  --system "You are an expert Rust developer"
+```
+
+Agent mode features:
+- Autonomous tool execution (bash, file operations, search)
+- Approval workflow for risky operations
+- Iteration limits for safety
+- JSON output format option
 
 ## Project Structure
 
 ```
 miyabi-cli-standalone/
-├── src/              # Source code
-│   └── index.ts     # Entry point
-├── tests/           # Test files
-│   └── example.test.ts
-├── .claude/         # AI agent configuration
-│   ├── agents/      # Agent definitions
-│   └── commands/    # Custom commands
-├── .github/
-│   ├── workflows/   # CI/CD automation
-│   └── labels.yml   # Label system (53 labels)
-├── CLAUDE.md        # AI context file
-└── package.json
+├── crates/
+│   ├── miyabi-cli/       # CLI entry point
+│   ├── miyabi-core/      # Core library
+│   │   ├── agent/        # Agent system
+│   │   ├── config.rs     # Configuration
+│   │   ├── session.rs    # Session management
+│   │   └── ...
+│   └── miyabi-tui/       # TUI implementation
+│       ├── app.rs        # Main application
+│       ├── views.rs      # UI views
+│       └── ...
+├── .miyabi/              # Local config
+├── Cargo.toml            # Workspace config
+└── README.md
 ```
 
-## Miyabi Framework
+## Development
 
-This project uses **7 autonomous AI agents**:
-
-1. **CoordinatorAgent** - Task planning & orchestration
-2. **IssueAgent** - Automatic issue analysis & labeling
-3. **CodeGenAgent** - AI-powered code generation
-4. **ReviewAgent** - Code quality validation (80+ score)
-5. **PRAgent** - Automatic PR creation
-6. **DeploymentAgent** - CI/CD deployment automation
-7. **TestAgent** - Test execution & coverage
-
-### Workflow
-
-1. **Create Issue**: Describe what you want to build
-2. **Agents Work**: AI agents analyze, implement, test
-3. **Review PR**: Check generated pull request
-4. **Merge**: Automatic deployment
-
-### Label System
-
-Issues transition through states automatically:
-
-- `📥 state:pending` - Waiting for agent assignment
-- `🔍 state:analyzing` - Being analyzed
-- `🏗️ state:implementing` - Code being written
-- `👀 state:reviewing` - Under review
-- `✅ state:done` - Completed & merged
-
-## Commands
+### Build
 
 ```bash
-# Check project status
-npx miyabi status
-
-# Watch for changes (real-time)
-npx miyabi status --watch
-
-# Create new issue
-gh issue create --title "Add feature" --body "Description"
+cargo build              # Debug build
+cargo build --release    # Release build
 ```
 
-## Configuration
+### Test
 
-### Environment Variables
+```bash
+cargo test --all         # Run all tests
+```
 
-Required variables (see `.env.example`):
+### Lint
 
-- `GITHUB_TOKEN` - GitHub personal access token
-- `ANTHROPIC_API_KEY` - Claude API key (optional for local development)
-- `REPOSITORY` - Format: `owner/repo`
+```bash
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all --check
+```
 
-### GitHub Actions
+## Models
 
-Workflows are pre-configured in `.github/workflows/`:
-
-- CI/CD pipeline
-- Automated testing
-- Deployment automation
-- Agent execution triggers
-
-**Note**: Set repository secrets at:
-`https://github.com/ShunsukeHayashi/miyabi-cli-standalone/settings/secrets/actions`
-
-Required secrets:
-- `GITHUB_TOKEN` (auto-provided by GitHub Actions)
-- `ANTHROPIC_API_KEY` (add manually for agent execution)
-
-## Documentation
-
-- **Miyabi Framework**: https://github.com/ShunsukeHayashi/Miyabi
-- **NPM Package**: https://www.npmjs.com/package/miyabi
-- **Label System**: See `.github/labels.yml`
-- **Agent Operations**: See `CLAUDE.md`
-
-## Support
-
-- **Issues**: https://github.com/ShunsukeHayashi/Miyabi/issues
-- **Discord**: [Coming soon]
+Supported models:
+- `claude-sonnet-4-5-20250929` (default)
+- `claude-haiku-4-5-20251001`
+- `claude-sonnet-4-20250514`
 
 ## License
 
@@ -132,4 +221,4 @@ MIT
 
 ---
 
-✨ Generated by [Miyabi](https://github.com/ShunsukeHayashi/Miyabi)
+Built with Rust, Ratatui, and Claude API.
