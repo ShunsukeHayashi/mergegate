@@ -691,4 +691,204 @@ mod tests {
         assert_eq!(result.status, WorkflowStatus::Completed);
         assert_eq!(result.steps.len(), 2);
     }
+
+    #[test]
+    fn test_step_condition_default() {
+        let condition = StepCondition::default();
+        assert!(matches!(condition, StepCondition::Always));
+    }
+
+    #[test]
+    fn test_retry_config_default() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_attempts, 1);
+        assert_eq!(config.delay, 5);
+    }
+
+    #[test]
+    fn test_failure_policy_default() {
+        let policy = FailurePolicy::default();
+        assert!(matches!(policy, FailurePolicy::Stop));
+    }
+
+    #[test]
+    fn test_step_status_equality() {
+        assert_eq!(StepStatus::Pending, StepStatus::Pending);
+        assert_eq!(StepStatus::Completed, StepStatus::Completed);
+        assert_ne!(StepStatus::Pending, StepStatus::Completed);
+        assert_ne!(StepStatus::Failed, StepStatus::Skipped);
+    }
+
+    #[test]
+    fn test_workflow_status_equality() {
+        assert_eq!(WorkflowStatus::Completed, WorkflowStatus::Completed);
+        assert_ne!(WorkflowStatus::Completed, WorkflowStatus::Failed);
+    }
+
+    #[test]
+    fn test_workflow_context_with_variables() {
+        let mut vars = HashMap::new();
+        vars.insert("key1".to_string(), "value1".to_string());
+        vars.insert("key2".to_string(), "value2".to_string());
+
+        let context = WorkflowContext::new().with_variables(vars);
+        assert_eq!(context.get_variable("key1"), Some(&"value1".to_string()));
+        assert_eq!(context.get_variable("key2"), Some(&"value2".to_string()));
+    }
+
+    #[test]
+    fn test_workflow_context_add_result() {
+        let mut context = WorkflowContext::new();
+        let result = StepResult {
+            step_id: "test-step".to_string(),
+            status: StepStatus::Completed,
+            output: Some("output".to_string()),
+            error: None,
+            duration_ms: 100,
+        };
+
+        context.add_result(result);
+        let retrieved = context.get_result("test-step");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().status, StepStatus::Completed);
+    }
+
+    #[test]
+    fn test_step_result_creation() {
+        let result = StepResult {
+            step_id: "test-step".to_string(),
+            status: StepStatus::Completed,
+            output: Some("test output".to_string()),
+            error: None,
+            duration_ms: 150,
+        };
+
+        assert_eq!(result.step_id, "test-step");
+        assert_eq!(result.status, StepStatus::Completed);
+        assert_eq!(result.output, Some("test output".to_string()));
+        assert!(result.error.is_none());
+        assert_eq!(result.duration_ms, 150);
+    }
+
+    #[test]
+    fn test_workflow_result_creation() {
+        let result = WorkflowResult {
+            workflow_name: "test-workflow".to_string(),
+            status: WorkflowStatus::Completed,
+            steps: vec![],
+            duration_ms: 1000,
+        };
+
+        assert_eq!(result.workflow_name, "test-workflow");
+        assert_eq!(result.status, WorkflowStatus::Completed);
+        assert!(result.steps.is_empty());
+        assert_eq!(result.duration_ms, 1000);
+    }
+
+    #[tokio::test]
+    async fn test_workflow_with_output_variables() {
+        let mut manager = WorkflowManager::new();
+        let workflow = Workflow {
+            name: "output-test".to_string(),
+            description: "Test output variables".to_string(),
+            steps: vec![
+                WorkflowStep {
+                    id: "step1".to_string(),
+                    name: "Step 1".to_string(),
+                    agent: None,
+                    task: "First task".to_string(),
+                    depends_on: vec![],
+                    condition: None,
+                    timeout: 30,
+                    retry: RetryConfig::default(),
+                    output: Some("first_result".to_string()),
+                },
+                WorkflowStep {
+                    id: "step2".to_string(),
+                    name: "Step 2".to_string(),
+                    agent: None,
+                    task: "Use ${first_result}".to_string(),
+                    depends_on: vec!["step1".to_string()],
+                    condition: None,
+                    timeout: 30,
+                    retry: RetryConfig::default(),
+                    output: None,
+                },
+            ],
+            variables: HashMap::new(),
+            on_failure: FailurePolicy::Stop,
+        };
+
+        manager.register(workflow);
+        let result = manager.execute("output-test", HashMap::new()).await.unwrap();
+
+        assert_eq!(result.status, WorkflowStatus::Completed);
+        assert_eq!(result.steps.len(), 2);
+    }
+
+    #[test]
+    fn test_workflow_with_global_variables() {
+        let mut vars = HashMap::new();
+        vars.insert("project".to_string(), "miyabi".to_string());
+
+        let workflow = Workflow {
+            name: "vars-test".to_string(),
+            description: "Test global variables".to_string(),
+            steps: vec![],
+            variables: vars,
+            on_failure: FailurePolicy::Stop,
+        };
+
+        assert_eq!(workflow.variables.get("project"), Some(&"miyabi".to_string()));
+    }
+
+    #[test]
+    fn test_workflow_step_with_all_fields() {
+        let step = WorkflowStep {
+            id: "complete-step".to_string(),
+            name: "Complete Step".to_string(),
+            agent: Some("test-agent".to_string()),
+            task: "Complete task".to_string(),
+            depends_on: vec!["dep1".to_string(), "dep2".to_string()],
+            condition: Some(StepCondition::OnSuccess),
+            timeout: 600,
+            retry: RetryConfig {
+                max_attempts: 3,
+                delay: 10,
+            },
+            output: Some("result".to_string()),
+        };
+
+        assert_eq!(step.id, "complete-step");
+        assert_eq!(step.agent, Some("test-agent".to_string()));
+        assert_eq!(step.depends_on.len(), 2);
+        assert_eq!(step.timeout, 600);
+        assert_eq!(step.retry.max_attempts, 3);
+    }
+
+    #[test]
+    fn test_step_condition_variants() {
+        let always = StepCondition::Always;
+        let on_success = StepCondition::OnSuccess;
+        let on_failure = StepCondition::OnFailure;
+        let if_expr = StepCondition::If {
+            expression: "true".to_string(),
+        };
+
+        assert!(matches!(always, StepCondition::Always));
+        assert!(matches!(on_success, StepCondition::OnSuccess));
+        assert!(matches!(on_failure, StepCondition::OnFailure));
+        assert!(matches!(if_expr, StepCondition::If { .. }));
+    }
+
+    #[test]
+    fn test_failure_policy_variants() {
+        let stop = FailurePolicy::Stop;
+        let continue_policy = FailurePolicy::Continue;
+        let cleanup = FailurePolicy::Cleanup;
+
+        assert!(matches!(stop, FailurePolicy::Stop));
+        assert!(matches!(continue_policy, FailurePolicy::Continue));
+        assert!(matches!(cleanup, FailurePolicy::Cleanup));
+    }
 }

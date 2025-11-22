@@ -559,4 +559,265 @@ mod tests {
         assert!(roots.contains(&id1));
         assert!(roots.contains(&id2));
     }
+
+    #[test]
+    fn test_task_id_default() {
+        let id = TaskId::default();
+        assert!(!id.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_task_with_priority() {
+        let task = Task::new("priority-task", "Task with priority")
+            .with_priority(10);
+
+        assert_eq!(task.priority, 10);
+        assert_eq!(task.name, "priority-task");
+    }
+
+    #[test]
+    fn test_task_with_estimated_time() {
+        let task = Task::new("timed-task", "Task with time estimate")
+            .with_estimated_time(120);
+
+        assert_eq!(task.estimated_time, Some(120));
+    }
+
+    #[test]
+    fn test_task_node_is_root() {
+        let task = Task::new("root-task", "Root task");
+        let node = TaskNode::new(task);
+
+        assert!(node.is_root());
+        assert_eq!(node.indegree(), 0);
+    }
+
+    #[test]
+    fn test_task_node_add_dependency() {
+        let task1 = Task::new("task1", "First task");
+        let task2 = Task::new("task2", "Second task");
+        let mut node = TaskNode::new(task1);
+        let dep_id = task2.id;
+
+        node.add_dependency(dep_id);
+        assert!(!node.is_root());
+        assert_eq!(node.indegree(), 1);
+        assert!(node.dependencies.contains(&dep_id));
+    }
+
+    #[test]
+    fn test_task_node_add_dependent() {
+        let task1 = Task::new("task1", "First task");
+        let task2 = Task::new("task2", "Second task");
+        let mut node = TaskNode::new(task1);
+        let dependent_id = task2.id;
+
+        node.add_dependent(dependent_id);
+        assert!(node.dependents.contains(&dependent_id));
+    }
+
+    #[test]
+    fn test_task_node_no_duplicate_dependencies() {
+        let task1 = Task::new("task1", "First task");
+        let task2 = Task::new("task2", "Second task");
+        let mut node = TaskNode::new(task1);
+        let dep_id = task2.id;
+
+        node.add_dependency(dep_id);
+        node.add_dependency(dep_id); // Add again
+
+        assert_eq!(node.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_task_level_creation() {
+        let level = TaskLevel::new(0);
+        assert_eq!(level.level, 0);
+        assert!(level.is_empty());
+        assert_eq!(level.task_count(), 0);
+    }
+
+    #[test]
+    fn test_task_level_add_task() {
+        let mut level = TaskLevel::new(1);
+        let task = Task::new("task1", "First task");
+
+        level.add_task(task);
+        assert!(!level.is_empty());
+        assert_eq!(level.task_count(), 1);
+    }
+
+    #[test]
+    fn test_graph_task_count() {
+        let mut graph = TaskGraph::new(4);
+        assert_eq!(graph.task_count(), 0);
+
+        let task = Task::new("task", "Test task");
+        graph.add_task(task);
+        assert_eq!(graph.task_count(), 1);
+    }
+
+    #[test]
+    fn test_graph_max_parallelism() {
+        let graph = TaskGraph::new(8);
+        assert_eq!(graph.max_parallelism(), 8);
+    }
+
+    #[test]
+    fn test_graph_get_node() {
+        let mut graph = TaskGraph::new(4);
+        let task = Task::new("test", "Test task");
+        let id = graph.add_task(task);
+
+        let node = graph.get_node(&id);
+        assert!(node.is_some());
+        assert_eq!(node.unwrap().task.name, "test");
+    }
+
+    #[test]
+    fn test_graph_task_ids() {
+        let mut graph = TaskGraph::new(4);
+        let task1 = Task::new("task1", "First");
+        let task2 = Task::new("task2", "Second");
+
+        let id1 = graph.add_task(task1);
+        let id2 = graph.add_task(task2);
+
+        let ids = graph.task_ids();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&id1));
+        assert!(ids.contains(&id2));
+    }
+
+    #[test]
+    fn test_graph_levels() {
+        let mut graph = TaskGraph::new(4);
+
+        let task1 = Task::new("task1", "First");
+        let task2 = Task::new("task2", "Second");
+
+        let id1 = graph.add_task(task1);
+        let id2 = graph.add_task(task2);
+
+        graph.add_dependency(id2, id1).unwrap();
+        graph.build_levels().unwrap();
+
+        let levels = graph.levels();
+        assert!(!levels.is_empty());
+        // Tasks are added to levels as their dependencies are satisfied
+        assert!(graph.level_count() >= 1);
+    }
+
+    #[test]
+    fn test_builder_with_priority() {
+        let graph = TaskGraphBuilder::new(4)
+            .add_task_with_priority("high-priority", "Important task", 100)
+            .build()
+            .unwrap();
+
+        assert_eq!(graph.task_count(), 1);
+    }
+
+    #[test]
+    fn test_dag_error_task_not_found() {
+        let error = DAGError::TaskNotFound("missing-task".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("missing-task"));
+    }
+
+    #[test]
+    fn test_dag_error_circular_dependency() {
+        let error = DAGError::CircularDependency("cycle detected".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("cycle"));
+    }
+
+    #[test]
+    fn test_dag_error_invalid_graph() {
+        let error = DAGError::InvalidGraph("invalid".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("invalid"));
+    }
+
+    #[test]
+    fn test_complex_parallel_graph() {
+        // Create a graph with multiple parallel paths
+        // Root -> [A, B, C] -> Merge
+        let mut graph = TaskGraph::new(4);
+
+        let root = Task::new("root", "Root task");
+        let a = Task::new("a", "Task A");
+        let b = Task::new("b", "Task B");
+        let c = Task::new("c", "Task C");
+        let merge = Task::new("merge", "Merge task");
+
+        let root_id = graph.add_task(root);
+        let a_id = graph.add_task(a);
+        let b_id = graph.add_task(b);
+        let c_id = graph.add_task(c);
+        let merge_id = graph.add_task(merge);
+
+        graph.add_dependency(a_id, root_id).unwrap();
+        graph.add_dependency(b_id, root_id).unwrap();
+        graph.add_dependency(c_id, root_id).unwrap();
+        graph.add_dependency(merge_id, a_id).unwrap();
+        graph.add_dependency(merge_id, b_id).unwrap();
+        graph.add_dependency(merge_id, c_id).unwrap();
+
+        graph.build_levels().unwrap();
+
+        // All 5 tasks should be assigned to levels
+        assert!(graph.level_count() >= 1);
+        let total_tasks: usize = graph.levels().iter().map(|l| l.task_count()).sum();
+        assert_eq!(total_tasks, 5);
+    }
+
+    #[test]
+    fn test_builder_dependency_error() {
+        let result = TaskGraphBuilder::new(4)
+            .add_task("task1", "First")
+            .add_dependency("task1", "nonexistent");
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_single_task_graph() {
+        let mut graph = TaskGraph::new(4);
+        let task = Task::new("single", "Single task");
+        graph.add_task(task);
+
+        graph.build_levels().unwrap();
+
+        assert_eq!(graph.level_count(), 1);
+        assert_eq!(graph.levels()[0].task_count(), 1);
+    }
+
+    #[test]
+    fn test_task_id_display() {
+        let id = TaskId::new();
+        let display = id.to_string();
+
+        // Should be a valid UUID string
+        assert!(!display.is_empty());
+        assert!(display.contains('-')); // UUIDs contain hyphens
+    }
+
+    #[test]
+    fn test_independent_tasks_parallel() {
+        // All independent tasks should be in the same level
+        let mut graph = TaskGraph::new(10);
+
+        for i in 0..5 {
+            let task = Task::new(format!("task{}", i), format!("Task {}", i));
+            graph.add_task(task);
+        }
+
+        graph.build_levels().unwrap();
+
+        // All tasks are independent, so they should be in level 0
+        // (with max_parallelism=10, they can all run in parallel)
+        assert_eq!(graph.level_count(), 1);
+        assert_eq!(graph.levels()[0].task_count(), 5);
+    }
 }
