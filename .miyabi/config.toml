@@ -1,0 +1,29 @@
+# Miyabi CLI Configuration
+
+[api]
+# Anthropic API key (or set ANTHROPIC_API_KEY env var)
+# api_key = "your-api-key-here"
+model = "claude-sonnet-4-20250514"
+max_tokens = 8192
+timeout_secs = 120
+max_retries = 3
+
+[ui]
+show_sidebar = false
+show_status_bar = true
+show_breadcrumb = true
+theme = "tokyo-night"
+vim_mode = false
+show_line_numbers = true
+
+[session]
+auto_save = true
+auto_save_interval = 30
+max_sessions = 100
+
+[tools]
+enable_bash = true
+enable_file_tools = true
+enable_search_tools = true
+auto_approve_low_risk = false
+bash_timeout = 120
