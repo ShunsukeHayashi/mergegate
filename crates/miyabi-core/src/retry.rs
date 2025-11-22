@@ -209,4 +209,168 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(attempt_count.load(Ordering::SeqCst), 1);
     }
+
+    #[test]
+    fn test_retry_config_new() {
+        let config = RetryConfig::new(5, 200, 5000);
+        assert_eq!(config.max_attempts, 5);
+        assert_eq!(config.initial_delay_ms, 200);
+        assert_eq!(config.max_delay_ms, 5000);
+        assert_eq!(config.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_retry_config_aggressive() {
+        let config = RetryConfig::aggressive();
+        assert_eq!(config.max_attempts, 5);
+        assert_eq!(config.initial_delay_ms, 50);
+        assert_eq!(config.max_delay_ms, 10000);
+        assert_eq!(config.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_retry_config_conservative() {
+        let config = RetryConfig::conservative();
+        assert_eq!(config.max_attempts, 2);
+        assert_eq!(config.initial_delay_ms, 500);
+        assert_eq!(config.max_delay_ms, 60000);
+        assert_eq!(config.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_calculate_delay_capped_at_max() {
+        let config = RetryConfig::new(10, 100, 500);
+
+        // Early attempts grow exponentially
+        assert_eq!(config.calculate_delay(0), Duration::from_millis(100));
+        assert_eq!(config.calculate_delay(1), Duration::from_millis(200));
+        assert_eq!(config.calculate_delay(2), Duration::from_millis(400));
+
+        // Capped at max_delay_ms
+        assert_eq!(config.calculate_delay(3), Duration::from_millis(500));
+        assert_eq!(config.calculate_delay(4), Duration::from_millis(500));
+        assert_eq!(config.calculate_delay(10), Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_calculate_delay_zero_attempt() {
+        let config = RetryConfig::default();
+        let delay = config.calculate_delay(0);
+        assert_eq!(delay, Duration::from_millis(100));
+    }
+
+    #[tokio::test]
+    async fn test_retry_exhausts_all_attempts() {
+        let attempt_count = Arc::new(AtomicU32::new(0));
+        let attempt_count_clone = Arc::clone(&attempt_count);
+
+        let config = RetryConfig::new(2, 10, 100);
+
+        let result = retry_with_backoff(config, || {
+            let count = Arc::clone(&attempt_count_clone);
+            async move {
+                count.fetch_add(1, Ordering::SeqCst);
+                Err::<String, Error>(Error::Timeout(1000))
+            }
+        })
+        .await;
+
+        assert!(result.is_err());
+        // Initial attempt + 2 retries = 3 total
+        assert_eq!(attempt_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_retry_with_zero_max_attempts() {
+        let attempt_count = Arc::new(AtomicU32::new(0));
+        let attempt_count_clone = Arc::clone(&attempt_count);
+
+        let config = RetryConfig::new(0, 10, 100);
+
+        let result = retry_with_backoff(config, || {
+            let count = Arc::clone(&attempt_count_clone);
+            async move {
+                count.fetch_add(1, Ordering::SeqCst);
+                Err::<String, Error>(Error::Timeout(1000))
+            }
+        })
+        .await;
+
+        assert!(result.is_err());
+        // Only initial attempt, no retries
+        assert_eq!(attempt_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_retry_returns_correct_value() {
+        let config = RetryConfig::new(1, 10, 100);
+
+        let result = retry_with_backoff(config, || async {
+            Ok::<i32, Error>(42)
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn test_retry_returns_last_error() {
+        let config = RetryConfig::new(1, 10, 100);
+
+        let result = retry_with_backoff(config, || async {
+            Err::<String, Error>(Error::Timeout(5000))
+        })
+        .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            Error::Timeout(ms) => assert_eq!(ms, 5000),
+            _ => panic!("Expected Timeout error"),
+        }
+    }
+
+    #[test]
+    fn test_retry_config_clone() {
+        let config = RetryConfig::aggressive();
+        let cloned = config.clone();
+
+        assert_eq!(config.max_attempts, cloned.max_attempts);
+        assert_eq!(config.initial_delay_ms, cloned.initial_delay_ms);
+        assert_eq!(config.max_delay_ms, cloned.max_delay_ms);
+    }
+
+    #[test]
+    fn test_retry_config_debug() {
+        let config = RetryConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("RetryConfig"));
+        assert!(debug_str.contains("max_attempts"));
+    }
+
+    #[tokio::test]
+    async fn test_retry_succeeds_on_last_attempt() {
+        let attempt_count = Arc::new(AtomicU32::new(0));
+        let attempt_count_clone = Arc::clone(&attempt_count);
+
+        let config = RetryConfig::new(2, 10, 100);
+
+        let result = retry_with_backoff(config, || {
+            let count = Arc::clone(&attempt_count_clone);
+            async move {
+                let current = count.fetch_add(1, Ordering::SeqCst);
+                // Fail first 2, succeed on 3rd (last attempt)
+                if current < 2 {
+                    Err(Error::Timeout(1000))
+                } else {
+                    Ok::<String, Error>("finally!".to_string())
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "finally!");
+        assert_eq!(attempt_count.load(Ordering::SeqCst), 3);
+    }
 }
