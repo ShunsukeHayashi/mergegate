@@ -4,6 +4,7 @@
 //! line numbers, and indicators for a professional git diff display.
 
 use crate::diff_render::{DiffRender, DiffLine, DiffLineType};
+use crate::markdown_stream::ScrollState;
 use crate::syntax::{normalize_language, SyntaxHighlighter};
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -110,6 +111,8 @@ pub struct DiffViewer {
     options: DiffViewerOptions,
     /// Syntax highlighter for code content
     highlighter: SyntaxHighlighter,
+    /// Scroll state for navigation
+    scroll: ScrollState,
 }
 
 impl Default for DiffViewer {
@@ -125,6 +128,7 @@ impl DiffViewer {
             diff: DiffRender::new(),
             options: DiffViewerOptions::default(),
             highlighter: SyntaxHighlighter::new(),
+            scroll: ScrollState::new(),
         }
     }
 
@@ -134,6 +138,7 @@ impl DiffViewer {
             diff: DiffRender::new(),
             options,
             highlighter: SyntaxHighlighter::new(),
+            scroll: ScrollState::new(),
         }
     }
 
@@ -145,6 +150,8 @@ impl DiffViewer {
     /// Parse diff text
     pub fn parse(&mut self, diff_text: &str) -> &mut Self {
         self.diff.parse(diff_text);
+        // Update scroll state with total lines
+        self.scroll.total_lines = self.diff.line_count();
         self
     }
 
@@ -156,6 +163,83 @@ impl DiffViewer {
     /// Check if empty
     pub fn is_empty(&self) -> bool {
         self.diff.is_empty()
+    }
+
+    /// Set viewport height for scrolling
+    pub fn set_viewport_height(&mut self, height: usize) {
+        self.scroll.viewport_height = height;
+    }
+
+    /// Get current scroll offset
+    pub fn scroll_offset(&self) -> usize {
+        self.scroll.offset
+    }
+
+    /// Get scroll percentage (0.0 to 1.0)
+    pub fn scroll_percentage(&self) -> f32 {
+        self.scroll.scroll_percentage()
+    }
+
+    /// Scroll up by n lines
+    pub fn scroll_up(&mut self, n: usize) {
+        self.scroll.scroll_up(n);
+    }
+
+    /// Scroll down by n lines
+    pub fn scroll_down(&mut self, n: usize) {
+        self.scroll.scroll_down(n);
+    }
+
+    /// Scroll up by one page
+    pub fn page_up(&mut self) {
+        self.scroll.page_up();
+    }
+
+    /// Scroll down by one page
+    pub fn page_down(&mut self) {
+        self.scroll.page_down();
+    }
+
+    /// Scroll to the top
+    pub fn scroll_to_top(&mut self) {
+        self.scroll.scroll_to_top();
+    }
+
+    /// Scroll to the bottom
+    pub fn scroll_to_bottom(&mut self) {
+        self.scroll.scroll_to_bottom();
+    }
+
+    /// Scroll to a specific line
+    pub fn scroll_to_line(&mut self, line: usize) {
+        self.scroll.offset = line.min(self.scroll.total_lines.saturating_sub(1));
+    }
+
+    /// Check if at top of content
+    pub fn is_at_top(&self) -> bool {
+        self.scroll.offset == 0
+    }
+
+    /// Check if at bottom of content
+    pub fn is_at_bottom(&self) -> bool {
+        if self.scroll.total_lines <= self.scroll.viewport_height {
+            true
+        } else {
+            self.scroll.offset >= self.scroll.total_lines - self.scroll.viewport_height
+        }
+    }
+
+    /// Get visible lines based on viewport
+    pub fn visible_lines(&self) -> Vec<Line<'static>> {
+        let lines = self.render();
+        let start = self.scroll.offset;
+        let end = (start + self.scroll.viewport_height).min(lines.len());
+
+        if start >= lines.len() {
+            Vec::new()
+        } else {
+            lines[start..end].to_vec()
+        }
     }
 
     /// Render to styled lines
@@ -569,5 +653,105 @@ mod tests {
         for line in &lines {
             assert!(!line.spans.is_empty());
         }
+    }
+
+    #[test]
+    fn test_scroll_initial_state() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+
+        assert_eq!(viewer.scroll_offset(), 0);
+        assert!(viewer.is_at_top());
+    }
+
+    #[test]
+    fn test_scroll_down() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        viewer.scroll_down(2);
+        assert_eq!(viewer.scroll_offset(), 2);
+        assert!(!viewer.is_at_top());
+    }
+
+    #[test]
+    fn test_scroll_up() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        viewer.scroll_down(5);
+        let offset_after_down = viewer.scroll_offset();
+        viewer.scroll_up(1);
+        assert!(viewer.scroll_offset() < offset_after_down || offset_after_down == 0);
+    }
+
+    #[test]
+    fn test_scroll_to_top() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        viewer.scroll_down(5);
+        viewer.scroll_to_top();
+        assert_eq!(viewer.scroll_offset(), 0);
+        assert!(viewer.is_at_top());
+    }
+
+    #[test]
+    fn test_scroll_to_bottom() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        viewer.scroll_to_bottom();
+        assert!(viewer.is_at_bottom());
+    }
+
+    #[test]
+    fn test_page_navigation() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        viewer.page_down();
+        let offset_after_page_down = viewer.scroll_offset();
+        assert!(offset_after_page_down > 0);
+
+        viewer.page_up();
+        assert!(viewer.scroll_offset() < offset_after_page_down);
+    }
+
+    #[test]
+    fn test_visible_lines() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        let visible = viewer.visible_lines();
+        assert!(visible.len() <= 3);
+    }
+
+    #[test]
+    fn test_scroll_percentage() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+        viewer.set_viewport_height(3);
+
+        assert_eq!(viewer.scroll_percentage(), 0.0);
+
+        viewer.scroll_to_bottom();
+        let percentage = viewer.scroll_percentage();
+        assert!(percentage >= 0.0 && percentage <= 1.0);
+    }
+
+    #[test]
+    fn test_scroll_to_line() {
+        let mut viewer = DiffViewer::new();
+        viewer.parse(SAMPLE_DIFF);
+
+        viewer.scroll_to_line(3);
+        assert_eq!(viewer.scroll_offset(), 3);
     }
 }
