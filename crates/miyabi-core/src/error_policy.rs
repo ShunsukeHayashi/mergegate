@@ -288,4 +288,249 @@ mod tests {
         breaker.reset().await;
         assert_eq!(breaker.state().await, CircuitState::Closed);
     }
+
+    #[test]
+    fn test_fallback_strategy_default() {
+        let strategy = FallbackStrategy::default();
+        match strategy {
+            FallbackStrategy::AcceptPartialSuccess { min_successful } => {
+                assert_eq!(min_successful, 1);
+            }
+            _ => panic!("Expected AcceptPartialSuccess"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_partial_success() {
+        let strategy = FallbackStrategy::partial_success();
+        match strategy {
+            FallbackStrategy::AcceptPartialSuccess { min_successful } => {
+                assert_eq!(min_successful, 1);
+            }
+            _ => panic!("Expected AcceptPartialSuccess"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_lower_temperature() {
+        let strategy = FallbackStrategy::lower_temperature();
+        match strategy {
+            FallbackStrategy::RetryWithLowerTemperature { temperature_reduction } => {
+                assert_eq!(temperature_reduction, 0.2);
+            }
+            _ => panic!("Expected RetryWithLowerTemperature"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_switch_model() {
+        let strategy = FallbackStrategy::switch_to_claude();
+        match strategy {
+            FallbackStrategy::SwitchModel { fallback_model } => {
+                assert_eq!(fallback_model, "claude-sonnet-4-5-20250929");
+            }
+            _ => panic!("Expected SwitchModel"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_wait_for_human() {
+        let strategy = FallbackStrategy::wait_for_human();
+        match strategy {
+            FallbackStrategy::WaitForHumanIntervention { timeout } => {
+                assert_eq!(timeout, Duration::from_secs(24 * 60 * 60));
+            }
+            _ => panic!("Expected WaitForHumanIntervention"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_skip_task() {
+        let strategy = FallbackStrategy::SkipTask;
+        assert!(matches!(strategy, FallbackStrategy::SkipTask));
+    }
+
+    #[test]
+    fn test_circuit_state_equality() {
+        assert_eq!(CircuitState::Closed, CircuitState::Closed);
+        assert_eq!(CircuitState::Open, CircuitState::Open);
+        assert_eq!(CircuitState::HalfOpen, CircuitState::HalfOpen);
+        assert_ne!(CircuitState::Closed, CircuitState::Open);
+        assert_ne!(CircuitState::Open, CircuitState::HalfOpen);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_default() {
+        let breaker = CircuitBreaker::default();
+        assert_eq!(breaker.state().await, CircuitState::Closed);
+        assert_eq!(breaker.failure_threshold, 5);
+        assert_eq!(breaker.success_threshold, 2);
+        assert_eq!(breaker.timeout, Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_default_config() {
+        let breaker = CircuitBreaker::default_config();
+        assert_eq!(breaker.failure_threshold, 5);
+        assert_eq!(breaker.success_threshold, 2);
+        assert_eq!(breaker.timeout, Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_success_closes_circuit() {
+        let breaker = CircuitBreaker::new(2, 2, Duration::from_millis(10));
+
+        // Open the circuit
+        for _ in 0..2 {
+            let _ = breaker
+                .call(|| {
+                    Box::pin(async {
+                        Result::<(), std::io::Error>::Err(std::io::Error::other("error"))
+                    })
+                })
+                .await;
+        }
+        assert_eq!(breaker.state().await, CircuitState::Open);
+
+        // Wait for timeout
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // First success puts it in half-open
+        let result = breaker
+            .call(|| Box::pin(async { Ok::<i32, std::io::Error>(42) }))
+            .await;
+        assert!(result.is_ok());
+
+        // Second success should close
+        let result = breaker
+            .call(|| Box::pin(async { Ok::<i32, std::io::Error>(42) }))
+            .await;
+        assert!(result.is_ok());
+
+        assert_eq!(breaker.state().await, CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_consecutive_failures() {
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
+
+        // Record one failure
+        let _ = breaker
+            .call(|| {
+                Box::pin(async {
+                    Result::<(), std::io::Error>::Err(std::io::Error::other("error"))
+                })
+            })
+            .await;
+        assert_eq!(breaker.consecutive_failures().await, 1);
+
+        // Record success - should reset failures
+        let _ = breaker
+            .call(|| Box::pin(async { Ok::<(), std::io::Error>(()) }))
+            .await;
+        assert_eq!(breaker.consecutive_failures().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_consecutive_successes() {
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
+
+        let _ = breaker
+            .call(|| Box::pin(async { Ok::<(), std::io::Error>(()) }))
+            .await;
+        assert_eq!(breaker.consecutive_successes().await, 1);
+
+        let _ = breaker
+            .call(|| Box::pin(async { Ok::<(), std::io::Error>(()) }))
+            .await;
+        // After reaching success_threshold, successes is reset
+        assert_eq!(breaker.consecutive_successes().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_passes_result_through() {
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
+
+        let result = breaker
+            .call(|| Box::pin(async { Ok::<i32, std::io::Error>(42) }))
+            .await;
+
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_custom_thresholds() {
+        let breaker = CircuitBreaker::new(1, 1, Duration::from_millis(10));
+
+        // Single failure opens circuit
+        let _ = breaker
+            .call(|| {
+                Box::pin(async {
+                    Result::<(), std::io::Error>::Err(std::io::Error::other("error"))
+                })
+            })
+            .await;
+        assert_eq!(breaker.state().await, CircuitState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_reset_clears_counters() {
+        let breaker = CircuitBreaker::new(3, 3, Duration::from_secs(60));
+
+        // Record some failures
+        for _ in 0..2 {
+            let _ = breaker
+                .call(|| {
+                    Box::pin(async {
+                        Result::<(), std::io::Error>::Err(std::io::Error::other("error"))
+                    })
+                })
+                .await;
+        }
+
+        assert_eq!(breaker.consecutive_failures().await, 2);
+
+        breaker.reset().await;
+
+        assert_eq!(breaker.consecutive_failures().await, 0);
+        assert_eq!(breaker.consecutive_successes().await, 0);
+        assert_eq!(breaker.state().await, CircuitState::Closed);
+    }
+
+    #[test]
+    fn test_fallback_strategy_custom_partial_success() {
+        let strategy = FallbackStrategy::AcceptPartialSuccess { min_successful: 5 };
+        match strategy {
+            FallbackStrategy::AcceptPartialSuccess { min_successful } => {
+                assert_eq!(min_successful, 5);
+            }
+            _ => panic!("Expected AcceptPartialSuccess"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_custom_model() {
+        let strategy = FallbackStrategy::SwitchModel {
+            fallback_model: "gpt-4".to_string(),
+        };
+        match strategy {
+            FallbackStrategy::SwitchModel { fallback_model } => {
+                assert_eq!(fallback_model, "gpt-4");
+            }
+            _ => panic!("Expected SwitchModel"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_strategy_custom_timeout() {
+        let strategy = FallbackStrategy::WaitForHumanIntervention {
+            timeout: Duration::from_secs(3600),
+        };
+        match strategy {
+            FallbackStrategy::WaitForHumanIntervention { timeout } => {
+                assert_eq!(timeout, Duration::from_secs(3600));
+            }
+            _ => panic!("Expected WaitForHumanIntervention"),
+        }
+    }
 }
