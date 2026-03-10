@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
@@ -93,6 +94,41 @@ enum Commands {
         /// System prompt for the agent
         #[arg(long)]
         system: Option<String>,
+    },
+    /// OpenClaw integration - control OpenClaw agents
+    Openclaw {
+        /// OpenClaw subcommand
+        #[command(subcommand)]
+        command: OpenclawCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum OpenclawCommand {
+    /// List all available agents
+    Agents,
+    /// Show OpenClaw status
+    Status,
+    /// Show detailed help for OpenClaw commands
+    Help,
+    /// Send a message to an agent
+    Send {
+        /// Agent name (e.g., maestro, kade, sakura)
+        agent: String,
+        /// Message to send
+        message: String,
+    },
+    /// Broadcast a message to all agents
+    Broadcast {
+        /// Message to broadcast
+        message: String,
+    },
+    /// Broadcast to a specific society
+    BroadcastSociety {
+        /// Society name (core, investment, content, marketing)
+        society: String,
+        /// Message to broadcast
+        message: String,
     },
 }
 
@@ -551,6 +587,232 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     eprintln!("Agent error: {}", e);
                     std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Openclaw { command }) => {
+            use miyabi_core::openclaw::{OpenClawClient, OpenClawResult};
+            use std::env;
+
+            // Get OpenClaw configuration
+            let gateway_url = env::var("OPENCLAW_GATEWAY_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:18789".to_string());
+            let token = env::var("OPENCLAW_TOKEN")
+                .unwrap_or_else(|_| {
+                    // Try to read from openclaw.json
+                    #[allow(unused_imports)]
+                    use std::fs;
+                    #[allow(unused_imports)]
+                    use std::path::PathBuf;
+
+                    let config_path = PathBuf::from(env::var("HOME").unwrap_or_default())
+                        .join(".openclaw")
+                        .join("openclaw.json");
+
+                    // Fallback: try to read token from config
+                    if let Ok(content) = fs::read_to_string(&config_path) {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Some(gateway) = json.get("gateway") {
+                                if let Some(auth) = gateway.get("auth") {
+                                    if let Some(t) = auth.get("token") {
+                                        return t.as_str().unwrap_or("").to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    String::new()
+                });
+
+            if token.is_empty() {
+                eprintln!("❌ Error: OPENCLAW_TOKEN not set");
+                eprintln!("  Set environment variable: export OPENCLAW_TOKEN=your_token");
+                eprintln!("  Or add to ~/.miyabi/config.toml");
+                return Ok(());
+            }
+
+            let client = OpenClawClient::new(gateway_url.clone(), token.clone());
+
+            // Handle Status command separately to avoid borrowing issues
+            if let OpenclawCommand::Status = command {
+                let token_display = if token.len() > 4 {
+                    format!("{}***", &token[..4])
+                } else {
+                    "***".to_string()
+                };
+                println!("📊 OpenClaw Status:");
+                println!("  Gateway: {}", gateway_url);
+                println!("  Token: {}", token_display);
+                return Ok(());
+            }
+
+            let client = OpenClawClient::new(gateway_url, token);
+
+            match command {
+                OpenclawCommand::Agents => {
+                    // List agents grouped by society
+                    let agents = OpenClawClient::get_agents();
+                    println!("🎭 Miyabi エージェント一覧 ({} agents):", agents.len());
+                    println!();
+
+                    // Group by society
+                    let mut grouped: HashMap<&str, Vec<_>> = HashMap::new();
+                    for agent in &agents {
+                        grouped.entry(&agent.society).or_default().push(agent);
+                    }
+
+                    // Define society order
+                    let society_order = vec!["Core", "Investment", "Content", "Marketing"];
+
+                    for society in &society_order {
+                        if let Some(society_agents) = grouped.get(*society) {
+                            println!("【{} Society】", society);
+                            for agent in society_agents {
+                                println!("  {} {} ({})", agent.emoji, agent.name, agent.id);
+                                println!("      Role: {}", agent.role);
+                            }
+                            println!();
+                        }
+                    }
+                }
+                OpenclawCommand::Send { agent, message } => {
+                    // Send message
+                    let resolved_agent = OpenClawClient::resolve_agent_alias(&agent);
+                    match client.send(&resolved_agent, &message).await {
+                        Ok(_msg) => {
+                            println!("✓ メッセージを送信しました:");
+                            println!("  Agent: {}", resolved_agent);
+                            println!("  Message: {}", message);
+                        }
+                        Err(e) => {
+                            eprintln!("❌ 送信エラー: {}", e);
+                        }
+                    }
+                }
+                OpenclawCommand::Broadcast { message } => {
+                    // Broadcast message to all core agents
+                    match client.broadcast(&message).await {
+                        Ok(results) => {
+                            println!("✓ ブロードキャストを送信しました:");
+                            println!("  Message: {}", message);
+                            println!();
+                            for result in results {
+                                println!("  {}", result);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("❌ ブロードキャストエラー: {}", e);
+                        }
+                    }
+                }
+                OpenclawCommand::BroadcastSociety { society, message } => {
+                    // Broadcast to specific society
+                    let society_agents = match society.to_lowercase().as_str() {
+                        "core" => vec!["maestro", "kade", "sakura", "tsubaki", "botan", "nagare"],
+                        "investment" => vec!["scout", "crystal", "dealer", "sentinel", "architect", "watchman", "chart", "fundy", "scribe"],
+                        "content" => vec!["tweeter", "pen", "vidpro", "artist", "optimizer", "scheduler"],
+                        "marketing" => vec!["hiro", "kazoeru", "funnel", "adops"],
+                        _ => {
+                            eprintln!("❌ 不明なSociety: {}", society);
+                            eprintln!("   利用可能: core, investment, content, marketing");
+                            return Ok(());
+                        }
+                    };
+
+                    println!("✓ {} Society にブロードキャスト:", society);
+                    println!("  Message: {}", message);
+                    println!();
+
+                    for agent in society_agents {
+                        match client.send(agent, &message).await {
+                            Ok(_) => println!("  ✓ {}", agent),
+                            Err(e) => eprintln!("  ❌ {}: {}", agent, e),
+                        }
+                    }
+                }
+                OpenclawCommand::Help => {
+                    // Show detailed help
+                    println!("📖 Miyabi OpenClaw CLI - 詳細ヘルプ");
+                    println!();
+                    println!("【基本コマンド】");
+                    println!();
+                    println!("  miyabi openclaw agents");
+                    println!("      → 全エージェント一覧を表示 (Society別)");
+                    println!();
+                    println!("  miyabi openclaw status");
+                    println!("      → OpenClaw Gatewayの状態を確認");
+                    println!();
+                    println!("  miyabi openclaw send <agent> <message>");
+                    println!("      → 特定のエージェントにメッセージを送信");
+                    println!();
+                    println!("  miyabi openclaw broadcast <message>");
+                    println!("      → 全コアエージェントにブロードキャスト");
+                    println!();
+                    println!("  miyabi openclaw broadcast-society <society> <message>");
+                    println!("      → 特定のSocietyにブロードキャスト");
+                    println!();
+                    println!("【エージェントIDとエイリアス】");
+                    println!();
+                    println!("  Core Society (6):");
+                    println!("    maestro    しきるん🎭 - shikirun, conductor, orchestrator");
+                    println!("    kade       カエデ🍁 - kaede, creator, codegen, developer");
+                    println!("    sakura     サクラ🌸 - reviewer, qa, critic");
+                    println!("    tsubaki    ツバキ🌺 - integrator, pr-manager, merge-bot");
+                    println!("    botan      ボタン🌼 - deployer, release-manager, deployment");
+                    println!("    nagare     ながれるん🌊 - nagarerun, workflow, automation");
+                    println!();
+                    println!("  Investment Society (9):");
+                    println!("    scout      スカウト🔍 - researcher, explorer");
+                    println!("    crystal    クリスタル💎 - valuer, analyst");
+                    println!("    dealer     ディーラー🎰 - trader, executor");
+                    println!("    sentinel   センチネル🛡️ - risk-manager, guardian-rm");
+                    println!("    architect  アーキテクト🏗️ - portfolio-manager, allocator");
+                    println!("    watchman   ウォッチマン👁️ - news-monitor, sentinel-news");
+                    println!("    chart      チャート📈 - technical-analyst, chart-reader");
+                    println!("    fundy      ファンディ📊 - fundamental-analyst, value-investor");
+                    println!("    scribe     スクライブ📝 - reporter, documenter");
+                    println!();
+                    println!("  Content Society (6):");
+                    println!("    tweeter    ツイーター🐦 - twitter-specialist, x-poster");
+                    println!("    pen        ペン✒️ - writer, author");
+                    println!("    vidpro     ビッドプロ🎬 - video-producer, youtuber");
+                    println!("    artist     アーティスト🎨 - designer, visual-creator");
+                    println!("    optimizer  オプティマイザー🔧 - seo-specialist, seo-analyst");
+                    println!("    scheduler  スケジューラー📅 - calendar-manager, planner");
+                    println!();
+                    println!("  Marketing Society (4):");
+                    println!("    hiro       ヒロ🚀 - promoter, growth-hacker");
+                    println!("    kazoeru    カゾエル🔢 - metrics-tracker, data-analyst");
+                    println!("    funnel     ファネル🌪️ - conversion-optimizer, cro-specialist");
+                    println!("    adops      アドオプス📢 - ad-manager, media-buyer");
+                    println!();
+                    println!("【使用例】");
+                    println!();
+                    println!("  # 個別送信");
+                    println!("  miyabi openclaw send maestro \"実装タスクを割り当てて\"");
+                    println!("  miyabi openclaw send kade \"コードレビューお願いします\"");
+                    println!("  miyabi openclaw send shikirun \"エイリアスでもOK\"");
+                    println!();
+                    println!("  # ブロードキャスト");
+                    println!("  miyabi openclaw broadcast \"システムメンテナンス開始\"");
+                    println!("  miyabi openclaw broadcast-society content \"新記事投稿\"");
+                    println!();
+                    println!("【環境変数】");
+                    println!();
+                    println!("  OPENCLAW_GATEWAY_URL  - Gateway URL (default: http://127.0.0.1:18789)");
+                    println!("  OPENCLAW_TOKEN         - Gateway認証トークン");
+                    println!();
+                    println!("【設定ファイル】");
+                    println!();
+                    println!("  ~/.openclaw/openclaw.json  - 設定ファイルから自動読み込み");
+                    println!();
+                    println!("---
+                    🌸 Miyabi Framework - OpenClaw Integration");
+                }
+                OpenclawCommand::Status => {
+                    // Already handled above
+                    unreachable!();
                 }
             }
         }

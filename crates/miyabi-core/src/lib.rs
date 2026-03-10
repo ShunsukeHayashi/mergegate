@@ -90,6 +90,8 @@ pub use workflow::{
 pub use mcp::{
     McpConfig, McpError, McpManager, McpRequest, McpResponse, McpServer, McpServerConfig, McpTool,
 };
+pub mod openclaw;
+pub use openclaw::{AgentInfo, OpenClawClient, OpenClawError, OpenClawResult};
 pub use dag::{
     DAGError, Task as DAGTask, TaskGraph, TaskGraphBuilder, TaskId, TaskLevel, TaskNode,
 };
