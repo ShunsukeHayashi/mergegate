@@ -101,6 +101,78 @@ enum Commands {
         #[command(subcommand)]
         command: OpenclawCommand,
     },
+    /// Collaborator canvas control via collab CLI
+    Collab {
+        /// Canvas subcommand
+        #[command(subcommand)]
+        command: CollabCommand,
+    },
+}
+
+/// Collab canvas subcommands — wraps the collab CLI at ~/.local/bin/collab
+#[derive(Subcommand)]
+enum CollabCommand {
+    /// List tiles on the canvas
+    List {
+        /// Output as JSON array
+        #[arg(long)]
+        json: bool,
+        /// Filter by tile type (note, code, term, image, graph)
+        #[arg(long)]
+        r#type: Option<String>,
+        /// Count only
+        #[arg(long)]
+        count: bool,
+    },
+    /// Add a tile to the canvas
+    Add {
+        /// Tile type (note, code, term, image, graph)
+        tile_type: String,
+        /// File to attach (required for note/code)
+        #[arg(long)]
+        file: Option<String>,
+        /// Position in grid units "x,y"
+        #[arg(long)]
+        pos: Option<String>,
+        /// Size in grid units "w,h"
+        #[arg(long)]
+        size: Option<String>,
+        /// Skip if tile with same file already exists
+        #[arg(long)]
+        idempotent: bool,
+    },
+    /// Remove a tile from the canvas
+    Rm {
+        /// Tile ID to remove
+        tile_id: String,
+    },
+    /// Move a tile to a new position
+    Move {
+        /// Tile ID to move
+        tile_id: String,
+        /// New position in grid units "x,y"
+        #[arg(long)]
+        pos: String,
+    },
+    /// Resize a tile
+    Resize {
+        /// Tile ID to resize
+        tile_id: String,
+        /// New size in grid units "w,h"
+        #[arg(long)]
+        size: String,
+    },
+    /// Get or set the canvas viewport
+    Viewport {
+        /// Set pan position "x,y"
+        #[arg(long)]
+        pan: Option<String>,
+        /// Set zoom level (e.g. 1.0)
+        #[arg(long)]
+        zoom: Option<f64>,
+    },
+    /// Show Collaborator connection status
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -813,6 +885,104 @@ async fn main() -> anyhow::Result<()> {
                 OpenclawCommand::Status => {
                     // Already handled above
                     unreachable!();
+                }
+            }
+        }
+
+        Some(Commands::Collab { command }) => {
+            use std::process::Command;
+            use std::env;
+
+            let collab_bin = {
+                let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+                format!("{}/.local/bin/collab", home)
+            };
+
+            let mut args: Vec<String> = Vec::new();
+
+            match command {
+                CollabCommand::List { json, r#type, count } => {
+                    args.push("tile".to_string());
+                    args.push("list".to_string());
+                    if json { args.push("--json".to_string()); }
+                    if count { args.push("--count".to_string()); }
+                    if let Some(t) = r#type {
+                        args.push("--type".to_string());
+                        args.push(t);
+                    }
+                }
+                CollabCommand::Add { tile_type, file, pos, size, idempotent } => {
+                    args.push("tile".to_string());
+                    args.push("add".to_string());
+                    args.push(tile_type);
+                    if let Some(f) = file {
+                        args.push("--file".to_string());
+                        args.push(f);
+                    }
+                    if let Some(p) = pos {
+                        args.push("--pos".to_string());
+                        args.push(p);
+                    }
+                    if let Some(s) = size {
+                        args.push("--size".to_string());
+                        args.push(s);
+                    }
+                    if idempotent { args.push("--idempotent".to_string()); }
+                }
+                CollabCommand::Rm { tile_id } => {
+                    args.push("tile".to_string());
+                    args.push("rm".to_string());
+                    args.push(tile_id);
+                }
+                CollabCommand::Move { tile_id, pos } => {
+                    args.push("tile".to_string());
+                    args.push("move".to_string());
+                    args.push(tile_id);
+                    args.push("--pos".to_string());
+                    args.push(pos);
+                }
+                CollabCommand::Resize { tile_id, size } => {
+                    args.push("tile".to_string());
+                    args.push("resize".to_string());
+                    args.push(tile_id);
+                    args.push("--size".to_string());
+                    args.push(size);
+                }
+                CollabCommand::Viewport { pan, zoom } => {
+                    if pan.is_some() || zoom.is_some() {
+                        args.push("viewport".to_string());
+                        args.push("set".to_string());
+                        if let Some(p) = pan {
+                            args.push("--pan".to_string());
+                            args.push(p);
+                        }
+                        if let Some(z) = zoom {
+                            args.push("--zoom".to_string());
+                            args.push(z.to_string());
+                        }
+                    } else {
+                        args.push("viewport".to_string());
+                    }
+                }
+                CollabCommand::Status => {
+                    args.push("status".to_string());
+                }
+            }
+
+            let status = Command::new(&collab_bin)
+                .args(&args)
+                .status();
+
+            match status {
+                Ok(s) => {
+                    if !s.success() {
+                        std::process::exit(s.code().unwrap_or(1));
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: failed to run collab CLI ({}): {}", collab_bin, e);
+                    eprintln!("  → Install collab CLI: https://github.com/ShunsukeHayashi/collab-cli");
+                    std::process::exit(1);
                 }
             }
         }
