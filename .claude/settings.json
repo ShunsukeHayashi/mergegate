@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hook": "bash /Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/scripts/hook-check-lock.sh \"$TOOL_INPUT\""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hook": "bash /Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/scripts/hook-post-bash.sh \"$TOOL_INPUT\""
+      }
+    ]
+  }
+}
