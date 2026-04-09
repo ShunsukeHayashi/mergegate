@@ -5,7 +5,9 @@ use crate::store::{
     CompletionMode, ExecutionTask, GitHubIssueState, GitHubPrState, ReviewDecision, TaskState,
     TasksSnapshot,
 };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +51,16 @@ pub struct GateReport {
     pub success: bool,
     pub detail: String,
     pub duration: Duration,
+}
+
+pub fn validate_branch_name(name: &str) -> bool {
+    static BRANCH_NAME_REGEX: OnceLock<Regex> = OnceLock::new();
+    BRANCH_NAME_REGEX
+        .get_or_init(|| {
+            Regex::new(r"^(feature|fix|hotfix)/issue-[1-9][0-9]*-[A-Za-z0-9][A-Za-z0-9._-]*$")
+                .expect("branch name regex must compile")
+        })
+        .is_match(name)
 }
 
 pub fn evaluate_gate(
@@ -119,12 +131,13 @@ pub fn evaluate_gate(
                     .unwrap_or_else(|| "lock window available".to_string()),
             )
         }
-        Gate::Gate5 => (
-            task.branch_name.is_some(),
-            task.branch_name
-                .clone()
-                .unwrap_or_else(|| "missing branch_name".to_string()),
-        ),
+        Gate::Gate5 => match task.branch_name.as_deref() {
+            Some(branch_name) if validate_branch_name(branch_name) => {
+                (true, format!("valid branch_name: {branch_name}"))
+            }
+            Some(branch_name) => (false, format!("invalid branch_name: {branch_name}")),
+            None => (false, "missing branch_name".to_string()),
+        },
         Gate::Gate6 => {
             let ok = task.github_evidence.as_ref().is_some_and(|evidence| {
                 evidence.pr_number > 0
@@ -158,11 +171,10 @@ pub fn evaluate_gate(
         }
         Gate::Gate8 => {
             let ok = match task.completion_mode {
-                CompletionMode::GithubPr => {
-                    task.github_evidence.as_ref().is_some_and(|evidence| {
-                        evidence.issue_state == GitHubIssueState::Closed
-                    })
-                }
+                CompletionMode::GithubPr => task
+                    .github_evidence
+                    .as_ref()
+                    .is_some_and(|evidence| evidence.issue_state == GitHubIssueState::Closed),
                 CompletionMode::Manual | CompletionMode::ExternalOp => true,
             };
             (
@@ -262,5 +274,19 @@ mod tests {
         assert!(evaluate_gate(Gate::Gate6, &task, &snapshot, &GateContext::default()).success);
         assert!(evaluate_gate(Gate::Gate7, &task, &snapshot, &GateContext::default()).success);
         assert!(evaluate_gate(Gate::Gate8, &task, &snapshot, &GateContext::default()).success);
+    }
+
+    #[test]
+    fn validate_branch_name_accepts_supported_prefixes() {
+        assert!(validate_branch_name("feature/issue-1-test"));
+        assert!(validate_branch_name("fix/issue-12-bugfix"));
+        assert!(validate_branch_name("hotfix/issue-999-hot-patch"));
+    }
+
+    #[test]
+    fn validate_branch_name_rejects_invalid_patterns() {
+        assert!(!validate_branch_name("feature/phase-a"));
+        assert!(!validate_branch_name("feature/issue-0-test"));
+        assert!(!validate_branch_name("main"));
     }
 }

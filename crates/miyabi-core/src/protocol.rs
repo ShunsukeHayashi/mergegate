@@ -1,12 +1,12 @@
 //! Deterministic execution protocol entry point.
 
 use crate::error::Error;
-use crate::gate::{evaluate_gate, Gate, GateContext, GateReport};
+use crate::gate::{evaluate_gate, validate_branch_name, Gate, GateContext, GateReport};
 use crate::lock::{FileLockManager, LeaseConfig, LockConflict};
 use crate::store::{
     CompletionMode, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState, GitHubPrState,
-    ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent, TaskEventType, TaskImpact,
-    TaskState, TasksSnapshot,
+    HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent, TaskEventType,
+    TaskImpact, TaskState, TasksSnapshot,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -63,9 +63,9 @@ impl DeterministicExecutionProtocol {
 
         for gate in gates {
             let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
-            let task = snapshot.get_task(task_id).ok_or_else(|| {
-                ProtocolError::input(format!("unknown task: {task_id}"))
-            })?;
+            let task = snapshot
+                .get_task(task_id)
+                .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?;
 
             let context = if matches!(gate, Gate::Gate4) {
                 let files = task
@@ -120,6 +120,9 @@ impl DeterministicExecutionProtocol {
         actor: &str,
         node: &str,
     ) -> ProtocolResult<ExecutionTask> {
+        if request.issue == 0 {
+            return Err(ProtocolError::input("issue number must be greater than 0"));
+        }
         let mut snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
         if snapshot.get_task(&request.task_id).is_some() {
             return Err(ProtocolError::input(format!(
@@ -179,17 +182,30 @@ impl DeterministicExecutionProtocol {
         files: &[String],
     ) -> ProtocolResult<AssignmentResult> {
         let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
-        let blocked_by = snapshot
+        let task = snapshot
             .get_task(task_id)
-            .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?
+            .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?;
+        let approval_granted = task
+            .human_approval
+            .as_ref()
+            .is_some_and(|approval| !approval.required || approval.approved_by.is_some());
+        if matches!(
+            task.impact.as_ref().map(|impact| impact.risk_level),
+            Some(ImpactRiskLevel::High | ImpactRiskLevel::Critical)
+        ) && !approval_granted
+        {
+            return Err(ProtocolError::gate_rejected(
+                "HIGH/CRITICAL risk requires --approve",
+            ));
+        }
+
+        let blocked_by = task
             .dependencies
             .iter()
             .filter_map(|dependency| {
                 snapshot
                     .get_task(dependency)
-                    .filter(|dep| {
-                        !matches!(dep.current_state, TaskState::Done | TaskState::Merged)
-                    })
+                    .filter(|dep| !matches!(dep.current_state, TaskState::Done | TaskState::Merged))
                     .map(|_| dependency.clone())
             })
             .collect::<Vec<_>>();
@@ -234,25 +250,46 @@ impl DeterministicExecutionProtocol {
         actor: &str,
         node: &str,
     ) -> ProtocolResult<ExecutionTask> {
-        let payload_risk = impact.risk_level;
-        let payload_symbols = impact.affected_symbols;
-        let depth1 = impact.depth1.clone();
-        let analyzed_commit = impact.analyzed_commit.clone();
-        let input_hash = impact.input_hash.clone();
-        self.update_task(task_id, actor, node, TaskEventType::ImpactRecorded, |task| {
-            task.impact = Some(TaskImpact {
-                risk_level: impact.risk_level,
-                affected_symbols: impact.affected_symbols,
-                depth1: depth1.clone(),
-                analyzed_at: Utc::now(),
-                analyzed_commit: analyzed_commit.clone(),
-                input_hash: input_hash.clone(),
-            });
-            Ok(serde_json::json!({
-                "risk_level": payload_risk,
-                "affected_symbols": payload_symbols
-            }))
-        })
+        let ImpactInput {
+            risk_level,
+            affected_symbols,
+            depth1,
+            analyzed_commit,
+            input_hash,
+            approve,
+        } = impact;
+        let approval = approve.then(|| HumanApproval {
+            required: matches!(
+                risk_level,
+                ImpactRiskLevel::High | ImpactRiskLevel::Critical
+            ),
+            approved_by: Some(actor.to_string()),
+            approved_at: Some(Utc::now()),
+            reason: Some("approved via impact --approve".to_string()),
+        });
+        self.update_task(
+            task_id,
+            actor,
+            node,
+            TaskEventType::ImpactRecorded,
+            |task| {
+                task.impact = Some(TaskImpact {
+                    risk_level,
+                    affected_symbols,
+                    depth1: depth1.clone(),
+                    analyzed_at: Utc::now(),
+                    analyzed_commit: analyzed_commit.clone(),
+                    input_hash: input_hash.clone(),
+                });
+                task.human_approval = approval.clone();
+                Ok(serde_json::json!({
+                    "risk_level": risk_level,
+                    "affected_symbols": affected_symbols,
+                    "approve": approve,
+                    "human_approval": approval.clone()
+                }))
+            },
+        )
     }
 
     pub fn record_branch(
@@ -264,6 +301,11 @@ impl DeterministicExecutionProtocol {
     ) -> ProtocolResult<ExecutionTask> {
         if branch_name.trim().is_empty() {
             return Err(ProtocolError::input("branch name must not be empty"));
+        }
+        if !validate_branch_name(branch_name) {
+            return Err(ProtocolError::gate_rejected(format!(
+                "invalid branch name: {branch_name}"
+            )));
         }
         self.update_task(task_id, actor, node, TaskEventType::BranchCreated, |task| {
             task.branch_name = Some(branch_name.to_string());
@@ -305,26 +347,36 @@ impl DeterministicExecutionProtocol {
         actor: &str,
         node: &str,
     ) -> ProtocolResult<ExecutionTask> {
-        if merge_commit_sha.len() != 40 || !merge_commit_sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        if merge_commit_sha.len() != 40 || !merge_commit_sha.chars().all(|c| c.is_ascii_hexdigit())
+        {
             return Err(ProtocolError::gate_rejected(
                 "merge sha must be a 40-char hex string",
             ));
         }
 
-        self.update_task(task_id, actor, node, TaskEventType::MergeVerified, |task| {
-            let mut evidence = task.github_evidence.clone().ok_or_else(|| {
-                ProtocolError::gate_rejected("pull request must be recorded before merge")
+        let merged =
+            self.update_task(task_id, actor, node, TaskEventType::MergeVerified, |task| {
+                let mut evidence = task.github_evidence.clone().ok_or_else(|| {
+                    ProtocolError::gate_rejected("pull request must be recorded before merge")
+                })?;
+                evidence.pr_state = GitHubPrState::Merged;
+                evidence.merge_commit_sha = Some(merge_commit_sha.to_string());
+                evidence.merged_at = Some(Utc::now());
+                evidence.review_decision = Some(ReviewDecision::Approved);
+                evidence.issue_state = GitHubIssueState::Closed;
+                evidence.issue_closed_by_pr = true;
+                task.github_evidence = Some(evidence);
+                task.current_state = TaskState::Merged;
+                Ok(serde_json::json!({ "merge_commit_sha": merge_commit_sha }))
             })?;
-            evidence.pr_state = GitHubPrState::Merged;
-            evidence.merge_commit_sha = Some(merge_commit_sha.to_string());
-            evidence.merged_at = Some(Utc::now());
-            evidence.review_decision = Some(ReviewDecision::Approved);
-            evidence.issue_state = GitHubIssueState::Closed;
-            evidence.issue_closed_by_pr = true;
-            task.github_evidence = Some(evidence);
-            task.current_state = TaskState::Merged;
-            Ok(serde_json::json!({ "merge_commit_sha": merge_commit_sha }))
-        })
+
+        self.lock_manager
+            .release_lock(task_id)
+            .map_err(ProtocolError::from)?;
+        self.unblock_dependents_after_merge(task_id, actor, node)?;
+
+        let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
+        Ok(snapshot.get_task(task_id).cloned().unwrap_or(merged))
     }
 
     pub fn locks(&self) -> ProtocolResult<HashMap<String, crate::store::FileLockEntry>> {
@@ -368,10 +420,16 @@ impl DeterministicExecutionProtocol {
         actor: &str,
         node: &str,
     ) -> ProtocolResult<ExecutionTask> {
-        self.update_task(task_id, actor, node, TaskEventType::StateTransition, |task| {
-            task.current_state = to;
-            Ok(serde_json::json!({ "to": to }))
-        })
+        self.update_task(
+            task_id,
+            actor,
+            node,
+            TaskEventType::StateTransition,
+            |task| {
+                task.current_state = to;
+                Ok(serde_json::json!({ "to": to }))
+            },
+        )
     }
 
     fn update_task<F>(
@@ -455,6 +513,63 @@ impl DeterministicExecutionProtocol {
             }),
         )
     }
+
+    fn unblock_dependents_after_merge(
+        &self,
+        task_id: &str,
+        actor: &str,
+        node: &str,
+    ) -> ProtocolResult<()> {
+        let mut snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
+        let dependent_ids = snapshot
+            .get_task(task_id)
+            .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?
+            .dependents
+            .clone();
+
+        let pending_dependents: Vec<String> = dependent_ids
+            .into_iter()
+            .filter(|dependent_id| {
+                snapshot.get_task(dependent_id).is_some_and(|task| {
+                    task.current_state == TaskState::Blocked
+                        && dependencies_satisfied(task, &snapshot)
+                })
+            })
+            .collect();
+
+        if pending_dependents.is_empty() {
+            return Ok(());
+        }
+
+        let now = Utc::now();
+        for dependent_id in &pending_dependents {
+            if let Some(task) = snapshot.get_task_mut(dependent_id) {
+                task.current_state = TaskState::Pending;
+                task.updated_at = now;
+            }
+        }
+
+        let version = snapshot.version;
+        self.snapshot_store
+            .save(&snapshot, version)
+            .map_err(ProtocolError::from)?;
+        for dependent_id in pending_dependents {
+            self.append_event(
+                &dependent_id,
+                TaskEventType::StateTransition,
+                actor,
+                node,
+                version + 1,
+                serde_json::json!({
+                    "to": TaskState::Pending,
+                    "reason": "dependencies_resolved_after_merge",
+                    "unblocked_by": task_id,
+                }),
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -467,6 +582,7 @@ pub struct ProtocolReport {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisterTaskRequest {
+    pub issue: u64,
     pub task_id: String,
     pub title: String,
     pub dependencies: Vec<String>,
@@ -488,6 +604,7 @@ pub struct ImpactInput {
     pub depth1: Vec<String>,
     pub analyzed_commit: Option<String>,
     pub input_hash: Option<String>,
+    pub approve: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -537,9 +654,9 @@ pub type ProtocolResult<T> = std::result::Result<T, ProtocolError>;
 
 fn dependencies_satisfied(task: &ExecutionTask, snapshot: &TasksSnapshot) -> bool {
     task.dependencies.iter().all(|dep_id| {
-        snapshot.get_task(dep_id).is_some_and(|dep| {
-            matches!(dep.current_state, TaskState::Done | TaskState::Merged)
-        })
+        snapshot
+            .get_task(dep_id)
+            .is_some_and(|dep| matches!(dep.current_state, TaskState::Done | TaskState::Merged))
     })
 }
 
@@ -572,8 +689,11 @@ fn compute_dag(snapshot: &TasksSnapshot) -> DagReport {
         .map(|task| task.id.clone())
         .collect();
     let mut levels = Vec::new();
-    let task_map: HashMap<&str, &ExecutionTask> =
-        snapshot.tasks.iter().map(|task| (task.id.as_str(), task)).collect();
+    let task_map: HashMap<&str, &ExecutionTask> = snapshot
+        .tasks
+        .iter()
+        .map(|task| (task.id.as_str(), task))
+        .collect();
 
     while !queue.is_empty() {
         let mut next = VecDeque::new();
@@ -628,6 +748,7 @@ mod tests {
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 1,
                     task_id: "phase-0".into(),
                     title: "Phase 0".into(),
                     dependencies: vec![],
@@ -642,6 +763,7 @@ mod tests {
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 2,
                     task_id: "phase-a".into(),
                     title: "Phase A".into(),
                     dependencies: vec!["phase-0".into()],
@@ -676,6 +798,7 @@ mod tests {
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 1,
                     task_id: "phase-a".into(),
                     title: "Phase A".into(),
                     dependencies: vec![],
@@ -700,11 +823,37 @@ mod tests {
     }
 
     #[test]
+    fn register_rejects_issue_zero() {
+        let (_tmp, protocol) = fixture();
+        let err = protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 0,
+                    task_id: "test-task".into(),
+                    title: "Test Task".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap_err();
+
+        assert!(matches!(err, ProtocolError::Input(_)));
+        assert!(err
+            .to_string()
+            .contains("issue number must be greater than 0"));
+    }
+
+    #[test]
     fn assign_branch_pr_merge_updates_task() {
         let (_tmp, protocol) = fixture();
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 1,
                     task_id: "phase-a".into(),
                     title: "Phase A".into(),
                     dependencies: vec![],
@@ -725,6 +874,7 @@ mod tests {
                     depth1: vec!["main".into()],
                     analyzed_commit: None,
                     input_hash: None,
+                    approve: false,
                 },
                 "codex",
                 "macbook",
@@ -742,9 +892,11 @@ mod tests {
         assert_eq!(assigned.task.current_state, TaskState::Implementing);
 
         protocol
-            .record_branch("phase-a", "feature/phase-a", "codex", "macbook")
+            .record_branch("phase-a", "feature/issue-1-phase-a", "codex", "macbook")
             .unwrap();
-        protocol.record_pr("phase-a", 12, "codex", "macbook").unwrap();
+        protocol
+            .record_pr("phase-a", 12, "codex", "macbook")
+            .unwrap();
         let merged = protocol
             .record_merge(
                 "phase-a",
@@ -764,14 +916,102 @@ mod tests {
                 .as_deref(),
             Some("0123456789abcdef0123456789abcdef01234567")
         );
+        assert!(protocol.locks().unwrap().is_empty());
     }
 
     #[test]
-    fn assign_returns_dependency_blocked_when_hard_dependency_is_unresolved() {
+    fn assign_rejects_high_risk_without_human_approval() {
         let (_tmp, protocol) = fixture();
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 1,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::High,
+                    affected_symbols: 2,
+                    depth1: vec!["assign".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let err = protocol
+            .assign("phase-a", "codex", "macbook", &[String::from("src/lib.rs")])
+            .unwrap_err();
+
+        assert!(matches!(err, ProtocolError::GateRejected(_)));
+        assert_eq!(
+            err.to_string(),
+            "gate rejected: HIGH/CRITICAL risk requires --approve"
+        );
+    }
+
+    #[test]
+    fn impact_approve_records_human_approval() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 1,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let task = protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::High,
+                    affected_symbols: 2,
+                    depth1: vec!["assign".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: true,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let approval = task.human_approval.as_ref().unwrap();
+        assert!(approval.required);
+        assert_eq!(approval.approved_by.as_deref(), Some("codex"));
+        assert!(approval.approved_at.is_some());
+    }
+
+    #[test]
+    fn merge_releases_locks_and_unblocks_dependents() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 1,
                     task_id: "phase-a".into(),
                     title: "Phase A".into(),
                     dependencies: vec![],
@@ -786,6 +1026,115 @@ mod tests {
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 2,
+                    task_id: "phase-b".into(),
+                    title: "Phase B".into(),
+                    dependencies: vec!["phase-a".into()],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::Low,
+                    affected_symbols: 1,
+                    depth1: vec!["main".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .assign("phase-a", "codex", "macbook", &[String::from("src/a.rs")])
+            .unwrap();
+        protocol
+            .record_branch("phase-a", "feature/issue-1-phase-a", "codex", "macbook")
+            .unwrap();
+        protocol
+            .record_pr("phase-a", 12, "codex", "macbook")
+            .unwrap();
+
+        let mut snapshot = protocol.snapshot_store.load().unwrap();
+        let version = snapshot.version;
+        let dependent = snapshot.get_task_mut("phase-b").unwrap();
+        dependent.current_state = TaskState::Blocked;
+        protocol.snapshot_store.save(&snapshot, version).unwrap();
+
+        protocol
+            .record_merge(
+                "phase-a",
+                "0123456789abcdef0123456789abcdef01234567",
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        assert!(protocol.locks().unwrap().is_empty());
+        let status = protocol.status(Some("phase-b")).unwrap();
+        match status {
+            StatusReport::Task(task) => assert_eq!(task.current_state, TaskState::Pending),
+            StatusReport::Snapshot(_) => panic!("expected task status"),
+        }
+    }
+
+    #[test]
+    fn record_branch_rejects_invalid_branch_names() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 1,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let err = protocol
+            .record_branch("phase-a", "bad-name", "codex", "macbook")
+            .unwrap_err();
+
+        assert!(matches!(err, ProtocolError::GateRejected(_)));
+        assert!(err.to_string().contains("invalid branch name"));
+    }
+
+    #[test]
+    fn assign_returns_dependency_blocked_when_hard_dependency_is_unresolved() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 1,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 2,
                     task_id: "phase-b".into(),
                     title: "Phase B".into(),
                     dependencies: vec!["phase-a".into()],
@@ -816,6 +1165,7 @@ mod tests {
         protocol
             .register(
                 RegisterTaskRequest {
+                    issue: 1,
                     task_id: "phase-a".into(),
                     title: "Phase A".into(),
                     dependencies: vec![],

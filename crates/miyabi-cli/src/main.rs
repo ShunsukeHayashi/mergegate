@@ -189,6 +189,8 @@ enum GateCommand {
         #[arg(long, value_enum)]
         risk: ImpactRiskArg,
         #[arg(long)]
+        approve: bool,
+        #[arg(long)]
         symbols: usize,
         #[arg(long, value_delimiter = ',')]
         depth1: Vec<String>,
@@ -198,20 +200,11 @@ enum GateCommand {
         input_hash: Option<String>,
     },
     /// Record branch creation
-    Branch {
-        task_id: String,
-        name: String,
-    },
+    Branch { task_id: String, name: String },
     /// Record PR creation
-    Pr {
-        task_id: String,
-        number: u64,
-    },
+    Pr { task_id: String, number: u64 },
     /// Record merge verification
-    Merge {
-        task_id: String,
-        sha: String,
-    },
+    Merge { task_id: String, sha: String },
     /// List active locks
     Locks,
     /// Show DAG levels
@@ -405,7 +398,10 @@ async fn main() -> anyhow::Result<()> {
                 Ok(Some(rules)) => {
                     println!("Rules:    {} rules loaded", rules.rules.len());
                     if !rules.agent_preferences.is_empty() {
-                        println!("Agents:   {} agent preferences", rules.agent_preferences.len());
+                        println!(
+                            "Agents:   {} agent preferences",
+                            rules.agent_preferences.len()
+                        );
                     }
                 }
                 Ok(None) => {
@@ -576,14 +572,20 @@ async fn main() -> anyhow::Result<()> {
                                 "warning" => "🟡",
                                 _ => "🔵",
                             };
-                            println!("  {} {} {} - {}", status, severity, rule.name, rule.suggestion);
+                            println!(
+                                "  {} {} {} - {}",
+                                status, severity, rule.name, rule.suggestion
+                            );
 
                             if verbose {
                                 if let Some(pattern) = &rule.pattern {
                                     println!("      Pattern: {}", pattern);
                                 }
                                 if !rule.file_extensions.is_empty() {
-                                    println!("      Extensions: {}", rule.file_extensions.join(", "));
+                                    println!(
+                                        "      Extensions: {}",
+                                        rule.file_extensions.join(", ")
+                                    );
                                 }
                                 println!();
                             }
@@ -616,7 +618,10 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
                 Ok(None) => {
-                    println!("No .miyabirules file found in {} or parent directories.", cwd.display());
+                    println!(
+                        "No .miyabirules file found in {} or parent directories.",
+                        cwd.display()
+                    );
                     println!();
                     println!("Create a .miyabirules file to define project-specific rules.");
                     println!("See: miyabi --help for more information.");
@@ -788,33 +793,32 @@ async fn main() -> anyhow::Result<()> {
             // Get OpenClaw configuration
             let gateway_url = env::var("OPENCLAW_GATEWAY_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:18789".to_string());
-            let token = env::var("OPENCLAW_TOKEN")
-                .unwrap_or_else(|_| {
-                    // Try to read from openclaw.json
-                    #[allow(unused_imports)]
-                    use std::fs;
-                    #[allow(unused_imports)]
-                    use std::path::PathBuf;
+            let token = env::var("OPENCLAW_TOKEN").unwrap_or_else(|_| {
+                // Try to read from openclaw.json
+                #[allow(unused_imports)]
+                use std::fs;
+                #[allow(unused_imports)]
+                use std::path::PathBuf;
 
-                    let config_path = PathBuf::from(env::var("HOME").unwrap_or_default())
-                        .join(".openclaw")
-                        .join("openclaw.json");
+                let config_path = PathBuf::from(env::var("HOME").unwrap_or_default())
+                    .join(".openclaw")
+                    .join("openclaw.json");
 
-                    // Fallback: try to read token from config
-                    if let Ok(content) = fs::read_to_string(&config_path) {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(gateway) = json.get("gateway") {
-                                if let Some(auth) = gateway.get("auth") {
-                                    if let Some(t) = auth.get("token") {
-                                        return t.as_str().unwrap_or("").to_string();
-                                    }
+                // Fallback: try to read token from config
+                if let Ok(content) = fs::read_to_string(&config_path) {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(gateway) = json.get("gateway") {
+                            if let Some(auth) = gateway.get("auth") {
+                                if let Some(t) = auth.get("token") {
+                                    return t.as_str().unwrap_or("").to_string();
                                 }
                             }
                         }
                     }
+                }
 
-                    String::new()
-                });
+                String::new()
+            });
 
             if token.is_empty() {
                 eprintln!("❌ Error: OPENCLAW_TOKEN not set");
@@ -899,8 +903,25 @@ async fn main() -> anyhow::Result<()> {
                     // Broadcast to specific society
                     let society_agents = match society.to_lowercase().as_str() {
                         "core" => vec!["maestro", "kade", "sakura", "tsubaki", "botan", "nagare"],
-                        "investment" => vec!["scout", "crystal", "dealer", "sentinel", "architect", "watchman", "chart", "fundy", "scribe"],
-                        "content" => vec!["tweeter", "pen", "vidpro", "artist", "optimizer", "scheduler"],
+                        "investment" => vec![
+                            "scout",
+                            "crystal",
+                            "dealer",
+                            "sentinel",
+                            "architect",
+                            "watchman",
+                            "chart",
+                            "fundy",
+                            "scribe",
+                        ],
+                        "content" => vec![
+                            "tweeter",
+                            "pen",
+                            "vidpro",
+                            "artist",
+                            "optimizer",
+                            "scheduler",
+                        ],
                         "marketing" => vec!["hiro", "kazoeru", "funnel", "adops"],
                         _ => {
                             eprintln!("❌ 不明なSociety: {}", society);
@@ -989,15 +1010,19 @@ async fn main() -> anyhow::Result<()> {
                     println!();
                     println!("【環境変数】");
                     println!();
-                    println!("  OPENCLAW_GATEWAY_URL  - Gateway URL (default: http://127.0.0.1:18789)");
+                    println!(
+                        "  OPENCLAW_GATEWAY_URL  - Gateway URL (default: http://127.0.0.1:18789)"
+                    );
                     println!("  OPENCLAW_TOKEN         - Gateway認証トークン");
                     println!();
                     println!("【設定ファイル】");
                     println!();
                     println!("  ~/.openclaw/openclaw.json  - 設定ファイルから自動読み込み");
                     println!();
-                    println!("---
-                    🌸 Miyabi Framework - OpenClaw Integration");
+                    println!(
+                        "---
+                    🌸 Miyabi Framework - OpenClaw Integration"
+                    );
                 }
                 OpenclawCommand::Status => {
                     // Already handled above
@@ -1007,8 +1032,8 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Some(Commands::Collab { command }) => {
-            use std::process::Command;
             use std::env;
+            use std::process::Command;
 
             let collab_bin = {
                 let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -1018,17 +1043,31 @@ async fn main() -> anyhow::Result<()> {
             let mut args: Vec<String> = Vec::new();
 
             match command {
-                CollabCommand::List { json, r#type, count } => {
+                CollabCommand::List {
+                    json,
+                    r#type,
+                    count,
+                } => {
                     args.push("tile".to_string());
                     args.push("list".to_string());
-                    if json { args.push("--json".to_string()); }
-                    if count { args.push("--count".to_string()); }
+                    if json {
+                        args.push("--json".to_string());
+                    }
+                    if count {
+                        args.push("--count".to_string());
+                    }
                     if let Some(t) = r#type {
                         args.push("--type".to_string());
                         args.push(t);
                     }
                 }
-                CollabCommand::Add { tile_type, file, pos, size, idempotent } => {
+                CollabCommand::Add {
+                    tile_type,
+                    file,
+                    pos,
+                    size,
+                    idempotent,
+                } => {
                     args.push("tile".to_string());
                     args.push("add".to_string());
                     args.push(tile_type);
@@ -1044,7 +1083,9 @@ async fn main() -> anyhow::Result<()> {
                         args.push("--size".to_string());
                         args.push(s);
                     }
-                    if idempotent { args.push("--idempotent".to_string()); }
+                    if idempotent {
+                        args.push("--idempotent".to_string());
+                    }
                 }
                 CollabCommand::Rm { tile_id } => {
                     args.push("tile".to_string());
@@ -1086,9 +1127,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            let status = Command::new(&collab_bin)
-                .args(&args)
-                .status();
+            let status = Command::new(&collab_bin).args(&args).status();
 
             match status {
                 Ok(s) => {
@@ -1098,7 +1137,9 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     eprintln!("error: failed to run collab CLI ({}): {}", collab_bin, e);
-                    eprintln!("  → Install collab CLI: https://github.com/ShunsukeHayashi/collab-cli");
+                    eprintln!(
+                        "  → Install collab CLI: https://github.com/ShunsukeHayashi/collab-cli"
+                    );
                     std::process::exit(1);
                 }
             }
@@ -1140,6 +1181,7 @@ fn handle_gate_command(
             protocol
                 .register(
                     RegisterTaskRequest {
+                        issue,
                         task_id,
                         title,
                         dependencies,
@@ -1162,27 +1204,29 @@ fn handle_gate_command(
                     }
                 })
         }
-        GateCommand::Status { task_id } => protocol.status(task_id.as_deref()).map(|status| {
-            match status {
-                StatusReport::Task(task) => {
-                    if matches!(format, OutputFormat::Json) {
-                        println!("{}", serde_json::to_string_pretty(&task).unwrap());
-                    } else {
-                        println!("{}: {:?} - {}", task.id, task.current_state, task.title);
-                    }
-                }
-                StatusReport::Snapshot(snapshot) => {
-                    if matches!(format, OutputFormat::Json) {
-                        println!("{}", serde_json::to_string_pretty(&snapshot).unwrap());
-                    } else {
-                        println!("tasks: {}", snapshot.tasks.len());
-                        for task in snapshot.tasks {
-                            println!("  {} [{:?}] {}", task.id, task.current_state, task.title);
+        GateCommand::Status { task_id } => {
+            protocol
+                .status(task_id.as_deref())
+                .map(|status| match status {
+                    StatusReport::Task(task) => {
+                        if matches!(format, OutputFormat::Json) {
+                            println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                        } else {
+                            println!("{}: {:?} - {}", task.id, task.current_state, task.title);
                         }
                     }
-                }
-            }
-        }),
+                    StatusReport::Snapshot(snapshot) => {
+                        if matches!(format, OutputFormat::Json) {
+                            println!("{}", serde_json::to_string_pretty(&snapshot).unwrap());
+                        } else {
+                            println!("tasks: {}", snapshot.tasks.len());
+                            for task in snapshot.tasks {
+                                println!("  {} [{:?}] {}", task.id, task.current_state, task.title);
+                            }
+                        }
+                    }
+                })
+        }
         GateCommand::Assign {
             task_id,
             agent,
@@ -1194,15 +1238,13 @@ fn handle_gate_command(
                 if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&result).unwrap());
                 } else {
-                    println!(
-                        "assigned: {} -> {}@{}",
-                        result.task.id, agent, agent_node
-                    );
+                    println!("assigned: {} -> {}@{}", result.task.id, agent, agent_node);
                 }
             }),
         GateCommand::Impact {
             task_id,
             risk,
+            approve,
             symbols,
             depth1,
             analyzed_commit,
@@ -1221,6 +1263,7 @@ fn handle_gate_command(
                     depth1,
                     analyzed_commit,
                     input_hash,
+                    approve,
                 },
                 actor,
                 &node,
