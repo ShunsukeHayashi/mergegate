@@ -11,18 +11,22 @@ pub mod dag;
 pub mod error;
 pub mod error_policy;
 pub mod feature_flags;
+pub mod gate;
 pub mod git;
 pub mod github;
 pub mod github_tools;
 pub mod hooks;
+pub mod lock;
 pub mod logger;
 pub mod mcp;
 pub mod orchestration;
 pub mod plugin;
+pub mod protocol;
 pub mod retry;
-pub mod streaming;
 pub mod rules;
 pub mod session;
+pub mod store;
+pub mod streaming;
 pub mod token;
 pub mod tool;
 pub mod tools;
@@ -47,13 +51,13 @@ pub use anthropic::{
     Tool as ApiTool, // Anthropic API tool definition format
     Usage,
 };
-pub use config::{ApiConfig, Config, SessionConfig, ToolConfig, UiConfig};
-pub use conversation::{
-    Conversation, ConversationError, ConversationManager, ConversationMessage, ConversationMetadata,
-};
 pub use cache::{
     create_api_cache, create_llm_cache, ApiCache, ApiCacheKey, CacheEntry, CacheStats, LLMCache,
     LLMCacheKey, TTLCache,
+};
+pub use config::{ApiConfig, Config, SessionConfig, ToolConfig, UiConfig};
+pub use conversation::{
+    Conversation, ConversationError, ConversationManager, ConversationMessage, ConversationMetadata,
 };
 pub use error::Error;
 pub use error_policy::{CircuitBreaker, CircuitState, FallbackStrategy};
@@ -63,8 +67,8 @@ pub use git::{
     has_uncommitted_changes, is_in_git_repo, is_valid_repository,
 };
 pub use github::{
-    Comment, CreateIssueRequest, CreatePullRequestRequest, GitHubClient, Issue, Label,
-    PullRequest, User,
+    Comment, CreateIssueRequest, CreatePullRequestRequest, GitHubClient, Issue, Label, PullRequest,
+    User,
 };
 pub use github_tools::{
     create_github_tool_registry, AddCommentTool, AddLabelsTool, CreateIssueTool,
@@ -72,6 +76,9 @@ pub use github_tools::{
 };
 pub use hooks::{Hook, HookAction, HookContext, HookEvent, HookManager, HookResult, HooksConfig};
 pub use logger::{init_logger, init_logger_with_config, LogFormat, LogLevel, LoggerConfig};
+pub use mcp::{
+    McpConfig, McpError, McpManager, McpRequest, McpResponse, McpServer, McpServerConfig, McpTool,
+};
 pub use plugin::{Plugin, PluginContext, PluginManager, PluginMetadata, PluginResult, PluginState};
 pub use retry::{retry_with_backoff, RetryConfig as BackoffRetryConfig};
 pub use rules::{AgentPreferences, MiyabiRules, Rule, RulesError, RulesLoader};
@@ -87,17 +94,14 @@ pub use workflow::{
     FailurePolicy, StepCondition, StepResult, StepStatus, Workflow, WorkflowContext,
     WorkflowManager, WorkflowResult, WorkflowStatus, WorkflowStep,
 };
-pub use mcp::{
-    McpConfig, McpError, McpManager, McpRequest, McpResponse, McpServer, McpServerConfig, McpTool,
-};
 pub mod openclaw;
-pub use openclaw::{AgentInfo, OpenClawClient, OpenClawError, OpenClawResult};
 pub use dag::{
     DAGError, Task as DAGTask, TaskGraph, TaskGraphBuilder, TaskId, TaskLevel, TaskNode,
 };
+pub use openclaw::{AgentInfo, OpenClawClient, OpenClawError, OpenClawResult};
 pub use orchestration::{
     create_orchestrator, Orchestrator, OrchestratorTask, ParallelConfig, ParallelResult, TaskResult,
 };
 pub use streaming::{
-    create_streaming_agent, AgentStreamEvent, StreamingAgent, StreamingConfig, StreamProcessor,
+    create_streaming_agent, AgentStreamEvent, StreamProcessor, StreamingAgent, StreamingConfig,
 };

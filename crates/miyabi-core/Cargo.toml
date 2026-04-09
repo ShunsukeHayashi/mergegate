@@ -24,6 +24,7 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 regex = { workspace = true }
+fs2 = { workspace = true }
 git2 = "0.19"
 serde_yaml = "0.9"
 dirs = "5"
