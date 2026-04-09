@@ -1,0 +1,7 @@
+# Polaris IP Protection: linguist 除外
+crates/miyabi-core/src/protocol.rs linguist-generated
+crates/miyabi-core/src/gate.rs linguist-generated
+crates/miyabi-core/src/lock.rs linguist-generated
+crates/miyabi-core/src/store.rs linguist-generated
+crates/miyabi-core/src/dream.rs linguist-generated
+project_memory/** linguist-generated
