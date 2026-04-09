@@ -1298,6 +1298,10 @@ fn handle_gate_command(
             emit_gate_error(format, "gate_rejected", &message);
             1
         }
+        Err(ProtocolError::DependencyBlocked(message)) => {
+            emit_gate_error(format, "gate_rejected", &message);
+            1
+        }
         Err(ProtocolError::Input(message)) => {
             emit_gate_error(format, "input_error", &message);
             2

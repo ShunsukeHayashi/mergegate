@@ -178,6 +178,28 @@ impl DeterministicExecutionProtocol {
         node: &str,
         files: &[String],
     ) -> ProtocolResult<AssignmentResult> {
+        let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
+        let blocked_by = snapshot
+            .get_task(task_id)
+            .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?
+            .dependencies
+            .iter()
+            .filter_map(|dependency| {
+                snapshot
+                    .get_task(dependency)
+                    .filter(|dep| {
+                        !matches!(dep.current_state, TaskState::Done | TaskState::Merged)
+                    })
+                    .map(|_| dependency.clone())
+            })
+            .collect::<Vec<_>>();
+        if !blocked_by.is_empty() {
+            return Err(ProtocolError::dependency_blocked(format!(
+                "blocked by dependencies: {}",
+                blocked_by.join(", ")
+            )));
+        }
+
         self.run(task_id, &[Gate::Gate2], agent, node)?;
         let conflict = self
             .lock_manager
@@ -284,7 +306,9 @@ impl DeterministicExecutionProtocol {
         node: &str,
     ) -> ProtocolResult<ExecutionTask> {
         if merge_commit_sha.len() != 40 || !merge_commit_sha.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(ProtocolError::input("merge sha must be a 40-char hex string"));
+            return Err(ProtocolError::gate_rejected(
+                "merge sha must be a 40-char hex string",
+            ));
         }
 
         self.update_task(task_id, actor, node, TaskEventType::MergeVerified, |task| {
@@ -487,6 +511,8 @@ pub struct DispatchableReport {
 pub enum ProtocolError {
     #[error("gate rejected: {0}")]
     GateRejected(String),
+    #[error("dependency blocked: {0}")]
+    DependencyBlocked(String),
     #[error("input error: {0}")]
     Input(String),
     #[error("{0}")]
@@ -496,6 +522,10 @@ pub enum ProtocolError {
 impl ProtocolError {
     pub fn gate_rejected(msg: impl Into<String>) -> Self {
         Self::GateRejected(msg.into())
+    }
+
+    pub fn dependency_blocked(msg: impl Into<String>) -> Self {
+        Self::DependencyBlocked(msg.into())
     }
 
     pub fn input(msg: impl Into<String>) -> Self {
@@ -734,5 +764,74 @@ mod tests {
                 .as_deref(),
             Some("0123456789abcdef0123456789abcdef01234567")
         );
+    }
+
+    #[test]
+    fn assign_returns_dependency_blocked_when_hard_dependency_is_unresolved() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    task_id: "phase-b".into(),
+                    title: "Phase B".into(),
+                    dependencies: vec!["phase-a".into()],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let err = protocol
+            .assign(
+                "phase-b",
+                "codex",
+                "macbook",
+                &[String::from("crates/miyabi-core/src/protocol.rs")],
+            )
+            .unwrap_err();
+
+        assert!(matches!(err, ProtocolError::DependencyBlocked(_)));
+    }
+
+    #[test]
+    fn record_merge_treats_invalid_sha_as_gate_rejection() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+
+        let err = protocol
+            .record_merge("phase-a", "not-a-valid-sha", "codex", "macbook")
+            .unwrap_err();
+
+        assert!(matches!(err, ProtocolError::GateRejected(_)));
     }
 }
