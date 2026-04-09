@@ -258,6 +258,24 @@ enum GateCommand {
     },
 }
 
+#[derive(Debug)]
+struct AssignPlanAttachment {
+    attachment_type: String,
+    source: String,
+    token_estimate: usize,
+    content: String,
+}
+
+#[derive(Debug)]
+struct AssignExecutionPlan {
+    task_title: String,
+    risk_level: Option<String>,
+    locked_files: Vec<String>,
+    completion_mode: String,
+    context_attachments: Vec<AssignPlanAttachment>,
+    next_steps: Vec<String>,
+}
+
 /// Collab canvas subcommands — wraps the collab CLI at ~/.local/bin/collab
 #[derive(Subcommand)]
 enum CollabCommand {
@@ -1279,12 +1297,23 @@ fn handle_gate_command(
             files,
         } => protocol
             .assign(&task_id, &agent, &agent_node, &files)
-            .map(|result| {
+            .and_then(|result| {
+                let attachments = protocol.attach_context(&task_id, actor, &node)?;
+                let plan = build_assign_execution_plan(&result.task, attachments);
                 if matches!(format, OutputFormat::Json) {
-                    println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "assignment": result,
+                            "plan": assign_plan_to_json(&plan),
+                        }))
+                        .unwrap()
+                    );
                 } else {
                     println!("assigned: {} -> {}@{}", result.task.id, agent, agent_node);
+                    print_assign_execution_plan(&result, &plan);
                 }
+                Ok(())
             }),
         GateCommand::Impact {
             task_id,
@@ -1510,6 +1539,132 @@ fn handle_gate_command(
             emit_gate_error(format, "internal_error", &error.to_string());
             1
         }
+    })
+}
+
+fn build_assign_execution_plan(
+    task: &miyabi_core::store::ExecutionTask,
+    attachments: Vec<miyabi_core::store::ContextAttachment>,
+) -> AssignExecutionPlan {
+    AssignExecutionPlan {
+        task_title: task.title.clone(),
+        risk_level: task.impact.as_ref().map(|impact| match impact.risk_level {
+            miyabi_core::store::ImpactRiskLevel::Low => "low".to_string(),
+            miyabi_core::store::ImpactRiskLevel::Medium => "medium".to_string(),
+            miyabi_core::store::ImpactRiskLevel::High => "high".to_string(),
+            miyabi_core::store::ImpactRiskLevel::Critical => "critical".to_string(),
+        }),
+        locked_files: task
+            .lock
+            .as_ref()
+            .map(|lock| lock.affected_files.clone())
+            .unwrap_or_default(),
+        completion_mode: completion_mode_label(task.completion_mode).to_string(),
+        context_attachments: attachments
+            .into_iter()
+            .map(|attachment| AssignPlanAttachment {
+                attachment_type: attachment.attachment_type,
+                source: attachment.source,
+                token_estimate: attachment.token_estimate,
+                content: attachment.content,
+            })
+            .collect(),
+        next_steps: assign_next_steps(&task.id, task.completion_mode),
+    }
+}
+
+fn completion_mode_label(mode: miyabi_core::store::CompletionMode) -> &'static str {
+    match mode {
+        miyabi_core::store::CompletionMode::GithubPr => "github-pr",
+        miyabi_core::store::CompletionMode::Manual => "manual",
+        miyabi_core::store::CompletionMode::ExternalOp => "external-op",
+    }
+}
+
+fn assign_next_steps(
+    task_id: &str,
+    completion_mode: miyabi_core::store::CompletionMode,
+) -> Vec<String> {
+    match completion_mode {
+        miyabi_core::store::CompletionMode::GithubPr => vec![
+            "1. Create branch".to_string(),
+            "2. Make changes".to_string(),
+            format!("3. miyabi gate branch {task_id} ..."),
+            format!("4. miyabi gate pr {task_id} ..."),
+            format!("5. miyabi gate merge {task_id} ..."),
+        ],
+        miyabi_core::store::CompletionMode::Manual => vec![
+            "1. Complete the work".to_string(),
+            format!("2. miyabi gate manual-complete {task_id} --reason ... --operator ..."),
+        ],
+        miyabi_core::store::CompletionMode::ExternalOp => vec![
+            "1. Complete external operation".to_string(),
+            format!("2. miyabi gate manual-complete {task_id} --reason ... --operator ..."),
+        ],
+    }
+}
+
+fn print_assign_execution_plan(
+    result: &miyabi_core::protocol::AssignmentResult,
+    plan: &AssignExecutionPlan,
+) {
+    println!("task title: {}", plan.task_title);
+    println!(
+        "risk level: {}",
+        plan.risk_level.as_deref().unwrap_or("not recorded")
+    );
+
+    if plan.locked_files.is_empty() {
+        println!("locked files: none");
+    } else {
+        println!("locked files:");
+        for file in &plan.locked_files {
+            println!("  - {}", file);
+        }
+    }
+
+    println!("completion mode: {}", plan.completion_mode);
+
+    if plan.context_attachments.is_empty() {
+        println!("context attachments: none");
+    } else {
+        println!("context attachments:");
+        for attachment in &plan.context_attachments {
+            println!(
+                "  - [{}] {} ({} tokens)",
+                attachment.attachment_type, attachment.source, attachment.token_estimate
+            );
+            println!("{}", attachment.content);
+        }
+    }
+
+    println!("next steps:");
+    for step in &plan.next_steps {
+        println!("  {}", step);
+    }
+
+    if result.lock_conflict.conflicting {
+        println!("lock conflict: true");
+    }
+}
+
+fn assign_plan_to_json(plan: &AssignExecutionPlan) -> serde_json::Value {
+    serde_json::json!({
+        "task_title": plan.task_title,
+        "risk_level": plan.risk_level,
+        "locked_files": plan.locked_files,
+        "completion_mode": plan.completion_mode,
+        "context_attachments": plan
+            .context_attachments
+            .iter()
+            .map(|attachment| serde_json::json!({
+                "attachment_type": attachment.attachment_type,
+                "source": attachment.source,
+                "token_estimate": attachment.token_estimate,
+                "content": attachment.content,
+            }))
+            .collect::<Vec<_>>(),
+        "next_steps": plan.next_steps,
     })
 }
 
