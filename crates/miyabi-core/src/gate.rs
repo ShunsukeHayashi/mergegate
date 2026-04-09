@@ -38,17 +38,9 @@ impl Gate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GateContext {
     pub lock_conflict: Option<LockConflict>,
-}
-
-impl Default for GateContext {
-    fn default() -> Self {
-        Self {
-            lock_conflict: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,7 +126,7 @@ pub fn evaluate_gate(
                 .unwrap_or_else(|| "missing branch_name".to_string()),
         ),
         Gate::Gate6 => {
-            let ok = task.github_evidence.as_ref().map_or(false, |evidence| {
+            let ok = task.github_evidence.as_ref().is_some_and(|evidence| {
                 evidence.pr_number > 0
                     && !evidence.pr_head_ref.is_empty()
                     && matches!(
@@ -152,7 +144,7 @@ pub fn evaluate_gate(
             )
         }
         Gate::Gate7 => {
-            let ok = task.github_evidence.as_ref().map_or(false, |evidence| {
+            let ok = task.github_evidence.as_ref().is_some_and(|evidence| {
                 evidence.pr_state == GitHubPrState::Merged && evidence.merge_commit_sha.is_some()
             });
             (
@@ -167,7 +159,7 @@ pub fn evaluate_gate(
         Gate::Gate8 => {
             let ok = match task.completion_mode {
                 CompletionMode::GithubPr => {
-                    task.github_evidence.as_ref().map_or(false, |evidence| {
+                    task.github_evidence.as_ref().is_some_and(|evidence| {
                         evidence.issue_state == GitHubIssueState::Closed
                     })
                 }

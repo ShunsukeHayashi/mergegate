@@ -782,7 +782,7 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(code);
         }
         Some(Commands::Openclaw { command }) => {
-            use miyabi_core::openclaw::{OpenClawClient, OpenClawResult};
+            use miyabi_core::openclaw::OpenClawClient;
             use std::env;
 
             // Get OpenClaw configuration
@@ -822,8 +822,6 @@ async fn main() -> anyhow::Result<()> {
                 eprintln!("  Or add to ~/.miyabi/config.toml");
                 return Ok(());
             }
-
-            let client = OpenClawClient::new(gateway_url.clone(), token.clone());
 
             // Handle Status command separately to avoid borrowing issues
             if let OpenclawCommand::Status = command {
@@ -1112,7 +1110,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn handle_gate_command(
     format: &OutputFormat,
-    store_path: &PathBuf,
+    store_path: &std::path::Path,
     command: GateCommand,
 ) -> anyhow::Result<i32> {
     use miyabi_core::protocol::{
@@ -1121,7 +1119,7 @@ fn handle_gate_command(
     };
     use miyabi_core::store::{CompletionMode, ImpactRiskLevel};
 
-    let protocol = DeterministicExecutionProtocol::from_store_path(store_path.clone());
+    let protocol = DeterministicExecutionProtocol::from_store_path(store_path.to_path_buf());
     let actor = "miyabi-cli";
     let node = std::env::var("HOSTNAME")
         .ok()

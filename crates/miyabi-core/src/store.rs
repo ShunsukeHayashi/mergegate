@@ -358,7 +358,7 @@ impl SnapshotStore {
             Ok(())
         })();
 
-        let unlock_result = lock_file.unlock();
+        let unlock_result = fs2::FileExt::unlock(&lock_file);
         result?;
         unlock_result?;
         Ok(())

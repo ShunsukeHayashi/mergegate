@@ -165,9 +165,9 @@ impl DeterministicExecutionProtocol {
                 .get_task(task_id)
                 .cloned()
                 .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?;
-            Ok(StatusReport::Task(task))
+            Ok(StatusReport::Task(Box::new(task)))
         } else {
-            Ok(StatusReport::Snapshot(snapshot))
+            Ok(StatusReport::Snapshot(Box::new(snapshot)))
         }
     }
 
@@ -469,8 +469,8 @@ pub struct ImpactInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StatusReport {
-    Task(ExecutionTask),
-    Snapshot(TasksSnapshot),
+    Task(Box<ExecutionTask>),
+    Snapshot(Box<TasksSnapshot>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

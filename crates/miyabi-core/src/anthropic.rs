@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::time::Duration;
 use thiserror::Error;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 /// Anthropic API base URL
 const API_BASE_URL: &str = "https://api.anthropic.com";
