@@ -36,3 +36,20 @@
 
 - [ ] Heartbeat + Telegram + VOICEBOX が全て動作
 - [ ] `git tag v1.2-ops-ready`
+
+## 3.6 Web ダッシュボード（人間用）
+
+- [ ] `miyabi gate serve` サブコマンド追加（localhost:4848）
+- [ ] `miyabi gate --format json status` の出力を HTML で描画
+- [ ] DAG をノードグラフで可視化（d3.js or mermaid）
+- [ ] ファイルロック一覧をリアルタイム表示
+- [ ] タスク状態を色分け（pending=灰, implementing=青, merged=緑, blocked=赤）
+- [ ] 自動リロード（2秒間隔で tasks.json を polling）
+- [ ] スマホ対応（レスポンシブ）
+- [ ] GitNexus WebView (`npx gitnexus serve`) と同じ方式: 静的 HTML + JSON API
+
+## 3.7 TUI ダッシュボード（エージェント用、Sprint 4 以降）
+
+- [ ] miyabi-tui に DTP タブを追加
+- [ ] tasks.json を読んで DAG + ロック + 状態を表示
+- [ ] `miyabi tui` で起動、Tab キーで DTP 画面に切り替え
