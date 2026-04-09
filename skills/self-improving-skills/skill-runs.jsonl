@@ -1,0 +1,3 @@
+{"ts":"2026-04-09T16:35:38.725Z","agent":"codex","skill":"context-and-impact","task":"DTP Phase A: miyabi-core に gate/lock/store/protocol を追加し cargo test とコミットまで完了","result":"success","score":0.95,"notes":""}
+{"ts":"2026-04-09T21:17:09.658Z","agent":"codex","skill":"context-and-impact","task":"DTP Phase B: miyabi gate CLI サブコマンド追加、protocol API 拡張、cargo test とコミット完了","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-09T21:27:55.420Z","agent":"codex","skill":"context-and-impact","task":"miyabi-core の clippy 7件を解消し clippy/test を通過確認。ただし HEAD 差分ゼロのため指定コミットは未作成","result":"partial","score":0.78,"notes":""}
