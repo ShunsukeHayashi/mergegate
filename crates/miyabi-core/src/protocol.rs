@@ -1,18 +1,24 @@
 //! Deterministic execution protocol entry point.
 
+use crate::dream::DreamReport;
 use crate::error::Error;
 use crate::gate::{evaluate_gate, validate_branch_name, Gate, GateContext, GateReport};
 use crate::lock::{FileLockManager, LeaseConfig, LockConflict};
 use crate::store::{
-    CompletionMode, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState, GitHubPrState,
-    HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent, TaskEventType,
-    TaskImpact, TaskState, TasksSnapshot,
+    CompletionMode, ContextAttachment, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState,
+    GitHubPrState, HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent,
+    TaskEventType, TaskImpact, TaskState, TasksSnapshot,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+const MAX_CONTEXT_TOKENS: usize = 4_000;
+const FILE_SNIPPET_LINE_LIMIT: usize = 30;
 
 #[derive(Debug, Clone)]
 pub struct DeterministicExecutionProtocol {
@@ -132,6 +138,7 @@ impl DeterministicExecutionProtocol {
         }
 
         let mut task = ExecutionTask::new(&request.task_id, request.title);
+        task.issue_number = request.issue;
         task.current_state = TaskState::Pending;
         task.dependencies = request.dependencies;
         task.soft_dependencies = request.soft_dependencies;
@@ -222,6 +229,21 @@ impl DeterministicExecutionProtocol {
             .has_conflict(files)
             .map_err(ProtocolError::from)?;
         if conflict.conflicting {
+            self.append_event(
+                task_id,
+                TaskEventType::GateRejected,
+                agent,
+                node,
+                snapshot.version + 1,
+                serde_json::json!({
+                    "gate": Gate::Gate4.label(),
+                    "detail": format!(
+                        "lock conflict held by {}",
+                        conflict.held_by.as_deref().unwrap_or("unknown")
+                    ),
+                    "files": files,
+                }),
+            )?;
             return Err(ProtocolError::gate_rejected(format!(
                 "lock conflict held by {}",
                 conflict.held_by.unwrap_or_else(|| "unknown".to_string())
@@ -231,6 +253,7 @@ impl DeterministicExecutionProtocol {
         self.lock_manager
             .acquire_lock(task_id, agent, node, files)
             .map_err(ProtocolError::from)?;
+        self.attach_context(task_id, agent, node)?;
 
         let task = self.transition_task(task_id, TaskState::Implementing, agent, node)?;
         Ok(AssignmentResult {
@@ -389,6 +412,43 @@ impl DeterministicExecutionProtocol {
         Ok(compute_dag(&snapshot))
     }
 
+    pub fn dream(
+        &self,
+        since: Option<chrono::Duration>,
+        actor: &str,
+        node: &str,
+    ) -> ProtocolResult<DreamReport> {
+        let report = crate::dream::dream(&self.event_store, since).map_err(ProtocolError::from)?;
+        let version = self
+            .snapshot_store
+            .load()
+            .map_err(ProtocolError::from)?
+            .version;
+        self.append_event(
+            "__dream__",
+            TaskEventType::DreamRecorded,
+            actor,
+            node,
+            version,
+            serde_json::json!({
+                "events_processed": report.events_processed,
+                "gate_rejections": report.patterns.gate_rejections.len(),
+                "lock_conflicts": report.patterns.lock_conflicts.len(),
+                "learnings": report.learnings.len(),
+            }),
+        )?;
+        Ok(report)
+    }
+
+    pub fn attach_context(
+        &self,
+        task_id: &str,
+        actor: &str,
+        node: &str,
+    ) -> ProtocolResult<Vec<ContextAttachment>> {
+        self.attach_context_with_limit(task_id, actor, node, MAX_CONTEXT_TOKENS)
+    }
+
     pub fn dispatchable(&self) -> ProtocolResult<DispatchableReport> {
         let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
         let tasks = snapshot
@@ -411,6 +471,33 @@ impl DeterministicExecutionProtocol {
             .cloned()
             .collect();
         Ok(DispatchableReport { tasks })
+    }
+
+    fn attach_context_with_limit(
+        &self,
+        task_id: &str,
+        actor: &str,
+        node: &str,
+        max_context_tokens: usize,
+    ) -> ProtocolResult<Vec<ContextAttachment>> {
+        let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
+        let task = snapshot
+            .get_task(task_id)
+            .cloned()
+            .ok_or_else(|| ProtocolError::input(format!("unknown task: {task_id}")))?;
+        let attachments = self.build_context_attachments(&task, max_context_tokens)?;
+        let payload = serde_json::to_value(&attachments).map_err(Error::from)?;
+        self.update_task(
+            task_id,
+            actor,
+            node,
+            TaskEventType::ContextAttached,
+            |task| {
+                task.context_attachments = attachments.clone();
+                Ok(payload.clone())
+            },
+        )?;
+        Ok(attachments)
     }
 
     fn transition_task(
@@ -512,6 +599,87 @@ impl DeterministicExecutionProtocol {
                 "duration_ms": report.duration.as_millis(),
             }),
         )
+    }
+
+    fn build_context_attachments(
+        &self,
+        task: &ExecutionTask,
+        max_context_tokens: usize,
+    ) -> ProtocolResult<Vec<ContextAttachment>> {
+        let mut attachments = Vec::new();
+        let mut remaining_tokens = max_context_tokens;
+
+        if task.issue_number > 0 {
+            push_attachment(
+                &mut attachments,
+                &mut remaining_tokens,
+                "issue",
+                &format!("github://issue/{}", task.issue_number),
+                &format!("Issue #{}", task.issue_number),
+            );
+        }
+
+        if let Some(impact) = &task.impact {
+            push_attachment(
+                &mut attachments,
+                &mut remaining_tokens,
+                "impact",
+                &format!("dtp://impact/{}", task.id),
+                &format!(
+                    "risk_level: {:?}\naffected_symbols: {}",
+                    impact.risk_level, impact.affected_symbols
+                ),
+            );
+        }
+
+        if let Some(lock) = &task.lock {
+            for file in &lock.affected_files {
+                if remaining_tokens == 0 {
+                    break;
+                }
+                let source_path = self.resolve_attachment_path(file);
+                if !source_path.exists() {
+                    continue;
+                }
+                let content = read_file_snippet(&source_path, FILE_SNIPPET_LINE_LIMIT)
+                    .map_err(ProtocolError::from)?;
+                push_attachment(
+                    &mut attachments,
+                    &mut remaining_tokens,
+                    "file_snippet",
+                    &source_path.display().to_string(),
+                    &content,
+                );
+            }
+        }
+
+        Ok(attachments)
+    }
+
+    fn resolve_attachment_path(&self, source: &str) -> PathBuf {
+        let path = PathBuf::from(source);
+        if path.is_absolute() {
+            return path;
+        }
+
+        let store_relative = self
+            .snapshot_store
+            .path()
+            .parent()
+            .map(|base| base.join(path))
+            .unwrap_or_else(|| PathBuf::from(source));
+        if store_relative.exists() {
+            return store_relative;
+        }
+
+        let cwd_relative = std::env::current_dir()
+            .map(|cwd| cwd.join(source))
+            .unwrap_or_else(|_| PathBuf::from(source));
+        if cwd_relative.exists() {
+            return cwd_relative;
+        }
+
+        store_relative
     }
 
     fn unblock_dependents_after_merge(
@@ -660,6 +828,73 @@ fn dependencies_satisfied(task: &ExecutionTask, snapshot: &TasksSnapshot) -> boo
     })
 }
 
+fn push_attachment(
+    attachments: &mut Vec<ContextAttachment>,
+    remaining_tokens: &mut usize,
+    attachment_type: &str,
+    source: &str,
+    content: &str,
+) {
+    if *remaining_tokens == 0 {
+        return;
+    }
+
+    let truncated_content = truncate_to_token_budget(content, *remaining_tokens);
+    let token_estimate = estimate_tokens(&truncated_content);
+    if token_estimate == 0 {
+        return;
+    }
+
+    *remaining_tokens = remaining_tokens.saturating_sub(token_estimate);
+    attachments.push(ContextAttachment {
+        attachment_type: attachment_type.to_string(),
+        source: source.to_string(),
+        content: truncated_content,
+        token_estimate,
+    });
+}
+
+fn truncate_to_token_budget(content: &str, max_tokens: usize) -> String {
+    if max_tokens == 0 {
+        return String::new();
+    }
+
+    let max_chars = max_tokens.saturating_mul(4);
+    let content_chars = content.chars().count();
+    if content_chars <= max_chars {
+        return content.to_string();
+    }
+
+    let truncated: String = content.chars().take(max_chars).collect();
+    if max_chars >= 3 {
+        format!(
+            "{}...",
+            truncated.chars().take(max_chars - 3).collect::<String>()
+        )
+    } else {
+        truncated
+    }
+}
+
+fn estimate_tokens(content: &str) -> usize {
+    let char_count = content.chars().count();
+    if char_count == 0 {
+        0
+    } else {
+        char_count.div_ceil(4)
+    }
+}
+
+fn read_file_snippet(path: &Path, max_lines: usize) -> Result<String, Error> {
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut lines = Vec::new();
+    for line in reader.lines().take(max_lines) {
+        lines.push(line?);
+    }
+    Ok(lines.join("\n"))
+}
+
 fn recompute_dependents(snapshot: &mut TasksSnapshot) {
     let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
     for task in &snapshot.tasks {
@@ -733,6 +968,7 @@ fn compute_dag(snapshot: &TasksSnapshot) -> DagReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::TempDir;
 
     fn fixture() -> (TempDir, DeterministicExecutionProtocol) {
@@ -917,6 +1153,128 @@ mod tests {
             Some("0123456789abcdef0123456789abcdef01234567")
         );
         assert!(protocol.locks().unwrap().is_empty());
+    }
+
+    #[test]
+    fn attach_context_collects_issue_impact_and_file_snippets() {
+        let (tmp, protocol) = fixture();
+        let src_dir = tmp.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let file_path = src_dir.join("lib.rs");
+        let file_content = (1..=35)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&file_path, file_content).unwrap();
+
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 42,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::Low,
+                    affected_symbols: 7,
+                    depth1: vec!["attach_context".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .assign("phase-a", "codex", "macbook", &[String::from("src/lib.rs")])
+            .unwrap();
+
+        let attachments = protocol
+            .attach_context("phase-a", "codex", "macbook")
+            .unwrap();
+
+        assert_eq!(attachments.len(), 3);
+        assert_eq!(attachments[0].attachment_type, "issue");
+        assert_eq!(attachments[0].content, "Issue #42");
+        assert_eq!(attachments[1].attachment_type, "impact");
+        assert!(attachments[1].content.contains("affected_symbols: 7"));
+        assert_eq!(attachments[2].attachment_type, "file_snippet");
+        assert!(attachments[2].content.contains("line 1"));
+        assert!(attachments[2].content.contains("line 30"));
+        assert!(!attachments[2].content.contains("line 31"));
+
+        let task = match protocol.status(Some("phase-a")).unwrap() {
+            StatusReport::Task(task) => task,
+            StatusReport::Snapshot(_) => panic!("expected task status"),
+        };
+        assert_eq!(task.issue_number, 42);
+        assert_eq!(task.context_attachments.len(), 3);
+    }
+
+    #[test]
+    fn attach_context_trims_to_token_budget() {
+        let (tmp, protocol) = fixture();
+        let src_dir = tmp.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(
+            src_dir.join("big.rs"),
+            "abcdefghijklmnopqrstuvwxyz".repeat(40),
+        )
+        .unwrap();
+
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 9,
+                    task_id: "phase-a".into(),
+                    title: "Phase A".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::Low,
+                    affected_symbols: 99,
+                    depth1: vec!["attach_context".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .assign("phase-a", "codex", "macbook", &[String::from("src/big.rs")])
+            .unwrap();
+
+        let attachments = protocol
+            .attach_context_with_limit("phase-a", "codex", "macbook", 8)
+            .unwrap();
+
+        let total_tokens: usize = attachments.iter().map(|item| item.token_estimate).sum();
+        assert!(total_tokens <= 8);
+        assert!(!attachments.is_empty());
     }
 
     #[test]

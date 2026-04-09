@@ -1,5 +1,6 @@
 //! Miyabi CLI - Main entry point
 
+use chrono::Duration as ChronoDuration;
 use clap::{Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
 use std::collections::HashMap;
@@ -201,6 +202,8 @@ enum GateCommand {
     },
     /// Record branch creation
     Branch { task_id: String, name: String },
+    /// Attach task context for execution
+    Attach { task_id: String },
     /// Record PR creation
     Pr { task_id: String, number: u64 },
     /// Record merge verification
@@ -211,6 +214,15 @@ enum GateCommand {
     Dag,
     /// Show dispatchable tasks
     Dispatchable,
+    /// Analyze recent event logs and extract learnings
+    Dream {
+        /// Analyze only recent events, e.g. 24h, 30m, 7d
+        #[arg(long)]
+        since: Option<String>,
+        /// Persist High learnings into docs/learnings/
+        #[arg(long)]
+        auto: bool,
+    },
 }
 
 /// Collab canvas subcommands — wraps the collab CLI at ~/.local/bin/collab
@@ -1154,6 +1166,7 @@ fn handle_gate_command(
     store_path: &std::path::Path,
     command: GateCommand,
 ) -> anyhow::Result<i32> {
+    use miyabi_core::dream::write_high_learnings;
     use miyabi_core::protocol::{
         DeterministicExecutionProtocol, ImpactInput, ProtocolError, RegisterTaskRequest,
         StatusReport,
@@ -1284,6 +1297,28 @@ fn handle_gate_command(
                     println!("branch recorded: {} -> {}", task.id, name);
                 }
             }),
+        GateCommand::Attach { task_id } => {
+            protocol
+                .attach_context(&task_id, actor, &node)
+                .map(|attachments| {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&attachments).unwrap());
+                    } else if attachments.is_empty() {
+                        println!("no context attachments: {}", task_id);
+                    } else {
+                        println!("context attachments: {}", task_id);
+                        for attachment in attachments {
+                            println!(
+                                "--- [{}] {} ({} tokens)",
+                                attachment.attachment_type,
+                                attachment.source,
+                                attachment.token_estimate
+                            );
+                            println!("{}", attachment.content);
+                        }
+                    }
+                })
+        }
         GateCommand::Pr { task_id, number } => protocol
             .record_pr(&task_id, number, actor, &node)
             .map(|task| {
@@ -1333,6 +1368,40 @@ fn handle_gate_command(
                 }
             }
         }),
+        GateCommand::Dream { since, auto } => {
+            let since = since
+                .as_deref()
+                .map(parse_gate_since)
+                .transpose()
+                .map_err(|error: anyhow::Error| ProtocolError::input(error.to_string()))?;
+            protocol.dream(since, actor, &node).and_then(|report| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                } else {
+                    print_dream_report(&report);
+                }
+
+                if auto {
+                    let written = write_high_learnings(
+                        &report,
+                        &std::env::current_dir()
+                            .map_err(|error| ProtocolError::input(error.to_string()))?
+                            .join("docs")
+                            .join("learnings"),
+                    )
+                    .map_err(ProtocolError::Internal)?;
+                    if !matches!(format, OutputFormat::Json) {
+                        if written.is_empty() {
+                            println!("high learnings: none");
+                        } else {
+                            println!("high learnings written: {}", written.len());
+                        }
+                    }
+                }
+
+                Ok(())
+            })
+        }
     };
 
     Ok(match result {
@@ -1354,6 +1423,82 @@ fn handle_gate_command(
             1
         }
     })
+}
+
+fn parse_gate_since(input: &str) -> anyhow::Result<ChronoDuration> {
+    let trimmed = input.trim();
+    if trimmed.len() < 2 {
+        return Err(anyhow::anyhow!("invalid --since value: {trimmed}"));
+    }
+
+    let (number, unit) = trimmed.split_at(trimmed.len() - 1);
+    let value: i64 = number
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid --since value: {trimmed}"))?;
+
+    match unit {
+        "s" => Ok(ChronoDuration::seconds(value)),
+        "m" => Ok(ChronoDuration::minutes(value)),
+        "h" => Ok(ChronoDuration::hours(value)),
+        "d" => Ok(ChronoDuration::days(value)),
+        _ => Err(anyhow::anyhow!(
+            "unsupported --since unit: {unit} (use s, m, h, d)"
+        )),
+    }
+}
+
+fn print_dream_report(report: &miyabi_core::DreamReport) {
+    println!("events processed: {}", report.events_processed);
+
+    if report.patterns.gate_rejections.is_empty() {
+        println!("gate rejections: none");
+    } else {
+        println!("gate rejections:");
+        let mut gates: Vec<_> = report.patterns.gate_rejections.iter().collect();
+        gates.sort_by(|left, right| left.0.cmp(right.0));
+        for (gate, count) in gates {
+            println!("  {} -> {}", gate, count);
+        }
+    }
+
+    if report.patterns.lock_conflicts.is_empty() {
+        println!("lock conflicts: none");
+    } else {
+        println!("lock conflicts:");
+        let mut files: Vec<_> = report.patterns.lock_conflicts.iter().collect();
+        files.sort_by(|left, right| left.0.cmp(right.0));
+        for (file, count) in files {
+            println!("  {} -> {}", file, count);
+        }
+    }
+
+    if report.patterns.completion_times.is_empty() {
+        println!("completion times: none");
+    } else {
+        println!("completion times:");
+        for (task_id, duration) in &report.patterns.completion_times {
+            println!("  {} -> {}s", task_id, duration.as_secs());
+        }
+    }
+
+    if report.learnings.is_empty() {
+        println!("learnings: none");
+    } else {
+        println!("learnings:");
+        for learning in &report.learnings {
+            println!(
+                "  [{:?}] {}{}",
+                learning.importance,
+                learning.title,
+                learning
+                    .related_task
+                    .as_deref()
+                    .map(|task| format!(" ({task})"))
+                    .unwrap_or_default()
+            );
+            println!("    {}", learning.content);
+        }
+    }
 }
 
 fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {

@@ -107,9 +107,19 @@ pub struct TaskLockSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextAttachment {
+    pub attachment_type: String,
+    pub source: String,
+    pub content: String,
+    pub token_estimate: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionTask {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub issue_number: u64,
     pub current_state: TaskState,
     pub dependencies: Vec<String>,
     pub dependents: Vec<String>,
@@ -120,6 +130,8 @@ pub struct ExecutionTask {
     pub github_evidence: Option<GitHubEvidence>,
     pub completion_mode: CompletionMode,
     pub human_approval: Option<HumanApproval>,
+    #[serde(default)]
+    pub context_attachments: Vec<ContextAttachment>,
     pub priority: u32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -131,6 +143,7 @@ impl ExecutionTask {
         Self {
             id: id.into(),
             title: title.into(),
+            issue_number: 0,
             current_state: TaskState::Draft,
             dependencies: Vec::new(),
             dependents: Vec::new(),
@@ -141,6 +154,7 @@ impl ExecutionTask {
             github_evidence: None,
             completion_mode: CompletionMode::GithubPr,
             human_approval: None,
+            context_attachments: Vec::new(),
             priority: 0,
             created_at: now,
             updated_at: now,
@@ -164,7 +178,9 @@ pub enum TaskEventType {
     BranchCreated,
     PrCreated,
     MergeVerified,
+    ContextAttached,
     AuditRecorded,
+    DreamRecorded,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -587,6 +603,7 @@ impl LegacyTask {
         ExecutionTask {
             id: self.id,
             title: self.title,
+            issue_number: 0,
             current_state: legacy_state(&self.state),
             dependencies: self.dependencies,
             dependents: self.dependents,
@@ -597,6 +614,7 @@ impl LegacyTask {
             github_evidence,
             completion_mode: CompletionMode::GithubPr,
             human_approval: None,
+            context_attachments: Vec::new(),
             priority: 0,
             created_at,
             updated_at,
@@ -770,5 +788,37 @@ mod tests {
         assert_eq!(task.current_state, TaskState::Implementing);
         assert!(task.lock.is_some());
         assert!(rebuilt.file_locks.contains_key("src/lib.rs"));
+    }
+
+    #[test]
+    fn snapshot_load_defaults_missing_context_attachments() {
+        let tmp = TempDir::new().unwrap();
+        let snapshot_store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let mut task_value = serde_json::to_value(sample_task("task-a")).unwrap();
+        let task_object = task_value.as_object_mut().unwrap();
+        task_object.remove("context_attachments");
+        task_object.remove("issue_number");
+
+        let raw = serde_json::json!({
+            "version": 1,
+            "generated_at": Utc::now(),
+            "generated_from_event_id": null,
+            "tasks": [task_value],
+            "file_locks": {}
+        });
+        fs::write(
+            snapshot_store.path(),
+            serde_json::to_vec_pretty(&raw).unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = snapshot_store.load().unwrap();
+        assert_eq!(snapshot.tasks.len(), 1);
+        assert_eq!(snapshot.tasks[0].issue_number, 0);
+        assert!(snapshot.tasks[0].context_attachments.is_empty());
     }
 }

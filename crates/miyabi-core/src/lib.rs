@@ -8,6 +8,7 @@ pub mod cache;
 pub mod config;
 pub mod conversation;
 pub mod dag;
+pub mod dream;
 pub mod error;
 pub mod error_policy;
 pub mod feature_flags;
@@ -98,6 +99,7 @@ pub mod openclaw;
 pub use dag::{
     DAGError, Task as DAGTask, TaskGraph, TaskGraphBuilder, TaskId, TaskLevel, TaskNode,
 };
+pub use dream::{DreamPatterns, DreamReport, Importance, Learning};
 pub use openclaw::{AgentInfo, OpenClawClient, OpenClawError, OpenClawResult};
 pub use orchestration::{
     create_orchestrator, Orchestrator, OrchestratorTask, ParallelConfig, ParallelResult, TaskResult,
