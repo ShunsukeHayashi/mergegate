@@ -29,14 +29,12 @@ pub fn find_git_root(start_path: Option<&Path>) -> Result<PathBuf> {
     };
 
     match git2::Repository::discover(&search_path) {
-        Ok(repo) => repo
-            .workdir()
-            .map(|p| p.to_path_buf())
-            .ok_or_else(|| {
-                Error::Git(
-                    "Repository is bare (no working directory). Miyabi requires a non-bare repository.".to_string()
-                )
-            }),
+        Ok(repo) => repo.workdir().map(|p| p.to_path_buf()).ok_or_else(|| {
+            Error::Git(
+                "Repository is bare (no working directory). Miyabi requires a non-bare repository."
+                    .to_string(),
+            )
+        }),
         Err(e) => Err(Error::Git(format!(
             "Not in a Git repository. Please run miyabi from within a Git repository.\n\
              Searched from: {:?}\n\

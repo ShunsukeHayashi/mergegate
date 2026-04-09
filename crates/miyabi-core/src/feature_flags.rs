@@ -66,7 +66,10 @@ impl FeatureFlagManager {
     /// `true` if the flag exists and is enabled, `false` otherwise
     pub fn is_enabled(&self, flag_name: &str) -> bool {
         let flags = self.flags.read().unwrap();
-        flags.get(flag_name).map(|flag| flag.enabled).unwrap_or(false)
+        flags
+            .get(flag_name)
+            .map(|flag| flag.enabled)
+            .unwrap_or(false)
     }
 
     /// Set a feature flag
@@ -190,7 +193,10 @@ impl FeatureFlagManager {
     /// HashMap of flag names to enabled status
     pub fn export_to_map(&self) -> HashMap<String, bool> {
         let flags = self.flags.read().unwrap();
-        flags.iter().map(|(name, flag)| (name.clone(), flag.enabled)).collect()
+        flags
+            .iter()
+            .map(|(name, flag)| (name.clone(), flag.enabled))
+            .collect()
     }
 
     /// Clear all feature flags

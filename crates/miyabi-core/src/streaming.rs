@@ -238,12 +238,8 @@ fn convert_agent_event(event: crate::agent::AgentEvent) -> AgentStreamEvent {
         crate::agent::AgentEvent::TokenUsage { input, output } => {
             AgentStreamEvent::TokenUsage { input, output }
         }
-        crate::agent::AgentEvent::Completed { result } => {
-            AgentStreamEvent::Completed { result }
-        }
-        crate::agent::AgentEvent::Failed { error } => {
-            AgentStreamEvent::Error { error }
-        }
+        crate::agent::AgentEvent::Completed { result } => AgentStreamEvent::Completed { result },
+        crate::agent::AgentEvent::Failed { error } => AgentStreamEvent::Error { error },
         crate::agent::AgentEvent::ToolApproved { .. } => {
             // Approval events are internal, map to Started
             AgentStreamEvent::Started
@@ -254,9 +250,7 @@ fn convert_agent_event(event: crate::agent::AgentEvent) -> AgentStreamEvent {
         crate::agent::AgentEvent::ToolProgress { name, .. } => {
             AgentStreamEvent::ToolStarted { name }
         }
-        crate::agent::AgentEvent::TextDelta { text } => {
-            AgentStreamEvent::TextChunk { text }
-        }
+        crate::agent::AgentEvent::TextDelta { text } => AgentStreamEvent::TextChunk { text },
     }
 }
 
@@ -353,8 +347,7 @@ mod tests {
         let client = AnthropicClient::new("test-key".to_string()).unwrap();
         let registry = ExecutorRegistry::with_standard_tools();
 
-        let agent = StreamingAgent::new(client, registry)
-            .with_system_prompt("You are helpful");
+        let agent = StreamingAgent::new(client, registry).with_system_prompt("You are helpful");
         assert_eq!(agent.system_prompt, Some("You are helpful".to_string()));
     }
 

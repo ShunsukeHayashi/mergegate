@@ -500,14 +500,22 @@ impl LegacyTasksFile {
             version: self.version,
             generated_at: Utc::now(),
             generated_from_event_id: None,
-            tasks: self.tasks.into_iter().map(LegacyTask::into_execution_task).collect(),
+            tasks: self
+                .tasks
+                .into_iter()
+                .map(LegacyTask::into_execution_task)
+                .collect(),
             file_locks: HashMap::new(),
         };
 
         for task in &snapshot.tasks {
             if let Some(lock) = &task.lock {
                 let owner_parts: Vec<&str> = lock.locked_by.split('@').collect();
-                let agent = owner_parts.first().copied().unwrap_or("unknown").to_string();
+                let agent = owner_parts
+                    .first()
+                    .copied()
+                    .unwrap_or("unknown")
+                    .to_string();
                 let node = owner_parts.get(1).copied().unwrap_or("unknown").to_string();
                 let expires_at = lease_expiry(lock.last_heartbeat, lock.lease_duration_sec);
 

@@ -2,3 +2,6 @@
 {"ts":"2026-04-09T21:17:09.658Z","agent":"codex","skill":"context-and-impact","task":"DTP Phase B: miyabi gate CLI サブコマンド追加、protocol API 拡張、cargo test とコミット完了","result":"success","score":0.96,"notes":""}
 {"ts":"2026-04-09T21:27:55.420Z","agent":"codex","skill":"context-and-impact","task":"miyabi-core の clippy 7件を解消し clippy/test を通過確認。ただし HEAD 差分ゼロのため指定コミットは未作成","result":"partial","score":0.78,"notes":""}
 {"ts":"2026-04-09T21:28:53.022Z","agent":"codex","skill":"context-and-impact","task":"clippy 7件解消の確認後、空コミットで指定メッセージを作成","result":"success","score":0.92,"notes":""}
+{"ts":"2026-04-09T21:49:02.984Z","agent":"codex","skill":"rust-development","task":"Fix GitHub Issues #56 and #57: gate exit code mapping and dependency-blocked assign behavior","result":"success","score":0.97,"notes":""}
+{"ts":"2026-04-09T21:50:24.425Z","agent":"codex","skill":"rust-llm-pitfalls","task":"Fix GitHub Issues #54 and #55 in protocol.rs with approval and merge lock handling","result":"success","score":1,"notes":""}
+{"ts":"2026-04-09T21:52:05.485Z","agent":"codex","skill":"rust-llm-pitfalls","task":"Issue #52/#53 修正: issue=0 拒否とブランチ名バリデーション実装","result":"success","score":0.95,"notes":""}

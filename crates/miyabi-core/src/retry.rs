@@ -305,10 +305,7 @@ mod tests {
     async fn test_retry_returns_correct_value() {
         let config = RetryConfig::new(1, 10, 100);
 
-        let result = retry_with_backoff(config, || async {
-            Ok::<i32, Error>(42)
-        })
-        .await;
+        let result = retry_with_backoff(config, || async { Ok::<i32, Error>(42) }).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);

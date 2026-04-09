@@ -40,8 +40,7 @@ pub enum VimMode {
 }
 
 /// Keybinding style preference
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum KeybindingStyle {
     /// Standard keybindings
     #[default]
@@ -51,7 +50,6 @@ pub enum KeybindingStyle {
     /// Emacs-style keybindings
     Emacs,
 }
-
 
 /// Edit operation for undo/redo
 #[derive(Debug, Clone)]
@@ -1479,12 +1477,14 @@ impl ChatComposer {
                 return Style::default().bg(Color::Rgb(68, 71, 90)).fg(Color::Cyan);
             }
         }
-        if line_idx == self.cursor.line && col == self.cursor.col
-            && matches!(ch, '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>') {
-                return Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD);
-            }
+        if line_idx == self.cursor.line
+            && col == self.cursor.col
+            && matches!(ch, '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>')
+        {
+            return Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD);
+        }
 
         // Basic syntax highlighting
         match ch {

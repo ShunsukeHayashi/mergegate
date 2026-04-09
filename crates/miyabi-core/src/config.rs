@@ -21,7 +21,6 @@ pub struct Config {
     pub tools: ToolConfig,
 }
 
-
 /// API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

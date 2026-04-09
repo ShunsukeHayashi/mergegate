@@ -139,8 +139,7 @@ impl GitHubClient {
 
     /// Create from environment variables
     pub fn from_env() -> Result<Self> {
-        let token = std::env::var("GITHUB_TOKEN")
-            .map_err(|_| anyhow!("GITHUB_TOKEN not set"))?;
+        let token = std::env::var("GITHUB_TOKEN").map_err(|_| anyhow!("GITHUB_TOKEN not set"))?;
         let repo = std::env::var("GITHUB_REPOSITORY")
             .or_else(|_| std::env::var("REPOSITORY"))
             .map_err(|_| anyhow!("GITHUB_REPOSITORY or REPOSITORY not set"))?;
@@ -156,7 +155,11 @@ impl GitHubClient {
     // ========== Issues ==========
 
     /// List issues
-    pub async fn list_issues(&self, state: Option<&str>, labels: Option<&str>) -> Result<Vec<Issue>> {
+    pub async fn list_issues(
+        &self,
+        state: Option<&str>,
+        labels: Option<&str>,
+    ) -> Result<Vec<Issue>> {
         let mut url = format!(
             "{}/repos/{}/{}/issues",
             self.base_url, self.owner, self.repo
@@ -230,7 +233,8 @@ impl GitHubClient {
             self.base_url, self.owner, self.repo, issue_number
         );
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&serde_json::json!({ "labels": labels }))
             .send()
@@ -253,7 +257,8 @@ impl GitHubClient {
             self.base_url, self.owner, self.repo, number
         );
 
-        let response = self.client
+        let response = self
+            .client
             .patch(&url)
             .json(&serde_json::json!({ "state": "closed" }))
             .send()
@@ -273,10 +278,7 @@ impl GitHubClient {
 
     /// List pull requests
     pub async fn list_pull_requests(&self, state: Option<&str>) -> Result<Vec<PullRequest>> {
-        let mut url = format!(
-            "{}/repos/{}/{}/pulls",
-            self.base_url, self.owner, self.repo
-        );
+        let mut url = format!("{}/repos/{}/{}/pulls", self.base_url, self.owner, self.repo);
 
         if let Some(s) = state {
             url = format!("{}?state={}", url, s);
@@ -314,11 +316,11 @@ impl GitHubClient {
     }
 
     /// Create a pull request
-    pub async fn create_pull_request(&self, request: CreatePullRequestRequest) -> Result<PullRequest> {
-        let url = format!(
-            "{}/repos/{}/{}/pulls",
-            self.base_url, self.owner, self.repo
-        );
+    pub async fn create_pull_request(
+        &self,
+        request: CreatePullRequestRequest,
+    ) -> Result<PullRequest> {
+        let url = format!("{}/repos/{}/{}/pulls", self.base_url, self.owner, self.repo);
 
         let response = self.client.post(&url).json(&request).send().await?;
 
@@ -333,7 +335,11 @@ impl GitHubClient {
     }
 
     /// Merge a pull request
-    pub async fn merge_pull_request(&self, number: u64, commit_message: Option<&str>) -> Result<()> {
+    pub async fn merge_pull_request(
+        &self,
+        number: u64,
+        commit_message: Option<&str>,
+    ) -> Result<()> {
         let url = format!(
             "{}/repos/{}/{}/pulls/{}/merge",
             self.base_url, self.owner, self.repo, number
@@ -403,10 +409,7 @@ impl GitHubClient {
 
     /// Get repository information
     pub async fn get_repo(&self) -> Result<serde_json::Value> {
-        let url = format!(
-            "{}/repos/{}/{}",
-            self.base_url, self.owner, self.repo
-        );
+        let url = format!("{}/repos/{}/{}", self.base_url, self.owner, self.repo);
 
         let response = self.client.get(&url).send().await?;
 

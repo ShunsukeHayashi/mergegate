@@ -257,7 +257,9 @@ mod tests {
         let cache = TTLCache::new(Duration::from_secs(3600)); // default 1 hour
 
         // Insert with shorter custom TTL
-        cache.insert_with_ttl("key1", "value1", Duration::from_millis(50)).await;
+        cache
+            .insert_with_ttl("key1", "value1", Duration::from_millis(50))
+            .await;
         assert_eq!(cache.get(&"key1").await, Some("value1"));
 
         sleep(Duration::from_millis(100)).await;
@@ -301,7 +303,9 @@ mod tests {
         let cache = TTLCache::new(Duration::from_millis(50));
 
         cache.insert("key1", "value1").await;
-        cache.insert_with_ttl("key2", "value2", Duration::from_secs(3600)).await;
+        cache
+            .insert_with_ttl("key2", "value2", Duration::from_secs(3600))
+            .await;
 
         sleep(Duration::from_millis(100)).await;
 
@@ -437,7 +441,9 @@ mod tests {
         assert!(cache.get(&key).await.is_none());
 
         // Insert
-        cache.insert(key.clone(), "Response from LLM".to_string()).await;
+        cache
+            .insert(key.clone(), "Response from LLM".to_string())
+            .await;
 
         // Hit
         let cached = cache.get(&key).await;

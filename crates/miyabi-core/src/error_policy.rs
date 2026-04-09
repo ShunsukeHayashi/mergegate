@@ -315,7 +315,9 @@ mod tests {
     fn test_fallback_strategy_lower_temperature() {
         let strategy = FallbackStrategy::lower_temperature();
         match strategy {
-            FallbackStrategy::RetryWithLowerTemperature { temperature_reduction } => {
+            FallbackStrategy::RetryWithLowerTemperature {
+                temperature_reduction,
+            } => {
                 assert_eq!(temperature_reduction, 0.2);
             }
             _ => panic!("Expected RetryWithLowerTemperature"),

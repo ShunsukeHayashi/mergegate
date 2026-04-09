@@ -327,8 +327,8 @@ mod tests {
 
     #[test]
     fn test_orchestrator_task_with_system_prompt() {
-        let task = OrchestratorTask::new("task-1", "Do something")
-            .with_system_prompt("You are helpful");
+        let task =
+            OrchestratorTask::new("task-1", "Do something").with_system_prompt("You are helpful");
         assert_eq!(task.system_prompt, Some("You are helpful".to_string()));
     }
 

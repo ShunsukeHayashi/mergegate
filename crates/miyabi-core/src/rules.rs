@@ -649,7 +649,11 @@ settings:
         let loader = RulesLoader::new(temp_dir.path().to_path_buf());
 
         // Invalid YAML
-        std::fs::write(temp_dir.path().join(".miyabirules"), "invalid: yaml: content:").unwrap();
+        std::fs::write(
+            temp_dir.path().join(".miyabirules"),
+            "invalid: yaml: content:",
+        )
+        .unwrap();
 
         let result = loader.load();
         assert!(result.is_err());

@@ -145,16 +145,15 @@ impl App {
             Ok(Some(rules)) => {
                 let count = rules.rules.len();
                 if count > 0 {
-                    view.notifications.info(
-                        "Rules Loaded",
-                        format!("{} project rules active", count),
-                    );
+                    view.notifications
+                        .info("Rules Loaded", format!("{} project rules active", count));
                 }
                 Some(rules)
             }
             Ok(None) => None,
             Err(e) => {
-                view.notifications.error("Rules Error", format!("Failed to load: {}", e));
+                view.notifications
+                    .error("Rules Error", format!("Failed to load: {}", e));
                 None
             }
         };
@@ -280,9 +279,10 @@ impl App {
                                                     .notifications
                                                     .error("Clipboard Error", e.to_string());
                                             } else {
-                                                self.view
-                                                    .notifications
-                                                    .info("Copied", format!("{} chars", text.len()));
+                                                self.view.notifications.info(
+                                                    "Copied",
+                                                    format!("{} chars", text.len()),
+                                                );
                                             }
                                         }
                                         Err(e) => {
@@ -305,7 +305,8 @@ impl App {
                                 #[cfg(target_os = "macos")]
                                 let result = std::process::Command::new("open").arg(&path).spawn();
                                 #[cfg(target_os = "linux")]
-                                let result = std::process::Command::new("xdg-open").arg(&path).spawn();
+                                let result =
+                                    std::process::Command::new("xdg-open").arg(&path).spawn();
                                 #[cfg(target_os = "windows")]
                                 let result = std::process::Command::new("cmd")
                                     .args(["/C", "start", "", &path])
@@ -316,9 +317,7 @@ impl App {
                                         self.view.notifications.info("Opened", &path);
                                     }
                                     Err(e) => {
-                                        self.view
-                                            .notifications
-                                            .error("Open Error", e.to_string());
+                                        self.view.notifications.error("Open Error", e.to_string());
                                     }
                                 }
                             }

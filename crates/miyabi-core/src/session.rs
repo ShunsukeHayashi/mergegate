@@ -353,9 +353,11 @@ mod tests {
 
     #[test]
     fn test_session_with_system_prompt() {
-        let session = Session::new("Test")
-            .system_prompt("You are a helpful assistant");
-        assert_eq!(session.system_prompt, Some("You are a helpful assistant".to_string()));
+        let session = Session::new("Test").system_prompt("You are a helpful assistant");
+        assert_eq!(
+            session.system_prompt,
+            Some("You are a helpful assistant".to_string())
+        );
     }
 
     #[test]

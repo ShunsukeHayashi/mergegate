@@ -65,10 +65,7 @@ impl HistoryList {
             }
         }
 
-        let list_items: Vec<ListItem> = visible_lines
-            .into_iter()
-            .map(ListItem::new)
-            .collect();
+        let list_items: Vec<ListItem> = visible_lines.into_iter().map(ListItem::new).collect();
 
         let list = List::new(list_items).style(Style::default().fg(colors::FG));
         frame.render_widget(list, inner);

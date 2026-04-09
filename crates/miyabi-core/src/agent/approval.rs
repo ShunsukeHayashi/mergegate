@@ -92,13 +92,11 @@ impl ApprovalCallback for RejectHighRisk {
     async fn request_approval(&self, request: &ApprovalRequest) -> ApprovalDecision {
         match request.risk_level {
             RiskLevel::Low | RiskLevel::Medium => ApprovalDecision::Approved,
-            RiskLevel::High | RiskLevel::Critical => {
-                ApprovalDecision::Rejected(Some(format!(
-                    "Tool {} requires manual approval (risk level: {})",
-                    request.name,
-                    request.risk_level.as_str()
-                )))
-            }
+            RiskLevel::High | RiskLevel::Critical => ApprovalDecision::Rejected(Some(format!(
+                "Tool {} requires manual approval (risk level: {})",
+                request.name,
+                request.risk_level.as_str()
+            ))),
         }
     }
 }
@@ -187,7 +185,10 @@ mod tests {
             risk_level: RiskLevel::Low,
             description: "Read file".to_string(),
         };
-        assert_eq!(approver.request_approval(&low_risk).await, ApprovalDecision::Approved);
+        assert_eq!(
+            approver.request_approval(&low_risk).await,
+            ApprovalDecision::Approved
+        );
 
         // High risk should be rejected
         let high_risk = ApprovalRequest {

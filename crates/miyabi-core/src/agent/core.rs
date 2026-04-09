@@ -153,9 +153,10 @@ impl Agent {
     /// Main agent execution loop
     pub async fn run(&self, prompt: &str) -> Result<AgentResult, AgentError> {
         // Execute SessionStart hooks
-        let session_context = HookContext::new()
-            .with_data("prompt", prompt);
-        self.hook_manager.execute(&HookEvent::SessionStart, &session_context).await;
+        let session_context = HookContext::new().with_data("prompt", prompt);
+        self.hook_manager
+            .execute(&HookEvent::SessionStart, &session_context)
+            .await;
 
         self.emit_event(AgentEvent::Started {
             prompt: prompt.to_string(),
@@ -220,7 +221,9 @@ impl Agent {
                     let end_context = HookContext::new()
                         .with_data("iterations", &result.iterations.to_string())
                         .with_data("tool_calls", &result.tool_calls.to_string());
-                    self.hook_manager.execute(&HookEvent::SessionEnd, &end_context).await;
+                    self.hook_manager
+                        .execute(&HookEvent::SessionEnd, &end_context)
+                        .await;
 
                     return Ok(result);
                 }
@@ -302,7 +305,9 @@ impl Agent {
                         let pre_tool_context = HookContext::new()
                             .with_tool(&tool_use.name)
                             .with_data("input", &tool_use.input.to_string());
-                        self.hook_manager.execute(&HookEvent::PreTool, &pre_tool_context).await;
+                        self.hook_manager
+                            .execute(&HookEvent::PreTool, &pre_tool_context)
+                            .await;
 
                         // Execute tool
                         self.emit_event(AgentEvent::ToolExecuting {
@@ -327,7 +332,9 @@ impl Agent {
                                 let post_tool_context = HookContext::new()
                                     .with_tool(&tool_use.name)
                                     .with_result(&output.content.to_string());
-                                self.hook_manager.execute(&HookEvent::PostTool, &post_tool_context).await;
+                                self.hook_manager
+                                    .execute(&HookEvent::PostTool, &post_tool_context)
+                                    .await;
 
                                 // Create tool result
                                 let content = serde_json::to_string(&output.content)
@@ -349,7 +356,9 @@ impl Agent {
                                 let error_context = HookContext::new()
                                     .with_tool(&tool_use.name)
                                     .with_error(&e.to_string());
-                                self.hook_manager.execute(&HookEvent::OnError, &error_context).await;
+                                self.hook_manager
+                                    .execute(&HookEvent::OnError, &error_context)
+                                    .await;
 
                                 // Add error as tool result
                                 results.push(ContentBlock::ToolResult {
@@ -397,7 +406,9 @@ impl Agent {
                     let end_context = HookContext::new()
                         .with_data("iterations", &result.iterations.to_string())
                         .with_data("tool_calls", &result.tool_calls.to_string());
-                    self.hook_manager.execute(&HookEvent::SessionEnd, &end_context).await;
+                    self.hook_manager
+                        .execute(&HookEvent::SessionEnd, &end_context)
+                        .await;
 
                     return Ok(result);
                 }

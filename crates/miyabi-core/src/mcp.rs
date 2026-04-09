@@ -136,7 +136,11 @@ impl McpServer {
     }
 
     /// Send a request and get a response
-    pub async fn request(&mut self, method: &str, params: Option<serde_json::Value>) -> Result<McpResponse> {
+    pub async fn request(
+        &mut self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<McpResponse> {
         self.request_id += 1;
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
@@ -145,9 +149,15 @@ impl McpServer {
             params,
         };
 
-        let stdin = self.process.stdin.as_mut()
+        let stdin = self
+            .process
+            .stdin
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdin"))?;
-        let stdout = self.process.stdout.as_mut()
+        let stdout = self
+            .process
+            .stdout
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdout"))?;
 
         // Send request
@@ -183,7 +193,9 @@ impl McpServer {
             return Err(anyhow::anyhow!("MCP error: {}", error.message));
         }
 
-        response.result.ok_or_else(|| anyhow::anyhow!("No result in response"))
+        response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in response"))
     }
 
     /// List available tools
@@ -193,16 +205,25 @@ impl McpServer {
             return Err(anyhow::anyhow!("MCP error: {}", error.message));
         }
 
-        let result = response.result.ok_or_else(|| anyhow::anyhow!("No result"))?;
+        let result = response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result"))?;
         let tools: Vec<McpTool> = serde_json::from_value(
-            result.get("tools").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+            result
+                .get("tools")
+                .cloned()
+                .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
 
         Ok(tools)
     }
 
     /// Call a tool
-    pub async fn call_tool(&mut self, name: &str, arguments: serde_json::Value) -> Result<serde_json::Value> {
+    pub async fn call_tool(
+        &mut self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value> {
         let params = serde_json::json!({
             "name": name,
             "arguments": arguments
@@ -424,7 +445,10 @@ command: node
         let config = McpServerConfig {
             name: "filesystem".to_string(),
             command: "npx".to_string(),
-            args: vec!["-y".to_string(), "@anthropic/mcp-server-filesystem".to_string()],
+            args: vec![
+                "-y".to_string(),
+                "@anthropic/mcp-server-filesystem".to_string(),
+            ],
             env: {
                 let mut env = HashMap::new();
                 env.insert("HOME".to_string(), "/tmp".to_string());
@@ -616,15 +640,13 @@ command: node
     #[test]
     fn test_mcp_manager_is_running() {
         let config = McpConfig {
-            servers: vec![
-                McpServerConfig {
-                    name: "server1".to_string(),
-                    command: "cmd".to_string(),
-                    args: vec![],
-                    env: HashMap::new(),
-                    auto_start: false,
-                },
-            ],
+            servers: vec![McpServerConfig {
+                name: "server1".to_string(),
+                command: "cmd".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                auto_start: false,
+            }],
         };
 
         let manager = McpManager::with_config(config);

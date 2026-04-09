@@ -13,8 +13,7 @@ mod approval_integration_tests {
         let registry = ExecutorRegistry::with_standard_tools();
 
         // Agent should be created successfully with AutoApproveAll callback
-        let _agent = Agent::new(client, registry)
-            .with_approval_callback(AutoApproveAll);
+        let _agent = Agent::new(client, registry).with_approval_callback(AutoApproveAll);
     }
 
     #[test]
@@ -23,8 +22,7 @@ mod approval_integration_tests {
         let registry = ExecutorRegistry::with_standard_tools();
 
         // Agent should be created successfully with RejectHighRisk callback
-        let _agent = Agent::new(client, registry)
-            .with_approval_callback(RejectHighRisk);
+        let _agent = Agent::new(client, registry).with_approval_callback(RejectHighRisk);
     }
 
     #[test]

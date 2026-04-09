@@ -270,7 +270,11 @@ impl HookManager {
                 let expanded_title = self.expand_variables(title, context);
                 let expanded_message = self.expand_variables(message, context);
                 // For now, just log the notification
-                tracing::info!("Hook notification: {} - {}", expanded_title, expanded_message);
+                tracing::info!(
+                    "Hook notification: {} - {}",
+                    expanded_title,
+                    expanded_message
+                );
                 HookResult {
                     hook_name: hook.name.clone(),
                     success: true,

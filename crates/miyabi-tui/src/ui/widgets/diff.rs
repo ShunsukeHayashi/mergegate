@@ -36,27 +36,25 @@ pub fn render_diff_widget_with_scroll(
     // Create a DiffRender with the single file
     let mut renderer = DiffRender::new();
     renderer.files.push(diff.clone());
-    
+
     // Get rendered lines
     let lines = renderer.render();
-    
+
     // Create block with optional title
     let block = if let Some(t) = title {
-        Block::default()
-            .borders(Borders::ALL)
-            .title(t.to_string())
+        Block::default().borders(Borders::ALL).title(t.to_string())
     } else {
         Block::default()
             .borders(Borders::ALL)
             .title(format!("{} → {}", diff.old_path, diff.new_path))
     };
-    
+
     // Create paragraph with scroll
     let paragraph = Paragraph::new(lines)
         .block(block)
         .wrap(Wrap { trim: false })
         .scroll((scroll, 0));
-    
+
     frame.render_widget(paragraph, area);
 }
 

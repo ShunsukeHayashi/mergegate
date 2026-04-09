@@ -36,7 +36,8 @@ impl OpenClawClient {
             message: message.to_string(),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/api/message", self.gateway_url))
             .header("Authorization", format!("Bearer {}", self.token))
             .json(&payload)

@@ -134,11 +134,7 @@ pub struct McpToolExecutor {
 }
 
 impl McpToolExecutor {
-    pub fn new(
-        server_name: String,
-        tool: McpTool,
-        manager: Arc<AsyncMutex<McpManager>>,
-    ) -> Self {
+    pub fn new(server_name: String, tool: McpTool, manager: Arc<AsyncMutex<McpManager>>) -> Self {
         Self {
             server_name,
             tool_name: tool.name,
@@ -178,10 +174,13 @@ impl ToolExecutor for McpToolExecutor {
     async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
         let mut manager = self.manager.lock().await;
 
-        match manager.call_tool(&self.server_name, &self.tool_name, input).await {
+        match manager
+            .call_tool(&self.server_name, &self.tool_name, input)
+            .await
+        {
             Ok(result) => {
-                let content = serde_json::to_string_pretty(&result)
-                    .unwrap_or_else(|_| result.to_string());
+                let content =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
                 Ok(ToolOutput::success(content))
             }
             Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
@@ -270,7 +269,10 @@ impl ExecutorRegistry {
     }
 
     /// Register MCP tools from an MCP manager
-    pub async fn register_mcp_tools(&mut self, manager: Arc<AsyncMutex<McpManager>>) -> Result<usize, ToolError> {
+    pub async fn register_mcp_tools(
+        &mut self,
+        manager: Arc<AsyncMutex<McpManager>>,
+    ) -> Result<usize, ToolError> {
         let mut count = 0;
 
         // Get all tools from all servers
@@ -283,11 +285,7 @@ impl ExecutorRegistry {
 
         for (server_name, tools) in all_tools {
             for tool in tools {
-                let executor = McpToolExecutor::new(
-                    server_name.clone(),
-                    tool,
-                    manager.clone(),
-                );
+                let executor = McpToolExecutor::new(server_name.clone(), tool, manager.clone());
                 self.register(executor);
                 count += 1;
             }

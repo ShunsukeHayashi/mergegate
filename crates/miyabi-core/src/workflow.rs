@@ -77,7 +77,6 @@ pub enum StepCondition {
     If { expression: String },
 }
 
-
 /// Retry configuration for a step
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
@@ -119,7 +118,6 @@ pub enum FailurePolicy {
     /// Run cleanup steps
     Cleanup,
 }
-
 
 /// Step execution result
 #[derive(Debug, Clone)]
@@ -238,7 +236,11 @@ impl WorkflowManager {
             for entry in std::fs::read_dir(dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.extension().map(|e| e == "yml" || e == "yaml").unwrap_or(false) {
+                if path
+                    .extension()
+                    .map(|e| e == "yml" || e == "yaml")
+                    .unwrap_or(false)
+                {
                     if let Ok(name) = self.load_workflow(&path) {
                         loaded.push(name);
                     }
@@ -264,7 +266,11 @@ impl WorkflowManager {
     }
 
     /// Execute a workflow
-    pub async fn execute(&self, name: &str, initial_vars: HashMap<String, String>) -> Result<WorkflowResult> {
+    pub async fn execute(
+        &self,
+        name: &str,
+        initial_vars: HashMap<String, String>,
+    ) -> Result<WorkflowResult> {
         let workflow = self
             .workflows
             .get(name)
@@ -361,7 +367,10 @@ impl WorkflowManager {
 
         let status = if all_succeeded {
             WorkflowStatus::Completed
-        } else if step_results.iter().any(|r| r.status == StepStatus::Completed) {
+        } else if step_results
+            .iter()
+            .any(|r| r.status == StepStatus::Completed)
+        {
             WorkflowStatus::PartiallyCompleted
         } else {
             WorkflowStatus::Failed
@@ -453,24 +462,20 @@ impl WorkflowManager {
 
             // Execute the task
             let result = match agent.run(&expanded_task).await {
-                Ok(agent_result) => {
-                    StepResult {
-                        step_id: step.id.clone(),
-                        status: StepStatus::Completed,
-                        output: Some(agent_result.output),
-                        error: None,
-                        duration_ms: step_start.elapsed().as_millis() as u64,
-                    }
-                }
-                Err(e) => {
-                    StepResult {
-                        step_id: step.id.clone(),
-                        status: StepStatus::Failed,
-                        output: None,
-                        error: Some(e.to_string()),
-                        duration_ms: step_start.elapsed().as_millis() as u64,
-                    }
-                }
+                Ok(agent_result) => StepResult {
+                    step_id: step.id.clone(),
+                    status: StepStatus::Completed,
+                    output: Some(agent_result.output),
+                    error: None,
+                    duration_ms: step_start.elapsed().as_millis() as u64,
+                },
+                Err(e) => StepResult {
+                    step_id: step.id.clone(),
+                    status: StepStatus::Failed,
+                    output: None,
+                    error: Some(e.to_string()),
+                    duration_ms: step_start.elapsed().as_millis() as u64,
+                },
             };
 
             // Store output variable if specified
@@ -495,7 +500,10 @@ impl WorkflowManager {
 
         let status = if all_succeeded {
             WorkflowStatus::Completed
-        } else if step_results.iter().any(|r| r.status == StepStatus::Completed) {
+        } else if step_results
+            .iter()
+            .any(|r| r.status == StepStatus::Completed)
+        {
             WorkflowStatus::PartiallyCompleted
         } else {
             WorkflowStatus::Failed
@@ -517,7 +525,13 @@ impl WorkflowManager {
 
         for step in &workflow.steps {
             if !visited.contains_key(&step.id) {
-                self.visit_step(workflow, &step.id, &mut visited, &mut temp_visited, &mut order)?;
+                self.visit_step(
+                    workflow,
+                    &step.id,
+                    &mut visited,
+                    &mut temp_visited,
+                    &mut order,
+                )?;
             }
         }
 
@@ -534,7 +548,10 @@ impl WorkflowManager {
         order: &mut Vec<String>,
     ) -> Result<()> {
         if temp_visited.get(step_id).copied().unwrap_or(false) {
-            return Err(anyhow::anyhow!("Circular dependency detected at step: {}", step_id));
+            return Err(anyhow::anyhow!(
+                "Circular dependency detected at step: {}",
+                step_id
+            ));
         }
 
         if visited.get(step_id).copied().unwrap_or(false) {
@@ -561,7 +578,11 @@ impl WorkflowManager {
     }
 
     /// Evaluate a step condition
-    fn evaluate_condition(&self, condition: &Option<StepCondition>, context: &WorkflowContext) -> bool {
+    fn evaluate_condition(
+        &self,
+        condition: &Option<StepCondition>,
+        context: &WorkflowContext,
+    ) -> bool {
         match condition {
             None | Some(StepCondition::Always) => true,
             Some(StepCondition::OnSuccess) => context
@@ -607,19 +628,17 @@ mod tests {
         let workflow = Workflow {
             name: "test-workflow".to_string(),
             description: "Test".to_string(),
-            steps: vec![
-                WorkflowStep {
-                    id: "step1".to_string(),
-                    name: "First Step".to_string(),
-                    agent: Some("code-reviewer".to_string()),
-                    task: "Review code".to_string(),
-                    depends_on: vec![],
-                    condition: None,
-                    timeout: 300,
-                    retry: RetryConfig::default(),
-                    output: Some("review_result".to_string()),
-                },
-            ],
+            steps: vec![WorkflowStep {
+                id: "step1".to_string(),
+                name: "First Step".to_string(),
+                agent: Some("code-reviewer".to_string()),
+                task: "Review code".to_string(),
+                depends_on: vec![],
+                condition: None,
+                timeout: 300,
+                retry: RetryConfig::default(),
+                output: Some("review_result".to_string()),
+            }],
             variables: HashMap::new(),
             on_failure: FailurePolicy::Stop,
         };
@@ -815,7 +834,10 @@ mod tests {
         };
 
         manager.register(workflow);
-        let result = manager.execute("output-test", HashMap::new()).await.unwrap();
+        let result = manager
+            .execute("output-test", HashMap::new())
+            .await
+            .unwrap();
 
         assert_eq!(result.status, WorkflowStatus::Completed);
         assert_eq!(result.steps.len(), 2);
@@ -834,7 +856,10 @@ mod tests {
             on_failure: FailurePolicy::Stop,
         };
 
-        assert_eq!(workflow.variables.get("project"), Some(&"miyabi".to_string()));
+        assert_eq!(
+            workflow.variables.get("project"),
+            Some(&"miyabi".to_string())
+        );
     }
 
     #[test]

@@ -178,8 +178,9 @@ impl PluginManager {
     pub fn unregister(&self, name: &str) -> Result<()> {
         let mut plugins = self.plugins.write().unwrap();
 
-        let mut entry =
-            plugins.remove(name).ok_or_else(|| anyhow!("Plugin '{}' not found", name))?;
+        let mut entry = plugins
+            .remove(name)
+            .ok_or_else(|| anyhow!("Plugin '{}' not found", name))?;
 
         entry.plugin.shutdown()?;
         entry.state = PluginState::Shutdown;
@@ -198,10 +199,16 @@ impl PluginManager {
     pub fn execute(&self, name: &str, context: &PluginContext) -> Result<PluginResult> {
         let plugins = self.plugins.read().unwrap();
 
-        let entry = plugins.get(name).ok_or_else(|| anyhow!("Plugin '{}' not found", name))?;
+        let entry = plugins
+            .get(name)
+            .ok_or_else(|| anyhow!("Plugin '{}' not found", name))?;
 
         if entry.state != PluginState::Initialized {
-            return Err(anyhow!("Plugin '{}' is not initialized (state: {:?})", name, entry.state));
+            return Err(anyhow!(
+                "Plugin '{}' is not initialized (state: {:?})",
+                name,
+                entry.state
+            ));
         }
 
         entry.plugin.execute(context)
@@ -210,7 +217,10 @@ impl PluginManager {
     /// Lists all registered plugins
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
         let plugins = self.plugins.read().unwrap();
-        plugins.values().map(|entry| entry.plugin.metadata()).collect()
+        plugins
+            .values()
+            .map(|entry| entry.plugin.metadata())
+            .collect()
     }
 
     /// Gets plugin metadata

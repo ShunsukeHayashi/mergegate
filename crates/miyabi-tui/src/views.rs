@@ -392,9 +392,11 @@ impl MainView {
                 }
                 _ => {}
             },
-            ActiveOverlay::Help => if self.help_viewer.handle_key(key) == HelpAction::Close {
-                self.close_overlay();
-            },
+            ActiveOverlay::Help => {
+                if self.help_viewer.handle_key(key) == HelpAction::Close {
+                    self.close_overlay();
+                }
+            }
             ActiveOverlay::Approval => match self.approval_overlay.handle_key(key) {
                 ApprovalAction::Approve(id) | ApprovalAction::ApproveAll(id) => {
                     self.close_overlay();

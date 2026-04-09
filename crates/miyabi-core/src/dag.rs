@@ -568,8 +568,7 @@ mod tests {
 
     #[test]
     fn test_task_with_priority() {
-        let task = Task::new("priority-task", "Task with priority")
-            .with_priority(10);
+        let task = Task::new("priority-task", "Task with priority").with_priority(10);
 
         assert_eq!(task.priority, 10);
         assert_eq!(task.name, "priority-task");
@@ -577,8 +576,7 @@ mod tests {
 
     #[test]
     fn test_task_with_estimated_time() {
-        let task = Task::new("timed-task", "Task with time estimate")
-            .with_estimated_time(120);
+        let task = Task::new("timed-task", "Task with time estimate").with_estimated_time(120);
 
         assert_eq!(task.estimated_time, Some(120));
     }
