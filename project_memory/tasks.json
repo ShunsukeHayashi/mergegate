@@ -1,19 +1,23 @@
 {
-  "version": 2,
-  "last_updated": "2026-04-10T01:30:00Z",
+  "version": 19,
+  "generated_at": "2026-04-09T21:33:23.166442Z",
+  "generated_from_event_id": null,
   "tasks": [
     {
       "id": "phase-a",
       "title": "GATE + Lock + Store + Protocol（4ファイル新規）",
-      "github_issue_number": 0,
-      "state": "implementing",
+      "current_state": "implementing",
       "dependencies": [],
-      "dependents": ["phase-b", "phase-c"],
+      "dependents": [
+        "phase-b",
+        "phase-c"
+      ],
       "soft_dependencies": [],
       "lock": {
         "locked_by": "codex-a@macbook-pro",
         "locked_at": "2026-04-10T01:30:00Z",
-        "ttl_secs": 3600,
+        "lease_duration_sec": 3600,
+        "last_heartbeat": "2026-04-10T01:30:00Z",
         "affected_files": [
           "crates/miyabi-core/src/gate.rs",
           "crates/miyabi-core/src/lock.rs",
@@ -25,56 +29,243 @@
         "risk_level": "LOW",
         "affected_symbols": 0,
         "depth1": [],
-        "analyzed_at": "2026-04-10T01:25:00Z"
+        "analyzed_at": "2026-04-10T01:25:00Z",
+        "analyzed_commit": null,
+        "input_hash": null
       },
       "branch_name": null,
-      "pr_number": null,
-      "merge_commit": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
       "updated_at": "2026-04-10T01:30:00Z"
     },
     {
       "id": "phase-b",
       "title": "CLI サブコマンド追加",
-      "github_issue_number": 0,
-      "state": "pending",
-      "dependencies": ["phase-a"],
-      "dependents": ["phase-c"],
+      "current_state": "pending",
+      "dependencies": [
+        "phase-a"
+      ],
+      "dependents": [
+        "phase-c"
+      ],
       "soft_dependencies": [],
       "lock": null,
       "impact": null,
       "branch_name": null,
-      "pr_number": null,
-      "merge_commit": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
       "updated_at": "2026-04-10T01:30:00Z"
     },
     {
       "id": "phase-c",
       "title": "GitHub Evidence + E2E テスト",
-      "github_issue_number": 0,
-      "state": "pending",
-      "dependencies": ["phase-a", "phase-b"],
+      "current_state": "pending",
+      "dependencies": [
+        "phase-a",
+        "phase-b"
+      ],
       "dependents": [],
       "soft_dependencies": [],
       "lock": null,
       "impact": null,
       "branch_name": null,
-      "pr_number": null,
-      "merge_commit": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
       "updated_at": "2026-04-10T01:30:00Z"
+    },
+    {
+      "id": "issue-51",
+      "title": "Add Agent mode to help documentation",
+      "current_state": "implementing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": {
+        "locked_by": "claude@macbook-pro",
+        "locked_at": "2026-04-09T21:32:36.199414Z",
+        "lease_duration_sec": 300,
+        "last_heartbeat": "2026-04-09T21:32:36.199414Z",
+        "affected_files": [
+          "docs/USER_MANUAL.md"
+        ]
+      },
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-09T21:32:36.193830Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-51-agent-help-docs",
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
+      "created_at": "2026-04-09T21:32:36.183108Z",
+      "updated_at": "2026-04-09T21:32:36.210553Z"
+    },
+    {
+      "id": "issue-50",
+      "title": "Add progress indicator for long-running agent tasks",
+      "current_state": "implementing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": {
+        "locked_by": "codex-b@macbook-pro",
+        "locked_at": "2026-04-09T21:33:14.098441Z",
+        "lease_duration_sec": 300,
+        "last_heartbeat": "2026-04-09T21:33:14.098441Z",
+        "affected_files": [
+          "crates/miyabi-tui/src/app.rs",
+          "crates/miyabi-tui/src/views.rs"
+        ]
+      },
+      "impact": {
+        "risk_level": "MEDIUM",
+        "affected_symbols": 5,
+        "depth1": [],
+        "analyzed_at": "2026-04-09T21:33:14.093332Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
+      "created_at": "2026-04-09T21:33:03.117158Z",
+      "updated_at": "2026-04-09T21:33:14.098828Z"
+    },
+    {
+      "id": "issue-49",
+      "title": "Add interactive tool approval in TUI Agent mode",
+      "current_state": "implementing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": {
+        "locked_by": "codex-c@macbook-pro",
+        "locked_at": "2026-04-09T21:33:14.107550Z",
+        "lease_duration_sec": 300,
+        "last_heartbeat": "2026-04-09T21:33:14.107550Z",
+        "affected_files": [
+          "crates/miyabi-tui/src/approval_overlay.rs"
+        ]
+      },
+      "impact": {
+        "risk_level": "MEDIUM",
+        "affected_symbols": 3,
+        "depth1": [],
+        "analyzed_at": "2026-04-09T21:33:14.103055Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
+      "created_at": "2026-04-09T21:33:03.121698Z",
+      "updated_at": "2026-04-09T21:33:14.107940Z"
+    },
+    {
+      "id": "issue-48",
+      "title": "Implement Context Manager for memory management",
+      "current_state": "implementing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": {
+        "locked_by": "claude-sub@macbook-pro",
+        "locked_at": "2026-04-09T21:33:23.165977Z",
+        "lease_duration_sec": 300,
+        "last_heartbeat": "2026-04-09T21:33:23.165977Z",
+        "affected_files": [
+          "crates/miyabi-core/src/conversation.rs"
+        ]
+      },
+      "impact": {
+        "risk_level": "HIGH",
+        "affected_symbols": 8,
+        "depth1": [],
+        "analyzed_at": "2026-04-09T21:33:14.112255Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "priority": 0,
+      "created_at": "2026-04-09T21:33:03.126596Z",
+      "updated_at": "2026-04-09T21:33:23.166407Z"
     }
   ],
   "file_locks": {
-    "crates/miyabi-core/src/gate.rs": "phase-a",
-    "crates/miyabi-core/src/lock.rs": "phase-a",
-    "crates/miyabi-core/src/protocol.rs": "phase-a",
-    "crates/miyabi-core/src/store.rs": "phase-a"
-  },
-  "dag_levels": [
-    ["phase-a"],
-    ["phase-b"],
-    ["phase-c"]
-  ]
+    "crates/miyabi-core/src/gate.rs": {
+      "task_id": "phase-a",
+      "agent": "codex-a",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T02:30:00Z"
+    },
+    "crates/miyabi-tui/src/views.rs": {
+      "task_id": "issue-50",
+      "agent": "codex-b",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-09T21:40:14.098441Z"
+    },
+    "crates/miyabi-core/src/lock.rs": {
+      "task_id": "phase-a",
+      "agent": "codex-a",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T02:30:00Z"
+    },
+    "crates/miyabi-tui/src/approval_overlay.rs": {
+      "task_id": "issue-49",
+      "agent": "codex-c",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-09T21:40:14.107550Z"
+    },
+    "crates/miyabi-core/src/protocol.rs": {
+      "task_id": "phase-a",
+      "agent": "codex-a",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T02:30:00Z"
+    },
+    "crates/miyabi-core/src/store.rs": {
+      "task_id": "phase-a",
+      "agent": "codex-a",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T02:30:00Z"
+    },
+    "crates/miyabi-tui/src/app.rs": {
+      "task_id": "issue-50",
+      "agent": "codex-b",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-09T21:40:14.098441Z"
+    },
+    "crates/miyabi-core/src/conversation.rs": {
+      "task_id": "issue-48",
+      "agent": "claude-sub",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-09T21:40:23.165977Z"
+    },
+    "docs/USER_MANUAL.md": {
+      "task_id": "issue-51",
+      "agent": "claude",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-09T21:39:36.199414Z"
+    }
+  }
 }
