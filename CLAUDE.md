@@ -116,12 +116,72 @@ miyabi agent run coordinator --issue <番号>
 
 ---
 
+## Polaris (DTP) — 確定的タスク実行プロトコル
+
+このリポには Polaris が統合されている。全エージェントは以下のルールに従うこと。
+
+### 必須: タスク作業前に miyabi gate を使う
+
+```bash
+# 1. タスク登録（Issue 番号必須）
+miyabi gate register --issue <N> --title "タスク名"
+
+# 2. 影響分析を記録
+miyabi gate impact <task-id> --risk <low|medium|high|critical> --symbols <N>
+
+# 3. ファイルロックを獲得してから作業開始
+miyabi gate assign <task-id> --agent <自分の名前> --node <マシン名> --files "変更するファイル"
+
+# 4. ブランチを記録
+miyabi gate branch <task-id> feature/issue-<N>-<slug>
+
+# 5. PR を記録
+miyabi gate pr <task-id> <PR番号>
+
+# 6. merge を記録
+miyabi gate merge <task-id> <merge-commit-sha>
+```
+
+### 禁止
+
+- `miyabi gate assign` せずにファイルを編集する → pre-commit hook が拒否
+- ロック中の他人のファイルに触る → CLI が拒否
+- Issue なしでタスクを始める → GATE 0 が拒否
+- HIGH/CRITICAL risk を承認なしで進める → GATE 3 が拒否
+
+### 確認コマンド
+
+```bash
+miyabi gate status              # タスク一覧
+miyabi gate locks               # ロック中ファイル
+miyabi gate dag                 # 依存関係
+miyabi gate dispatchable        # 実行可能タスク
+miyabi gate attach <task-id>    # コンテキストアタッチメント表示
+miyabi gate dream               # 学び抽出
+miyabi gate serve               # Web ダッシュボード (localhost:4848)
+```
+
+### 緊急時
+
+```bash
+miyabi gate force-unlock <task-id> --reason "理由" --operator "名前"
+miyabi gate manual-complete <task-id> --reason "理由" --operator "名前"
+```
+
+### バイナリ
+
+- リリースビルド: `target/release/miyabi`
+- PATH: `~/bin/miyabi-gate`
+- ビルド: `cargo build --release`
+
+---
+
 **このファイルはClaude Codeが自動参照します。**
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **miyabi-cli-standalone** (5689 symbols, 12438 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **miyabi-cli-standalone** (5691 symbols, 12441 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

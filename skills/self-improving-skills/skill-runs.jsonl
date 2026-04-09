@@ -5,3 +5,9 @@
 {"ts":"2026-04-09T21:49:02.984Z","agent":"codex","skill":"rust-development","task":"Fix GitHub Issues #56 and #57: gate exit code mapping and dependency-blocked assign behavior","result":"success","score":0.97,"notes":""}
 {"ts":"2026-04-09T21:50:24.425Z","agent":"codex","skill":"rust-llm-pitfalls","task":"Fix GitHub Issues #54 and #55 in protocol.rs with approval and merge lock handling","result":"success","score":1,"notes":""}
 {"ts":"2026-04-09T21:52:05.485Z","agent":"codex","skill":"rust-llm-pitfalls","task":"Issue #52/#53 修正: issue=0 拒否とブランチ名バリデーション実装","result":"success","score":0.95,"notes":""}
+{"ts":"2026-04-09T22:28:02.343Z","agent":"codex","skill":"rust-llm-pitfalls","task":"Implement dream command for Deterministic Task Protocol and extract learnings from event logs","result":"success","score":1,"notes":""}
+{"ts":"2026-04-09T22:30:25.557Z","agent":"codex","skill":"rust-llm-pitfalls","task":"attach_context 実装確認・検証: DTP 記憶アタッチメント (#58)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-09T22:42:43.479Z","agent":"codex","skill":"rust-development","task":"Build Polaris DTP web dashboard with miyabi gate serve and JSON endpoints","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-09T22:50:35.069Z","agent":"codex","skill":"obsidian-knowledge","task":"Add Obsidian vault integration to dream and attach_context modules","result":"success","score":1,"notes":""}
+{"ts":"2026-04-09T22:51:26.655Z","agent":"codex","skill":"polaris-ops","task":"theta cycle 統合確認: dream に自動記録 + 学び昇格 (#60)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-09T23:10:47.489Z","agent":"codex","skill":"polaris-ops","task":"verify_merge + escape hatch 実装","result":"success","score":0.95,"notes":""}
