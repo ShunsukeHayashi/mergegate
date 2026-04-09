@@ -210,6 +210,28 @@ enum GateCommand {
     Pr { task_id: String, number: u64 },
     /// Record merge verification
     Merge { task_id: String, sha: String },
+    /// Verify merge state using GitHub metadata
+    VerifyMerge {
+        task_id: String,
+        #[arg(long)]
+        repo: String,
+    },
+    /// Force-release an active lock
+    ForceUnlock {
+        task_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        operator: String,
+    },
+    /// Mark a task complete without merge verification
+    ManualComplete {
+        task_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        operator: String,
+    },
     /// List active locks
     Locks,
     /// Show DAG levels
@@ -1348,6 +1370,46 @@ fn handle_gate_command(
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("merge recorded: {} -> {}", task.id, sha);
+                }
+            }),
+        GateCommand::VerifyMerge { task_id, repo } => protocol
+            .verify_merge(&task_id, &repo, actor, &node)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    let sha = task
+                        .github_evidence
+                        .as_ref()
+                        .and_then(|evidence| evidence.merge_commit_sha.as_deref())
+                        .unwrap_or("unknown");
+                    println!("merge verified: {} -> {}", task.id, sha);
+                }
+            }),
+        GateCommand::ForceUnlock {
+            task_id,
+            reason,
+            operator,
+        } => protocol
+            .force_unlock(&task_id, &reason, &operator)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("lock released: {} by {}", task.id, operator);
+                }
+            }),
+        GateCommand::ManualComplete {
+            task_id,
+            reason,
+            operator,
+        } => protocol
+            .manual_complete(&task_id, &reason, &operator)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("task completed manually: {} by {}", task.id, operator);
                 }
             }),
         GateCommand::Locks => protocol.locks().map(|locks| {
