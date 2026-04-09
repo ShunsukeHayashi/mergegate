@@ -1,6 +1,6 @@
 //! Miyabi CLI - Main entry point
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -95,6 +95,18 @@ enum Commands {
         #[arg(long)]
         system: Option<String>,
     },
+    /// Deterministic Task Protocol gate controls
+    Gate {
+        /// Output format
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
+        /// Path to the task ledger JSON file
+        #[arg(long, default_value = "project_memory/tasks.json")]
+        store_path: PathBuf,
+        /// Gate subcommand
+        #[command(subcommand)]
+        command: GateCommand,
+    },
     /// OpenClaw integration - control OpenClaw agents
     Openclaw {
         /// OpenClaw subcommand
@@ -107,6 +119,105 @@ enum Commands {
         #[command(subcommand)]
         command: CollabCommand,
     },
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum CompletionModeArg {
+    GithubPr,
+    Manual,
+    ExternalOp,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum ImpactRiskArg {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+#[derive(Subcommand)]
+enum GateCommand {
+    /// Register a task in the execution ledger
+    Register {
+        /// GitHub issue number
+        #[arg(long, default_value_t = 0)]
+        issue: u64,
+        /// Task title
+        #[arg(long)]
+        title: String,
+        /// Explicit task ID (defaults to issue-N or slugified title)
+        #[arg(long)]
+        task_id: Option<String>,
+        /// Hard dependencies (comma separated)
+        #[arg(long, value_delimiter = ',')]
+        dependencies: Vec<String>,
+        /// Soft dependencies (comma separated)
+        #[arg(long, value_delimiter = ',')]
+        soft_dependencies: Vec<String>,
+        /// Priority score
+        #[arg(long, default_value_t = 0)]
+        priority: u32,
+        /// Completion mode
+        #[arg(long, value_enum, default_value_t = CompletionModeArg::GithubPr)]
+        completion_mode: CompletionModeArg,
+    },
+    /// Show status for one task or the whole ledger
+    Status {
+        /// Optional task ID
+        task_id: Option<String>,
+    },
+    /// Assign a task and acquire file locks
+    Assign {
+        task_id: String,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        node: String,
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        files: Vec<String>,
+    },
+    /// Record impact analysis
+    Impact {
+        task_id: String,
+        #[arg(long, value_enum)]
+        risk: ImpactRiskArg,
+        #[arg(long)]
+        symbols: usize,
+        #[arg(long, value_delimiter = ',')]
+        depth1: Vec<String>,
+        #[arg(long)]
+        analyzed_commit: Option<String>,
+        #[arg(long)]
+        input_hash: Option<String>,
+    },
+    /// Record branch creation
+    Branch {
+        task_id: String,
+        name: String,
+    },
+    /// Record PR creation
+    Pr {
+        task_id: String,
+        number: u64,
+    },
+    /// Record merge verification
+    Merge {
+        task_id: String,
+        sha: String,
+    },
+    /// List active locks
+    Locks,
+    /// Show DAG levels
+    Dag,
+    /// Show dispatchable tasks
+    Dispatchable,
 }
 
 /// Collab canvas subcommands — wraps the collab CLI at ~/.local/bin/collab
@@ -662,6 +773,14 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Some(Commands::Gate {
+            format,
+            store_path,
+            command,
+        }) => {
+            let code = handle_gate_command(&format, &store_path, command)?;
+            std::process::exit(code);
+        }
         Some(Commands::Openclaw { command }) => {
             use miyabi_core::openclaw::{OpenClawClient, OpenClawResult};
             use std::env;
@@ -989,6 +1108,250 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn handle_gate_command(
+    format: &OutputFormat,
+    store_path: &PathBuf,
+    command: GateCommand,
+) -> anyhow::Result<i32> {
+    use miyabi_core::protocol::{
+        DeterministicExecutionProtocol, ImpactInput, ProtocolError, RegisterTaskRequest,
+        StatusReport,
+    };
+    use miyabi_core::store::{CompletionMode, ImpactRiskLevel};
+
+    let protocol = DeterministicExecutionProtocol::from_store_path(store_path.clone());
+    let actor = "miyabi-cli";
+    let node = std::env::var("HOSTNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "local".to_string());
+
+    let result = match command {
+        GateCommand::Register {
+            issue,
+            title,
+            task_id,
+            dependencies,
+            soft_dependencies,
+            priority,
+            completion_mode,
+        } => {
+            let task_id = task_id.unwrap_or_else(|| derive_task_id(issue, &title));
+            protocol
+                .register(
+                    RegisterTaskRequest {
+                        task_id,
+                        title,
+                        dependencies,
+                        soft_dependencies,
+                        priority,
+                        completion_mode: match completion_mode {
+                            CompletionModeArg::GithubPr => CompletionMode::GithubPr,
+                            CompletionModeArg::Manual => CompletionMode::Manual,
+                            CompletionModeArg::ExternalOp => CompletionMode::ExternalOp,
+                        },
+                    },
+                    actor,
+                    &node,
+                )
+                .map(|task| {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                    } else {
+                        println!("registered: {} ({})", task.id, task.title);
+                    }
+                })
+        }
+        GateCommand::Status { task_id } => protocol.status(task_id.as_deref()).map(|status| {
+            match status {
+                StatusReport::Task(task) => {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                    } else {
+                        println!("{}: {:?} - {}", task.id, task.current_state, task.title);
+                    }
+                }
+                StatusReport::Snapshot(snapshot) => {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&snapshot).unwrap());
+                    } else {
+                        println!("tasks: {}", snapshot.tasks.len());
+                        for task in snapshot.tasks {
+                            println!("  {} [{:?}] {}", task.id, task.current_state, task.title);
+                        }
+                    }
+                }
+            }
+        }),
+        GateCommand::Assign {
+            task_id,
+            agent,
+            node: agent_node,
+            files,
+        } => protocol
+            .assign(&task_id, &agent, &agent_node, &files)
+            .map(|result| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                } else {
+                    println!(
+                        "assigned: {} -> {}@{}",
+                        result.task.id, agent, agent_node
+                    );
+                }
+            }),
+        GateCommand::Impact {
+            task_id,
+            risk,
+            symbols,
+            depth1,
+            analyzed_commit,
+            input_hash,
+        } => protocol
+            .record_impact(
+                &task_id,
+                ImpactInput {
+                    risk_level: match risk {
+                        ImpactRiskArg::Low => ImpactRiskLevel::Low,
+                        ImpactRiskArg::Medium => ImpactRiskLevel::Medium,
+                        ImpactRiskArg::High => ImpactRiskLevel::High,
+                        ImpactRiskArg::Critical => ImpactRiskLevel::Critical,
+                    },
+                    affected_symbols: symbols,
+                    depth1,
+                    analyzed_commit,
+                    input_hash,
+                },
+                actor,
+                &node,
+            )
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("impact recorded: {}", task.id);
+                }
+            }),
+        GateCommand::Branch { task_id, name } => protocol
+            .record_branch(&task_id, &name, actor, &node)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("branch recorded: {} -> {}", task.id, name);
+                }
+            }),
+        GateCommand::Pr { task_id, number } => protocol
+            .record_pr(&task_id, number, actor, &node)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("pr recorded: {} -> #{}", task.id, number);
+                }
+            }),
+        GateCommand::Merge { task_id, sha } => protocol
+            .record_merge(&task_id, &sha, actor, &node)
+            .map(|task| {
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
+                } else {
+                    println!("merge recorded: {} -> {}", task.id, sha);
+                }
+            }),
+        GateCommand::Locks => protocol.locks().map(|locks| {
+            if matches!(format, OutputFormat::Json) {
+                println!("{}", serde_json::to_string_pretty(&locks).unwrap());
+            } else if locks.is_empty() {
+                println!("no active locks");
+            } else {
+                for (file, lock) in locks {
+                    println!("{} -> {}@{}", file, lock.agent, lock.node);
+                }
+            }
+        }),
+        GateCommand::Dag => protocol.dag().map(|report| {
+            if matches!(format, OutputFormat::Json) {
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else {
+                for (index, level) in report.levels.iter().enumerate() {
+                    println!("level {}: {}", index, level.join(", "));
+                }
+            }
+        }),
+        GateCommand::Dispatchable => protocol.dispatchable().map(|report| {
+            if matches!(format, OutputFormat::Json) {
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else if report.tasks.is_empty() {
+                println!("no dispatchable tasks");
+            } else {
+                for task in report.tasks {
+                    println!("{} [{}] {}", task.id, task.priority, task.title);
+                }
+            }
+        }),
+    };
+
+    Ok(match result {
+        Ok(()) => 0,
+        Err(ProtocolError::GateRejected(message)) => {
+            emit_gate_error(format, "gate_rejected", &message);
+            1
+        }
+        Err(ProtocolError::Input(message)) => {
+            emit_gate_error(format, "input_error", &message);
+            2
+        }
+        Err(ProtocolError::Internal(error)) => {
+            emit_gate_error(format, "internal_error", &error.to_string());
+            1
+        }
+    })
+}
+
+fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {
+    if matches!(format, OutputFormat::Json) {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "error": kind,
+                "message": message,
+            }))
+            .unwrap()
+        );
+    } else {
+        eprintln!("{}: {}", kind, message);
+    }
+}
+
+fn derive_task_id(issue: u64, title: &str) -> String {
+    if issue > 0 {
+        return format!("issue-{issue}");
+    }
+
+    let slug: String = title
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = slug
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    if slug.is_empty() {
+        "task".to_string()
+    } else {
+        slug
+    }
 }
 
 fn truncate_str(s: &str, max_len: usize) -> String {

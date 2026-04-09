@@ -225,6 +225,11 @@ impl TasksSnapshot {
             self.tasks.push(task);
         }
     }
+
+    pub fn remove_task(&mut self, task_id: &str) -> Option<ExecutionTask> {
+        let index = self.tasks.iter().position(|task| task.id == task_id)?;
+        Some(self.tasks.remove(index))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -313,7 +318,13 @@ impl SnapshotStore {
             return Ok(TasksSnapshot::default());
         }
         let raw = fs::read_to_string(&self.file_path)?;
-        Ok(serde_json::from_str(&raw)?)
+        match serde_json::from_str(&raw) {
+            Ok(snapshot) => Ok(snapshot),
+            Err(_) => {
+                let legacy: LegacyTasksFile = serde_json::from_str(&raw)?;
+                Ok(legacy.into_snapshot())
+            }
+        }
     }
 
     pub fn save(&self, snapshot: &TasksSnapshot, expected_version: u64) -> Result<()> {
@@ -473,6 +484,177 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyTasksFile {
+    #[serde(default)]
+    version: u64,
+    #[serde(default)]
+    tasks: Vec<LegacyTask>,
+}
+
+impl LegacyTasksFile {
+    fn into_snapshot(self) -> TasksSnapshot {
+        let mut snapshot = TasksSnapshot {
+            version: self.version,
+            generated_at: Utc::now(),
+            generated_from_event_id: None,
+            tasks: self.tasks.into_iter().map(LegacyTask::into_execution_task).collect(),
+            file_locks: HashMap::new(),
+        };
+
+        for task in &snapshot.tasks {
+            if let Some(lock) = &task.lock {
+                let owner_parts: Vec<&str> = lock.locked_by.split('@').collect();
+                let agent = owner_parts.first().copied().unwrap_or("unknown").to_string();
+                let node = owner_parts.get(1).copied().unwrap_or("unknown").to_string();
+                let expires_at = lease_expiry(lock.last_heartbeat, lock.lease_duration_sec);
+
+                for file in &lock.affected_files {
+                    snapshot.file_locks.insert(
+                        file.clone(),
+                        FileLockEntry {
+                            task_id: task.id.clone(),
+                            agent: agent.clone(),
+                            node: node.clone(),
+                            expires_at,
+                        },
+                    );
+                }
+            }
+        }
+
+        snapshot
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyTask {
+    id: String,
+    title: String,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    dependencies: Vec<String>,
+    #[serde(default)]
+    dependents: Vec<String>,
+    #[serde(default)]
+    soft_dependencies: Vec<String>,
+    #[serde(default)]
+    lock: Option<LegacyLock>,
+    #[serde(default)]
+    impact: Option<LegacyImpact>,
+    #[serde(default)]
+    branch_name: Option<String>,
+    #[serde(default)]
+    pr_number: Option<u64>,
+    #[serde(default)]
+    merge_commit: Option<String>,
+    #[serde(default)]
+    created_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    updated_at: Option<DateTime<Utc>>,
+}
+
+impl LegacyTask {
+    fn into_execution_task(self) -> ExecutionTask {
+        let created_at = self.created_at.unwrap_or_else(Utc::now);
+        let updated_at = self.updated_at.unwrap_or(created_at);
+        let github_evidence = self.pr_number.map(|pr_number| GitHubEvidence {
+            pr_number,
+            pr_head_ref: self.branch_name.clone().unwrap_or_default(),
+            pr_state: if self.merge_commit.is_some() {
+                GitHubPrState::Merged
+            } else {
+                GitHubPrState::Open
+            },
+            merge_commit_sha: self.merge_commit,
+            merged_at: None,
+            review_decision: None,
+            issue_state: GitHubIssueState::Open,
+            issue_closed_by_pr: false,
+        });
+
+        ExecutionTask {
+            id: self.id,
+            title: self.title,
+            current_state: legacy_state(&self.state),
+            dependencies: self.dependencies,
+            dependents: self.dependents,
+            soft_dependencies: self.soft_dependencies,
+            lock: self.lock.map(LegacyLock::into_snapshot),
+            impact: self.impact.map(LegacyImpact::into_snapshot),
+            branch_name: self.branch_name,
+            github_evidence,
+            completion_mode: CompletionMode::GithubPr,
+            human_approval: None,
+            priority: 0,
+            created_at,
+            updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyLock {
+    locked_by: String,
+    locked_at: DateTime<Utc>,
+    ttl_secs: u64,
+    #[serde(default)]
+    affected_files: Vec<String>,
+}
+
+impl LegacyLock {
+    fn into_snapshot(self) -> TaskLockSnapshot {
+        TaskLockSnapshot {
+            locked_by: self.locked_by,
+            locked_at: self.locked_at,
+            lease_duration_sec: self.ttl_secs,
+            last_heartbeat: self.locked_at,
+            affected_files: self.affected_files,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyImpact {
+    risk_level: ImpactRiskLevel,
+    affected_symbols: usize,
+    #[serde(default)]
+    depth1: Vec<String>,
+    analyzed_at: DateTime<Utc>,
+}
+
+impl LegacyImpact {
+    fn into_snapshot(self) -> TaskImpact {
+        TaskImpact {
+            risk_level: self.risk_level,
+            affected_symbols: self.affected_symbols,
+            depth1: self.depth1,
+            analyzed_at: self.analyzed_at,
+            analyzed_commit: None,
+            input_hash: None,
+        }
+    }
+}
+
+fn legacy_state(state: &str) -> TaskState {
+    match state {
+        "draft" => TaskState::Draft,
+        "pending" => TaskState::Pending,
+        "analyzing" => TaskState::Analyzing,
+        "implementing" => TaskState::Implementing,
+        "reviewing" => TaskState::Reviewing,
+        "merged" => TaskState::Merged,
+        "deploying" => TaskState::Deploying,
+        "done" => TaskState::Done,
+        "blocked" => TaskState::Blocked,
+        "failed" => TaskState::Failed,
+        "cancelled" => TaskState::Cancelled,
+        "awaiting_github_sync" => TaskState::AwaitingGithubSync,
+        _ => TaskState::Draft,
+    }
 }
 
 pub fn lease_expiry(last_heartbeat: DateTime<Utc>, lease_duration_sec: u64) -> DateTime<Utc> {

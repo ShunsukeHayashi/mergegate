@@ -24,14 +24,14 @@ impl Default for LeaseConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LockConflict {
     pub conflicting: bool,
     pub held_by: Option<String>,
     pub task_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LeaseSweep {
     pub released: Vec<String>,
     pub active: Vec<String>,
