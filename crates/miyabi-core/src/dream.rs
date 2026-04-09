@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 const DREAM_TASK_ID: &str = "__dream__";
@@ -50,19 +51,31 @@ pub fn dream(event_store: &EventStore, since: Option<ChronoDuration>) -> Result<
     Ok(analyze_events(&events))
 }
 
+pub fn dream_with_auto(
+    event_store: &EventStore,
+    since: Option<ChronoDuration>,
+    auto: bool,
+    repo_root: &Path,
+) -> Result<DreamReport> {
+    let events = collect_events(event_store, since)?;
+    let report = analyze_events(&events);
+    if auto {
+        run_theta_cycle(&report, repo_root)?;
+    }
+    Ok(report)
+}
+
 pub fn write_high_learnings(report: &DreamReport, directory: &Path) -> Result<Vec<PathBuf>> {
     fs::create_dir_all(directory)?;
 
     let mut written = Vec::new();
-    for (index, learning) in report
+    let date_prefix = Utc::now().format("%Y-%m-%d").to_string();
+    for learning in report
         .learnings
         .iter()
         .filter(|learning| learning.importance == Importance::High)
-        .enumerate()
     {
-        let timestamp = Utc::now().format("%Y%m%d-%H%M%S");
-        let filename = format!("{timestamp}-{index:02}-{}.md", slugify(&learning.title));
-        let path = directory.join(filename);
+        let path = next_learning_path(directory, &date_prefix, &slugify(&learning.title));
         let tmp_path = path.with_extension("md.tmp");
         let content = format!(
             "# {}\n\n- importance: {:?}\n- related_task: {}\n\n{}\n",
@@ -77,6 +90,101 @@ pub fn write_high_learnings(report: &DreamReport, directory: &Path) -> Result<Ve
     }
 
     Ok(written)
+}
+
+fn run_theta_cycle(report: &DreamReport, repo_root: &Path) -> Result<()> {
+    run_theta_cycle_with_runner(report, repo_root, &mut run_command)
+}
+
+fn run_theta_cycle_with_runner<F>(report: &DreamReport, repo_root: &Path, run: &mut F) -> Result<()>
+where
+    F: FnMut(&str, &[String], &Path) -> Result<()>,
+{
+    let score = average_learning_score(report);
+    run(
+        "npx",
+        &[
+            "miyabi".to_string(),
+            "bus".to_string(),
+            "record-run".to_string(),
+            "polaris".to_string(),
+            "--result".to_string(),
+            "success".to_string(),
+            "--score".to_string(),
+            format!("{score:.2}"),
+            "--task".to_string(),
+            "dream cycle".to_string(),
+        ],
+        repo_root,
+    )?;
+
+    let learning_dir = repo_root.join("docs").join("learnings");
+    let high_learnings = report
+        .learnings
+        .iter()
+        .filter(|learning| learning.importance == Importance::High)
+        .collect::<Vec<_>>();
+    let written = write_high_learnings(report, &learning_dir)?;
+
+    for (path, learning) in written.iter().zip(high_learnings) {
+        let relative_path = path
+            .strip_prefix(repo_root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+        run("git", &[String::from("add"), relative_path], repo_root)?;
+        run(
+            "git",
+            &[
+                String::from("commit"),
+                String::from("-m"),
+                format!("[学習] {}", learning.title),
+            ],
+            repo_root,
+        )?;
+    }
+
+    Ok(())
+}
+
+pub fn obsidian_export(learning: &Learning, vault_path: Option<&Path>) -> Result<PathBuf> {
+    let root = vault_path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(default_obsidian_vault_path);
+    let date = Utc::now().format("%Y-%m-%d").to_string();
+    let note_dir = root.join("Docs-Operations").join("dtp-learnings");
+    fs::create_dir_all(&note_dir)?;
+
+    let filename = format!("{date}-{}.md", slugify(&learning.title));
+    let path = note_dir.join(filename);
+    let tmp_path = path.with_extension("md.tmp");
+    let created = Utc::now().to_rfc3339();
+    let tags = format!(
+        "- dtp\n- learning\n- importance/{}",
+        importance_slug(learning.importance)
+    );
+    let content = format!(
+        "---\n\
+type: dtp_learning\n\
+domain: docs-operations\n\
+status: captured\n\
+tags:\n\
+{tags}\n\
+created: {created}\n\
+---\n\n\
+# {title}\n\n\
+- importance: {:?}\n\
+- related_task: {}\n\n\
+{body}\n\n\
+[[DTP Learnings MOC]]\n",
+        learning.importance,
+        learning.related_task.as_deref().unwrap_or("none"),
+        title = learning.title,
+        body = learning.content,
+    );
+    fs::write(&tmp_path, content)?;
+    fs::rename(&tmp_path, &path)?;
+    Ok(path)
 }
 
 pub fn analyze_events(events: &[TaskEvent]) -> DreamReport {
@@ -216,6 +324,40 @@ fn extract_learnings(patterns: &DreamPatterns) -> Vec<Learning> {
     learnings
 }
 
+fn average_learning_score(report: &DreamReport) -> f32 {
+    if report.learnings.is_empty() {
+        return 1.0;
+    }
+
+    let total: f32 = report
+        .learnings
+        .iter()
+        .map(|learning| match learning.importance {
+            Importance::High => 1.0,
+            Importance::Medium => 0.7,
+            Importance::Low => 0.4,
+        })
+        .sum();
+    total / report.learnings.len() as f32
+}
+
+fn next_learning_path(directory: &Path, date_prefix: &str, slug: &str) -> PathBuf {
+    let base_name = format!("{date_prefix}-{slug}");
+    let initial = directory.join(format!("{base_name}.md"));
+    if !initial.exists() {
+        return initial;
+    }
+
+    let mut suffix = 2;
+    loop {
+        let candidate = directory.join(format!("{base_name}-{suffix}.md"));
+        if !candidate.exists() {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
 fn slugify(title: &str) -> String {
     let slug: String = title
         .chars()
@@ -229,12 +371,42 @@ fn slugify(title: &str) -> String {
     }
 }
 
+fn default_obsidian_vault_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join("dev")
+        .join("content")
+        .join("obsidian")
+}
+
+fn importance_slug(importance: Importance) -> &'static str {
+    match importance {
+        Importance::High => "high",
+        Importance::Medium => "medium",
+        Importance::Low => "low",
+    }
+}
+
+fn run_command(program: &str, args: &[String], cwd: &Path) -> Result<()> {
+    let status = Command::new(program).args(args).current_dir(cwd).status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(crate::error::Error::Other(format!(
+            "command failed: {} {}",
+            program,
+            args.join(" ")
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::store::TaskEvent;
     use chrono::{Duration as ChronoDuration, TimeZone};
     use serde_json::json;
+    use tempfile::TempDir;
 
     fn event(
         event_type: TaskEventType,
@@ -331,5 +503,80 @@ mod tests {
         assert!(report.patterns.lock_conflicts.is_empty());
         assert!(report.patterns.completion_times.is_empty());
         assert!(report.learnings.is_empty());
+    }
+
+    #[test]
+    fn obsidian_export_creates_valid_markdown_with_frontmatter() {
+        let tmp = TempDir::new().unwrap();
+        let learning = Learning {
+            title: "GATE 3 の拒否が多発".to_string(),
+            importance: Importance::High,
+            content: "手順書の改善が必要です。".to_string(),
+            related_task: Some("task-3".to_string()),
+        };
+
+        let path = obsidian_export(&learning, Some(tmp.path())).unwrap();
+        let note = fs::read_to_string(&path).unwrap();
+
+        assert!(path.starts_with(tmp.path().join("Docs-Operations").join("dtp-learnings")));
+        assert!(note.starts_with("---\n"));
+        assert!(note.contains("type: dtp_learning"));
+        assert!(note.contains("domain: docs-operations"));
+        assert!(note.contains("status: captured"));
+        assert!(note.contains("- dtp"));
+        assert!(note.contains("[[DTP Learnings MOC]]"));
+    }
+
+    #[test]
+    fn dream_with_auto_produces_learning_files() {
+        let tmp = TempDir::new().unwrap();
+        let event_store = EventStore::new(tmp.path().join("events.jsonl"));
+        let base = Utc.with_ymd_and_hms(2026, 4, 10, 0, 0, 0).unwrap();
+        for index in 0..3 {
+            event_store
+                .append(&TaskEvent {
+                    id: format!("gate-{index}"),
+                    ts: base + ChronoDuration::seconds(index),
+                    event_type: TaskEventType::GateRejected,
+                    task_id: format!("task-{index}"),
+                    agent: "test".into(),
+                    node: "test".into(),
+                    payload: json!({"gate": "GATE 3"}),
+                    version: index as u64 + 1,
+                })
+                .unwrap();
+        }
+
+        let report = dream_with_auto(&event_store, None, false, tmp.path()).unwrap();
+        let mut calls = Vec::new();
+        run_theta_cycle_with_runner(&report, tmp.path(), &mut |program, args, _cwd| {
+            calls.push((program.to_string(), args.to_vec()));
+            Ok(())
+        })
+        .unwrap();
+
+        let learning_dir = tmp.path().join("docs").join("learnings");
+        let entries = fs::read_dir(&learning_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), 1);
+        let content = fs::read_to_string(&entries[0]).unwrap();
+        assert!(content.contains("GATE 3"));
+        assert!(
+            calls
+                .iter()
+                .any(|(program, args)| program == "npx"
+                    && args.first() == Some(&"miyabi".to_string()))
+        );
+        assert!(calls
+            .iter()
+            .any(|(program, args)| program == "git" && args.first() == Some(&"add".to_string())));
+        assert!(
+            calls
+                .iter()
+                .any(|(program, args)| program == "git"
+                    && args.first() == Some(&"commit".to_string()))
+        );
     }
 }

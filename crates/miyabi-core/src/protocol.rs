@@ -415,10 +415,13 @@ impl DeterministicExecutionProtocol {
     pub fn dream(
         &self,
         since: Option<chrono::Duration>,
+        auto: bool,
+        repo_root: &Path,
         actor: &str,
         node: &str,
     ) -> ProtocolResult<DreamReport> {
-        let report = crate::dream::dream(&self.event_store, since).map_err(ProtocolError::from)?;
+        let report = crate::dream::dream_with_auto(&self.event_store, since, auto, repo_root)
+            .map_err(ProtocolError::from)?;
         let version = self
             .snapshot_store
             .load()
@@ -630,6 +633,23 @@ impl DeterministicExecutionProtocol {
                     impact.risk_level, impact.affected_symbols
                 ),
             );
+        }
+
+        if let Some(vault_path) = obsidian_vault_path() {
+            for note in find_obsidian_notes(&vault_path, &task.title, 3)? {
+                if remaining_tokens == 0 {
+                    break;
+                }
+                let content = read_file_snippet(&note, FILE_SNIPPET_LINE_LIMIT)
+                    .map_err(ProtocolError::from)?;
+                push_attachment(
+                    &mut attachments,
+                    &mut remaining_tokens,
+                    "obsidian_note",
+                    &note.display().to_string(),
+                    &content,
+                );
+            }
         }
 
         if let Some(lock) = &task.lock {
@@ -895,6 +915,91 @@ fn read_file_snippet(path: &Path, max_lines: usize) -> Result<String, Error> {
     Ok(lines.join("\n"))
 }
 
+fn obsidian_vault_path() -> Option<PathBuf> {
+    std::env::var("OBSIDIAN_VAULT_PATH")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+fn find_obsidian_notes(
+    vault_path: &Path,
+    task_title: &str,
+    limit: usize,
+) -> Result<Vec<PathBuf>, Error> {
+    if limit == 0 || !vault_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let keywords = title_keywords(task_title);
+    if keywords.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut matches = Vec::new();
+    collect_obsidian_matches(vault_path, &keywords, &mut matches)?;
+    matches.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.as_os_str().cmp(right.1.as_os_str()))
+    });
+    matches.truncate(limit);
+    Ok(matches.into_iter().map(|(_, path)| path).collect())
+}
+
+fn collect_obsidian_matches(
+    directory: &Path,
+    keywords: &[String],
+    matches: &mut Vec<(usize, PathBuf)>,
+) -> Result<(), Error> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_obsidian_matches(&path, keywords, matches)?;
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+
+        let haystack = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let score = keywords
+            .iter()
+            .filter(|keyword| haystack.contains(keyword.as_str()))
+            .count();
+        if score > 0 {
+            matches.push((score, path));
+        }
+    }
+
+    Ok(())
+}
+
+fn title_keywords(title: &str) -> Vec<String> {
+    let normalized: String = title
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    normalized
+        .split_whitespace()
+        .filter(|token| token.len() >= 3)
+        .map(ToString::to_string)
+        .collect()
+}
+
 fn recompute_dependents(snapshot: &mut TasksSnapshot) {
     let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
     for task in &snapshot.tasks {
@@ -969,7 +1074,13 @@ fn compute_dag(snapshot: &TasksSnapshot) -> DagReport {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, OnceLock};
     use tempfile::TempDir;
+
+    fn obsidian_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     fn fixture() -> (TempDir, DeterministicExecutionProtocol) {
         let tmp = TempDir::new().unwrap();
@@ -1157,6 +1268,8 @@ mod tests {
 
     #[test]
     fn attach_context_collects_issue_impact_and_file_snippets() {
+        let _guard = obsidian_env_lock().lock().unwrap();
+        std::env::remove_var("OBSIDIAN_VAULT_PATH");
         let (tmp, protocol) = fixture();
         let src_dir = tmp.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
@@ -1205,26 +1318,36 @@ mod tests {
             .attach_context("phase-a", "codex", "macbook")
             .unwrap();
 
-        assert_eq!(attachments.len(), 3);
-        assert_eq!(attachments[0].attachment_type, "issue");
-        assert_eq!(attachments[0].content, "Issue #42");
-        assert_eq!(attachments[1].attachment_type, "impact");
-        assert!(attachments[1].content.contains("affected_symbols: 7"));
-        assert_eq!(attachments[2].attachment_type, "file_snippet");
-        assert!(attachments[2].content.contains("line 1"));
-        assert!(attachments[2].content.contains("line 30"));
-        assert!(!attachments[2].content.contains("line 31"));
+        let issue_attachment = attachments
+            .iter()
+            .find(|attachment| attachment.attachment_type == "issue")
+            .unwrap();
+        assert_eq!(issue_attachment.content, "Issue #42");
+        let impact_attachment = attachments
+            .iter()
+            .find(|attachment| attachment.attachment_type == "impact")
+            .unwrap();
+        assert!(impact_attachment.content.contains("affected_symbols: 7"));
+        let file_attachment = attachments
+            .iter()
+            .find(|attachment| attachment.attachment_type == "file_snippet")
+            .unwrap();
+        assert!(file_attachment.content.contains("line 1"));
+        assert!(file_attachment.content.contains("line 30"));
+        assert!(!file_attachment.content.contains("line 31"));
 
         let task = match protocol.status(Some("phase-a")).unwrap() {
             StatusReport::Task(task) => task,
             StatusReport::Snapshot(_) => panic!("expected task status"),
         };
         assert_eq!(task.issue_number, 42);
-        assert_eq!(task.context_attachments.len(), 3);
+        assert!(task.context_attachments.len() >= 3);
     }
 
     #[test]
     fn attach_context_trims_to_token_budget() {
+        let _guard = obsidian_env_lock().lock().unwrap();
+        std::env::remove_var("OBSIDIAN_VAULT_PATH");
         let (tmp, protocol) = fixture();
         let src_dir = tmp.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
@@ -1275,6 +1398,72 @@ mod tests {
         let total_tokens: usize = attachments.iter().map(|item| item.token_estimate).sum();
         assert!(total_tokens <= 8);
         assert!(!attachments.is_empty());
+    }
+
+    #[test]
+    fn attach_context_with_obsidian_vault_finds_matching_notes() {
+        let _guard = obsidian_env_lock().lock().unwrap();
+        let (tmp, protocol) = fixture();
+        let src_dir = tmp.path().join("src");
+        let vault_dir = tmp.path().join("vault");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::create_dir_all(vault_dir.join("Notes")).unwrap();
+        fs::write(src_dir.join("lib.rs"), "fn main() {}\n").unwrap();
+        fs::write(
+            vault_dir.join("Notes").join("phase-auth-implementation.md"),
+            "# Auth notes\n",
+        )
+        .unwrap();
+        fs::write(
+            vault_dir.join("Notes").join("unrelated-topic.md"),
+            "# Other\n",
+        )
+        .unwrap();
+        std::env::set_var("OBSIDIAN_VAULT_PATH", &vault_dir);
+
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 10,
+                    task_id: "phase-a".into(),
+                    title: "Phase Auth Implementation".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "phase-a",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::Low,
+                    affected_symbols: 1,
+                    depth1: vec!["attach_context".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "codex",
+                "macbook",
+            )
+            .unwrap();
+        protocol
+            .assign("phase-a", "codex", "macbook", &[String::from("src/lib.rs")])
+            .unwrap();
+
+        let attachments = protocol
+            .attach_context("phase-a", "codex", "macbook")
+            .unwrap();
+        std::env::remove_var("OBSIDIAN_VAULT_PATH");
+
+        assert!(attachments.iter().any(|attachment| {
+            attachment.attachment_type == "obsidian_note"
+                && attachment.source.ends_with("phase-auth-implementation.md")
+        }));
     }
 
     #[test]

@@ -227,6 +227,9 @@ enum GateCommand {
         /// Analyze only recent events, e.g. 24h, 30m, 7d
         #[arg(long)]
         since: Option<String>,
+        /// Obsidian vault path for exported learnings
+        #[arg(long)]
+        vault_path: Option<PathBuf>,
         /// Persist High learnings into docs/learnings/
         #[arg(long)]
         auto: bool,
@@ -1174,7 +1177,6 @@ fn handle_gate_command(
     store_path: &std::path::Path,
     command: GateCommand,
 ) -> anyhow::Result<i32> {
-    use miyabi_core::dream::write_high_learnings;
     use miyabi_core::protocol::{
         DeterministicExecutionProtocol, ImpactInput, ProtocolError, RegisterTaskRequest,
         StatusReport,
@@ -1315,6 +1317,9 @@ fn handle_gate_command(
                         println!("no context attachments: {}", task_id);
                     } else {
                         println!("context attachments: {}", task_id);
+                        if std::env::var_os("OBSIDIAN_VAULT_PATH").is_some() {
+                            println!("obsidian search: enabled via OBSIDIAN_VAULT_PATH");
+                        }
                         for attachment in attachments {
                             println!(
                                 "--- [{}] {} ({} tokens)",
@@ -1380,39 +1385,48 @@ fn handle_gate_command(
             serve_dashboard(store_path, port)?;
             Ok(())
         }
-        GateCommand::Dream { since, auto } => {
+        GateCommand::Dream {
+            since,
+            vault_path,
+            auto,
+        } => {
             let since = since
                 .as_deref()
                 .map(parse_gate_since)
                 .transpose()
                 .map_err(|error: anyhow::Error| ProtocolError::input(error.to_string()))?;
-            protocol.dream(since, actor, &node).and_then(|report| {
-                if matches!(format, OutputFormat::Json) {
-                    println!("{}", serde_json::to_string_pretty(&report).unwrap());
-                } else {
-                    print_dream_report(&report);
-                }
+            let repo_root =
+                std::env::current_dir().map_err(|error| ProtocolError::input(error.to_string()))?;
+            protocol
+                .dream(since, auto, &repo_root, actor, &node)
+                .and_then(|report| {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                    } else {
+                        print_dream_report(&report);
+                    }
 
-                if auto {
-                    let written = write_high_learnings(
-                        &report,
-                        &std::env::current_dir()
-                            .map_err(|error| ProtocolError::input(error.to_string()))?
-                            .join("docs")
-                            .join("learnings"),
-                    )
-                    .map_err(ProtocolError::Internal)?;
-                    if !matches!(format, OutputFormat::Json) {
-                        if written.is_empty() {
-                            println!("high learnings: none");
-                        } else {
-                            println!("high learnings written: {}", written.len());
+                    if auto {
+                        let obsidian_written: Vec<PathBuf> = report
+                            .learnings
+                            .iter()
+                            .filter(|learning| learning.importance == miyabi_core::Importance::High)
+                            .map(|learning| {
+                                miyabi_core::dream::obsidian_export(learning, vault_path.as_deref())
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(ProtocolError::Internal)?;
+                        if !matches!(format, OutputFormat::Json) {
+                            if obsidian_written.is_empty() {
+                                println!("obsidian notes written: none");
+                            } else {
+                                println!("obsidian notes written: {}", obsidian_written.len());
+                            }
                         }
                     }
-                }
 
-                Ok(())
-            })
+                    Ok(())
+                })
         }
     };
 
