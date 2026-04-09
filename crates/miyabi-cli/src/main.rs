@@ -4,6 +4,8 @@ use chrono::Duration as ChronoDuration;
 use clap::{Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
 use std::collections::HashMap;
+use std::io::{self, BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
@@ -214,6 +216,12 @@ enum GateCommand {
     Dag,
     /// Show dispatchable tasks
     Dispatchable,
+    /// Serve a minimal web dashboard
+    Serve {
+        /// Port to bind the dashboard to
+        #[arg(long, default_value_t = 4848)]
+        port: u16,
+    },
     /// Analyze recent event logs and extract learnings
     Dream {
         /// Analyze only recent events, e.g. 24h, 30m, 7d
@@ -1368,6 +1376,10 @@ fn handle_gate_command(
                 }
             }
         }),
+        GateCommand::Serve { port } => {
+            serve_dashboard(store_path, port)?;
+            Ok(())
+        }
         GateCommand::Dream { since, auto } => {
             let since = since
                 .as_deref()
@@ -1514,6 +1526,377 @@ fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {
     } else {
         eprintln!("{}: {}", kind, message);
     }
+}
+
+const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polaris Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #162033;
+      --muted: #667085;
+      --border: #d6dfeb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #eef4ff 0%, #f8fafc 55%, #f4f7fb 100%);
+    }
+    .shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    header, .panel {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    }
+    header {
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+    }
+    .subtitle, .meta {
+      margin: 0;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .panel {
+      padding: 16px;
+    }
+    .task-list, .dag-list, .lock-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+    .task-item, .dag-item, .lock-item {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fbfdff;
+    }
+    .task-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .task-title {
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .task-meta, .dag-meta, .lock-meta {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-width: 92px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: #ffffff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: lowercase;
+    }
+    .empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+    @media (max-width: 640px) {
+      .shell { padding: 12px; }
+      header, .panel { border-radius: 14px; }
+      .task-top { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <h1>Polaris Dashboard</h1>
+      <p class="subtitle">Deterministic Task Protocol live view</p>
+      <p class="meta" id="meta">Loading...</p>
+    </header>
+    <section class="grid">
+      <article class="panel">
+        <h2>Tasks</h2>
+        <ul id="tasks" class="task-list"><li class="empty">Loading tasks...</li></ul>
+      </article>
+      <article class="panel">
+        <h2>DAG Levels</h2>
+        <ul id="dag" class="dag-list"><li class="empty">Loading DAG...</li></ul>
+      </article>
+      <article class="panel">
+        <h2>File Locks</h2>
+        <ul id="locks" class="lock-list"><li class="empty">Loading locks...</li></ul>
+      </article>
+    </section>
+  </div>
+  <script>
+    const stateColors = {
+      pending: "#6b7280",
+      implementing: "#2563eb",
+      merged: "#15803d",
+      done: "#15803d",
+      blocked: "#dc2626"
+    };
+
+    function setEmpty(id, message) {
+      document.getElementById(id).innerHTML = '<li class="empty">' + message + '</li>';
+    }
+
+    function colorForState(state) {
+      return stateColors[state] || "#7c3aed";
+    }
+
+    function renderTasks(snapshot) {
+      const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+      const el = document.getElementById("tasks");
+      if (tasks.length === 0) {
+        setEmpty("tasks", "No tasks in snapshot");
+        return;
+      }
+
+      el.innerHTML = "";
+      for (const task of tasks) {
+        const item = document.createElement("li");
+        item.className = "task-item";
+
+        const top = document.createElement("div");
+        top.className = "task-top";
+
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = task.title + " (" + task.id + ")";
+
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.style.background = colorForState(task.current_state);
+        badge.textContent = task.current_state;
+
+        top.appendChild(title);
+        top.appendChild(badge);
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+        const deps = Array.isArray(task.dependencies) && task.dependencies.length > 0
+          ? task.dependencies.join(", ")
+          : "none";
+        meta.textContent = "priority " + task.priority + " | deps: " + deps;
+
+        item.appendChild(top);
+        item.appendChild(meta);
+        el.appendChild(item);
+      }
+    }
+
+    function renderDag(report) {
+      const levels = Array.isArray(report.levels) ? report.levels : [];
+      const el = document.getElementById("dag");
+      if (levels.length === 0) {
+        setEmpty("dag", "No DAG levels available");
+        return;
+      }
+
+      el.innerHTML = "";
+      levels.forEach((level, index) => {
+        const item = document.createElement("li");
+        item.className = "dag-item";
+
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = "Level " + index;
+
+        const meta = document.createElement("div");
+        meta.className = "dag-meta";
+        meta.textContent = Array.isArray(level) && level.length > 0 ? level.join(", ") : "empty";
+
+        item.appendChild(title);
+        item.appendChild(meta);
+        el.appendChild(item);
+      });
+    }
+
+    function renderLocks(locks) {
+      const entries = Object.entries(locks || {});
+      const el = document.getElementById("locks");
+      if (entries.length === 0) {
+        setEmpty("locks", "No active file locks");
+        return;
+      }
+
+      el.innerHTML = "";
+      for (const [file, lock] of entries) {
+        const item = document.createElement("li");
+        item.className = "lock-item";
+
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = file;
+
+        const meta = document.createElement("div");
+        meta.className = "lock-meta";
+        meta.textContent = lock.agent + "@" + lock.node + " | task: " + lock.task_id;
+
+        item.appendChild(title);
+        item.appendChild(meta);
+        el.appendChild(item);
+      }
+    }
+
+    async function refresh() {
+      try {
+        const [statusRes, locksRes, dagRes] = await Promise.all([
+          fetch("/api/status"),
+          fetch("/api/locks"),
+          fetch("/api/dag")
+        ]);
+
+        if (!statusRes.ok || !locksRes.ok || !dagRes.ok) {
+          throw new Error("API request failed");
+        }
+
+        const [status, locks, dag] = await Promise.all([
+          statusRes.json(),
+          locksRes.json(),
+          dagRes.json()
+        ]);
+
+        renderTasks(status);
+        renderLocks(locks);
+        renderDag(dag);
+
+        document.getElementById("meta").textContent =
+          "Snapshot version " + status.version + " | updated " + status.generated_at +
+          " | auto-refresh every 3s";
+      } catch (error) {
+        document.getElementById("meta").textContent = "Refresh failed: " + error.message;
+        setEmpty("tasks", "Failed to load tasks");
+        setEmpty("dag", "Failed to load DAG");
+        setEmpty("locks", "Failed to load locks");
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
+"##;
+
+fn serve_dashboard(store_path: &std::path::Path, port: u16) -> anyhow::Result<()> {
+    let protocol = miyabi_core::protocol::DeterministicExecutionProtocol::from_store_path(
+        store_path.to_path_buf(),
+    );
+    let listener = TcpListener::bind(("127.0.0.1", port))?;
+    println!("Polaris Dashboard listening on http://127.0.0.1:{port}");
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(mut stream) => {
+                if let Err(error) = handle_dashboard_connection(&protocol, &mut stream) {
+                    eprintln!("dashboard request error: {error}");
+                }
+            }
+            Err(error) => eprintln!("dashboard accept error: {error}"),
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_dashboard_connection(
+    protocol: &miyabi_core::protocol::DeterministicExecutionProtocol,
+    stream: &mut TcpStream,
+) -> anyhow::Result<()> {
+    let mut request_line = String::new();
+    let mut reader = BufReader::new(stream.try_clone()?);
+    reader.read_line(&mut request_line)?;
+
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let path = parts.next().unwrap_or("/");
+
+    if method != "GET" {
+        write_http_response(
+            stream,
+            "405 Method Not Allowed",
+            "text/plain; charset=utf-8",
+            b"method not allowed",
+        )?;
+        return Ok(());
+    }
+
+    match path {
+        "/" => write_http_response(
+            stream,
+            "200 OK",
+            "text/html; charset=utf-8",
+            POLARIS_DASHBOARD_HTML.as_bytes(),
+        )?,
+        "/api/status" => {
+            let body =
+                serde_json::to_vec_pretty(&protocol.status(None)?).map_err(io::Error::other)?;
+            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+        }
+        "/api/locks" => {
+            let body = serde_json::to_vec_pretty(&protocol.locks()?).map_err(io::Error::other)?;
+            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+        }
+        "/api/dag" => {
+            let body = serde_json::to_vec_pretty(&protocol.dag()?).map_err(io::Error::other)?;
+            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+        }
+        _ => write_http_response(
+            stream,
+            "404 Not Found",
+            "text/plain; charset=utf-8",
+            b"not found",
+        )?,
+    }
+
+    Ok(())
+}
+
+fn write_http_response(
+    stream: &mut TcpStream,
+    status: &str,
+    content_type: &str,
+    body: &[u8],
+) -> io::Result<()> {
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )?;
+    stream.write_all(body)?;
+    stream.flush()
 }
 
 fn derive_task_id(issue: u64, title: &str) -> String {
