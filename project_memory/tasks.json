@@ -1,6 +1,6 @@
 {
-  "version": 110,
-  "generated_at": "2026-04-10T01:21:56.713090Z",
+  "version": 111,
+  "generated_at": "2026-04-10T01:21:58.769553Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -388,7 +388,7 @@
       "id": "issue-91",
       "title": "Obsidian automation system integration test",
       "issue_number": 91,
-      "current_state": "reviewing",
+      "current_state": "merged",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
@@ -405,12 +405,12 @@
       "github_evidence": {
         "pr_number": 94,
         "pr_head_ref": "feature/issue-91-obsidian-utf8-fix",
-        "pr_state": "OPEN",
-        "merge_commit_sha": null,
-        "merged_at": null,
-        "review_decision": "REVIEW_REQUIRED",
-        "issue_state": "OPEN",
-        "issue_closed_by_pr": false
+        "pr_state": "MERGED",
+        "merge_commit_sha": "2733aa9552873d503d2be2b661452eb10eb99b41",
+        "merged_at": "2026-04-10T01:21:58.768950Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
       },
       "completion_mode": "github_pr",
       "human_approval": null,
@@ -453,7 +453,7 @@
       ],
       "priority": 0,
       "created_at": "2026-04-10T01:06:37.793381Z",
-      "updated_at": "2026-04-10T01:08:07.737739Z"
+      "updated_at": "2026-04-10T01:21:58.769316Z"
     },
     {
       "id": "issue-93",
@@ -772,13 +772,13 @@
       "node": "macbook-pro",
       "expires_at": "2026-04-10T01:21:29.023205Z"
     },
-    "crates/miyabi-core/Cargo.toml": {
+    "crates/miyabi-core/src/lock.rs": {
       "task_id": "issue-100",
       "agent": "claude-code",
       "node": "macbook-pro",
       "expires_at": "2026-04-10T01:21:29.023205Z"
     },
-    "crates/miyabi-core/src/lock.rs": {
+    "crates/miyabi-core/Cargo.toml": {
       "task_id": "issue-100",
       "agent": "claude-code",
       "node": "macbook-pro",
