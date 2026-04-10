@@ -1,12 +1,28 @@
 # miyabi gate CLI — 確定的タスク実行スキル
 
+## バイナリ
+
+**`~/bin/miyabi-gate`** （全ノードにインストール済み）
+
 ## 概要
 
-Polaris (DTP) の CLI インターフェース。エージェントがタスクの登録・ロック・検証・完了を確定的に実行する。
+Polaris (DTP) の CLI。タスクの登録・ロック・検証・完了を確定的に実行する。
+ファイル編集前に必ず `miyabi-gate gate assign` でロックを取得すること。
+
+## クイックスタート
+
+```bash
+miyabi-gate gate init                                    # 初回のみ
+miyabi-gate gate register --issue 1 --title "タスク名"  # タスク登録
+miyabi-gate gate impact issue-1 --risk low --symbols 0   # 影響分析
+miyabi-gate gate assign issue-1 --agent claude --node macbook --files "src/main.rs"  # ロック獲得
+# → 作業実施
+miyabi-gate gate manual-complete issue-1 --reason "完了" --operator claude  # 完了
+```
 
 ## トリガー
 
-miyabi gate, polaris, dtp, タスク登録, ロック, GATE, 確定的, deterministic
+miyabi gate, miyabi-gate, polaris, dtp, タスク登録, ロック, assign, GATE, 確定的, deterministic, ファイルロック, 依存関係, DAG
 
 ## 前提
 
