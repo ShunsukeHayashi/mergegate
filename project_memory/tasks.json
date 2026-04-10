@@ -1,6 +1,6 @@
 {
-  "version": 111,
-  "generated_at": "2026-04-10T01:21:58.769553Z",
+  "version": 112,
+  "generated_at": "2026-04-10T01:22:00.857823Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -459,7 +459,7 @@
       "id": "issue-93",
       "title": "Bus docking: auto-enqueue on register",
       "issue_number": 93,
-      "current_state": "reviewing",
+      "current_state": "merged",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
@@ -476,12 +476,12 @@
       "github_evidence": {
         "pr_number": 95,
         "pr_head_ref": "feature/issue-93-bus-docking",
-        "pr_state": "OPEN",
-        "merge_commit_sha": null,
-        "merged_at": null,
-        "review_decision": "REVIEW_REQUIRED",
-        "issue_state": "OPEN",
-        "issue_closed_by_pr": false
+        "pr_state": "MERGED",
+        "merge_commit_sha": "3ff1a09c335d80ea78200e64500b2a0b00b54e76",
+        "merged_at": "2026-04-10T01:22:00.857241Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
       },
       "completion_mode": "github_pr",
       "human_approval": null,
@@ -510,7 +510,7 @@
       ],
       "priority": 0,
       "created_at": "2026-04-10T01:08:56.660888Z",
-      "updated_at": "2026-04-10T01:10:41.066418Z"
+      "updated_at": "2026-04-10T01:22:00.857518Z"
     },
     {
       "id": "issue-97",
@@ -766,6 +766,12 @@
     }
   ],
   "file_locks": {
+    "crates/miyabi-core/Cargo.toml": {
+      "task_id": "issue-100",
+      "agent": "claude-code",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T01:21:29.023205Z"
+    },
     "crates/miyabi-core/src/store.rs": {
       "task_id": "issue-100",
       "agent": "claude-code",
@@ -773,12 +779,6 @@
       "expires_at": "2026-04-10T01:21:29.023205Z"
     },
     "crates/miyabi-core/src/lock.rs": {
-      "task_id": "issue-100",
-      "agent": "claude-code",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-10T01:21:29.023205Z"
-    },
-    "crates/miyabi-core/Cargo.toml": {
       "task_id": "issue-100",
       "agent": "claude-code",
       "node": "macbook-pro",
