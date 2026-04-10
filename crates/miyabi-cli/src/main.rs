@@ -2132,6 +2132,132 @@ miyabi-gate gate dream               # Extract learnings from event log
 miyabi-gate gate dream --auto        # Also write High learnings to docs/ and update SKILL.md
 miyabi-gate gate serve               # Web dashboard at localhost:4848
 ```
+
+## Command Reference
+
+### init
+  Initialize project memory in the current repo.
+  miyabi-gate gate init
+
+### register
+  Register a new task. Creates an entry in tasks.json.
+  miyabi-gate gate register --issue <N> --title "Title"
+  miyabi-gate gate register --issue <N> --title "Title" --completion-mode manual
+  miyabi-gate gate register --issue <N> --title "Title" --dependencies dep-1,dep-2
+  miyabi-gate gate register --issue <N> --title "Title" --no-bus
+  Options:
+    --issue <N>              GitHub issue number (required, 0 = auto-create)
+    --title <TEXT>           Task title (required)
+    --task-id <ID>           Explicit ID (default: issue-N)
+    --dependencies <IDs>     Comma-separated hard dependency task IDs
+    --soft-dependencies <IDs> Comma-separated soft dependency task IDs
+    --priority <N>           Priority score (default: 0)
+    --completion-mode <MODE> github-pr (default) | manual | external-op
+    --no-bus                 Skip skill-bus auto-enqueue
+
+### impact
+  Record impact analysis for a task.
+  miyabi-gate gate impact <task-id> --risk low --symbols 3
+  miyabi-gate gate impact <task-id> --risk high --symbols 12 --approve
+  miyabi-gate gate impact <task-id> --risk medium --symbols 5 --depth1 "src/a.rs,src/b.rs"
+  Options:
+    --risk <LEVEL>           low | medium | high | critical
+    --symbols <N>            Number of affected symbols
+    --approve                Required for high/critical risk
+    --depth1 <FILES>         Comma-separated depth-1 impact files
+    --analyzed-commit <SHA>  Git commit used for analysis
+    --input-hash <HASH>      Hash of analysis input
+
+### assign
+  Acquire file locks and start implementation.
+  miyabi-gate gate assign <task-id> --agent codex --node macbook --files "src/main.rs,src/lib.rs"
+  Options:
+    --agent <NAME>           Agent name (required)
+    --node <NAME>            Machine name (required)
+    --files <PATHS>          Comma-separated file paths to lock (required)
+
+### branch
+  Record branch creation.
+  miyabi-gate gate branch <task-id> feature/issue-45-auth
+
+### pr
+  Record PR creation.
+  miyabi-gate gate pr <task-id> 88
+
+### merge
+  Record merge verification. Releases locks and unblocks dependents.
+  miyabi-gate gate merge <task-id> <40-char-SHA>
+
+### status
+  Show task status.
+  miyabi-gate gate status              # All tasks
+  miyabi-gate gate status <task-id>    # One task
+  miyabi-gate gate status --format json
+
+### locks
+  List active file locks.
+  miyabi-gate gate locks
+  miyabi-gate gate locks --format json
+
+### dag
+  Show DAG dependency levels.
+  miyabi-gate gate dag
+
+### dispatchable
+  Show tasks ready to be worked on (dependencies resolved, no lock).
+  miyabi-gate gate dispatchable
+  miyabi-gate gate dispatchable --format json
+
+### attach
+  View context attachments for a task.
+  miyabi-gate gate attach <task-id>
+  miyabi-gate gate attach <task-id> --format json
+
+### refresh
+  Force-refresh context attachments (clears cache).
+  miyabi-gate gate refresh <task-id>
+
+### verify-merge
+  Verify merge state via GitHub API.
+  miyabi-gate gate verify-merge <task-id> --repo owner/repo
+
+### force-unlock
+  Emergency: release a lock without completing the task.
+  miyabi-gate gate force-unlock <task-id> --reason "why" --operator "name"
+
+### manual-complete
+  Complete a task without merge verification (for doc/ops tasks).
+  miyabi-gate gate manual-complete <task-id> --reason "why" --operator "name"
+
+### dream
+  Analyze event logs and extract learnings.
+  miyabi-gate gate dream
+  miyabi-gate gate dream --since 24h
+  miyabi-gate gate dream --auto
+  miyabi-gate gate dream --auto --vault-path /path/to/obsidian
+  Options:
+    --since <DURATION>       Filter events (e.g. 24h, 7d, 30m)
+    --auto                   Write High learnings to docs/ + update SKILL.md
+    --vault-path <PATH>      Obsidian vault for exported learnings
+
+### heartbeat
+  Renew lock lease heartbeats.
+  miyabi-gate gate heartbeat --all
+
+### serve
+  Start web dashboard.
+  miyabi-gate gate serve
+  miyabi-gate gate serve --port 8080
+  Options:
+    --port <N>               Port number (default: 4848)
+
+### guide
+  Print this guide.
+  miyabi-gate gate guide
+
+### Global options (apply to all gate commands)
+  --format <text|json>       Output format (default: text)
+  --store-path <PATH>        Path to tasks.json (default: project_memory/tasks.json)
 "#;
 
 const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
