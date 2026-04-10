@@ -268,6 +268,8 @@ enum GateCommand {
         #[arg(long)]
         auto: bool,
     },
+    /// Print the full workflow guide for agents
+    Guide,
     /// Renew active lock heartbeats
     Heartbeat {
         /// Renew all implementing task leases
@@ -1602,6 +1604,10 @@ fn handle_gate_command(
                 })
             }
         }
+        GateCommand::Guide => {
+            print!("{AGENT_GUIDE}");
+            Ok(())
+        }
     };
 
     Ok(match result {
@@ -2019,6 +2025,114 @@ fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {
         eprintln!("{}: {}", kind, message);
     }
 }
+
+const AGENT_GUIDE: &str = r#"
+# Polaris (miyabi-gate) — Agent Guide
+
+## What is this?
+
+Polaris is a deterministic task execution protocol. It enforces a strict
+workflow so that any agent on any machine produces the same verifiable result.
+Tasks are tracked in project_memory/tasks.json, not in conversation memory.
+
+## Rules
+
+1. You MUST NOT edit files without acquiring a lock via `assign`.
+2. You MUST register a task before starting work.
+3. You MUST record impact analysis before assigning.
+4. HIGH/CRITICAL risk requires --approve flag.
+5. Every code task ends with branch → pr → merge. No exceptions.
+
+## Workflow (execute in this exact order)
+
+```
+Step 1: Register
+  miyabi-gate gate register --issue <N> --title "Task description"
+
+Step 2: Impact analysis
+  miyabi-gate gate impact <task-id> --risk <low|medium|high|critical> --symbols <N>
+  # Add --approve if risk is high or critical
+
+Step 3: Assign (acquires file locks)
+  miyabi-gate gate assign <task-id> --agent <your-name> --node <machine> --files "file1.rs,file2.rs"
+  # This prints an execution plan and context attachments. Read them.
+
+Step 4: Work
+  # Edit ONLY the locked files. Pre-commit hook blocks unlocked files.
+
+Step 5: Branch
+  miyabi-gate gate branch <task-id> feature/issue-<N>-<slug>
+
+Step 6: PR
+  miyabi-gate gate pr <task-id> <PR-number>
+
+Step 7: Merge
+  miyabi-gate gate merge <task-id> <merge-commit-sha>
+```
+
+## For document-only tasks (no PR needed)
+
+```
+miyabi-gate gate register --issue <N> --title "Doc task" --completion-mode manual
+miyabi-gate gate impact <task-id> --risk low --symbols 0
+miyabi-gate gate assign <task-id> --agent <name> --node <machine> --files "docs/file.md"
+# ... do the work ...
+miyabi-gate gate manual-complete <task-id> --reason "reason" --operator <name>
+```
+
+## Checking state
+
+```
+miyabi-gate gate status              # All tasks
+miyabi-gate gate status <task-id>    # One task
+miyabi-gate gate locks               # Active file locks
+miyabi-gate gate dag                 # Dependency graph
+miyabi-gate gate dispatchable        # Tasks ready to work on
+miyabi-gate gate attach <task-id>    # View context attachments
+```
+
+## Context attachments (auto-injected on assign)
+
+When you run `assign`, Polaris automatically attaches:
+- GitHub Issue body
+- Impact analysis result
+- Obsidian vault notes matching the task title (if OBSIDIAN_VAULT_PATH is set)
+- Wikilinks from those notes (expanded recursively)
+- First 30 lines of each locked file
+- First 30 lines of depth-1 impact files (direct callers)
+
+Use `miyabi-gate gate attach <task-id> --format json` to get this as JSON
+for programmatic injection into prompts.
+
+## Emergency commands
+
+```
+miyabi-gate gate force-unlock <task-id> --reason "why" --operator <name>
+miyabi-gate gate manual-complete <task-id> --reason "why" --operator <name>
+miyabi-gate gate heartbeat --all    # Renew all lease heartbeats
+```
+
+## Exit codes
+
+  0 = success
+  1 = GATE rejected (fix the condition and retry)
+  2 = input error (fix the command)
+
+## Quality checks (run before every commit)
+
+```
+cargo test --all
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+## Self-improvement
+
+```
+miyabi-gate gate dream               # Extract learnings from event log
+miyabi-gate gate dream --auto        # Also write High learnings to docs/ and update SKILL.md
+miyabi-gate gate serve               # Web dashboard at localhost:4848
+```
+"#;
 
 const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
 <html lang="en">
