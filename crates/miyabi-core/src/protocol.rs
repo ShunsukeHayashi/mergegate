@@ -507,6 +507,7 @@ impl DeterministicExecutionProtocol {
             |task| {
                 let from = task.current_state;
                 task.current_state = TaskState::Done;
+                task.completion_mode = CompletionMode::Manual;
                 Ok(serde_json::json!({
                     "from": from,
                     "to": TaskState::Done,
@@ -1452,7 +1453,7 @@ fn find_obsidian_notes(
     }
 
     let mut matches = Vec::new();
-    collect_obsidian_matches(vault_path, &keywords, &mut matches)?;
+    collect_obsidian_matches(vault_path, &keywords, &mut matches, MAX_VAULT_DEPTH)?;
     matches.sort_by(|left, right| {
         right
             .0
@@ -1467,12 +1468,16 @@ fn collect_obsidian_matches(
     directory: &Path,
     keywords: &[String],
     matches: &mut Vec<(usize, PathBuf)>,
+    depth: usize,
 ) -> Result<(), Error> {
+    if depth == 0 {
+        return Ok(());
+    }
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            collect_obsidian_matches(&path, keywords, matches)?;
+            collect_obsidian_matches(&path, keywords, matches, depth - 1)?;
             continue;
         }
         if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
@@ -1509,6 +1514,12 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
                 }
                 if inner == '|' {
                     // [[Note|Display]] — take the note part before |
+                    // consume remaining chars until ']' so parser stays aligned
+                    for remaining in chars.by_ref() {
+                        if remaining == ']' {
+                            break;
+                        }
+                    }
                     break;
                 }
                 name.push(inner);
@@ -1522,23 +1533,28 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
     links
 }
 
+const MAX_VAULT_DEPTH: usize = 5;
+
 fn resolve_wikilink(vault_path: &Path, link_name: &str) -> Option<PathBuf> {
     // Try exact match first
     let exact = vault_path.join(format!("{link_name}.md"));
     if exact.exists() {
         return Some(exact);
     }
-    // Search recursively for the note
-    find_note_by_name(vault_path, link_name)
+    // Search recursively for the note (depth-limited)
+    find_note_by_name(vault_path, link_name, MAX_VAULT_DEPTH)
 }
 
-fn find_note_by_name(directory: &Path, name: &str) -> Option<PathBuf> {
+fn find_note_by_name(directory: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    if depth == 0 {
+        return None;
+    }
     let target = format!("{}.md", name.to_ascii_lowercase());
     for entry in fs::read_dir(directory).ok()? {
         let entry = entry.ok()?;
         let path = entry.path();
         if path.is_dir() {
-            if let Some(found) = find_note_by_name(&path, name) {
+            if let Some(found) = find_note_by_name(&path, name, depth - 1) {
                 return Some(found);
             }
         } else if path
@@ -2617,6 +2633,73 @@ mod tests {
             .unwrap();
 
         assert_eq!(task.current_state, TaskState::Done);
+        assert_eq!(task.completion_mode, CompletionMode::Manual);
+    }
+
+    #[test]
+    fn full_lifecycle_register_to_merged_releases_lock() {
+        let (_tmp, protocol) = fixture();
+        protocol
+            .register(
+                RegisterTaskRequest {
+                    issue: 1,
+                    task_id: "e2e-lifecycle".into(),
+                    title: "E2E lifecycle".into(),
+                    dependencies: vec![],
+                    soft_dependencies: vec![],
+                    priority: 0,
+                    completion_mode: CompletionMode::GithubPr,
+                },
+                "test-agent",
+                "test-node",
+            )
+            .unwrap();
+        protocol
+            .record_impact(
+                "e2e-lifecycle",
+                ImpactInput {
+                    risk_level: ImpactRiskLevel::Low,
+                    affected_symbols: 1,
+                    depth1: vec!["e2e".into()],
+                    analyzed_commit: None,
+                    input_hash: None,
+                    approve: false,
+                },
+                "test-agent",
+                "test-node",
+            )
+            .unwrap();
+        protocol
+            .assign(
+                "e2e-lifecycle",
+                "test-agent",
+                "test-node",
+                &[String::from("src/test.rs")],
+            )
+            .unwrap();
+        protocol
+            .record_branch(
+                "e2e-lifecycle",
+                "feature/issue-1-test",
+                "test-agent",
+                "test-node",
+            )
+            .unwrap();
+        protocol
+            .record_pr("e2e-lifecycle", 42, "test-agent", "test-node")
+            .unwrap();
+        let merged = protocol
+            .record_merge(
+                "e2e-lifecycle",
+                "0123456789abcdef0123456789abcdef01234567",
+                "test-agent",
+                "test-node",
+            )
+            .unwrap();
+
+        assert_eq!(merged.current_state, TaskState::Merged);
+        assert!(merged.lock.is_none());
+        assert!(protocol.locks().unwrap().is_empty());
     }
 
     #[test]
@@ -2670,5 +2753,67 @@ mod tests {
             StatusReport::Snapshot(_) => panic!("expected task"),
         };
         assert!(after_heartbeat > before_heartbeat);
+    }
+
+    #[test]
+    fn extract_wikilinks_basic() {
+        assert_eq!(
+            extract_wikilinks("See [[Note A]] and [[Note B]]"),
+            vec!["Note A", "Note B"]
+        );
+    }
+
+    #[test]
+    fn extract_wikilinks_with_display_text() {
+        // After fixing F4, [[A|B]] should yield "A" and not corrupt next link
+        assert_eq!(
+            extract_wikilinks("[[Foo|display text]] then [[Bar]]"),
+            vec!["Foo", "Bar"]
+        );
+    }
+
+    #[test]
+    fn extract_wikilinks_empty_and_broken() {
+        assert!(extract_wikilinks("no links here").is_empty());
+        assert!(extract_wikilinks("[[]]").is_empty()); // empty name
+        assert!(extract_wikilinks("[[ ]]").is_empty()); // whitespace only
+        // Unclosed link: should still extract the name
+        assert_eq!(extract_wikilinks("[[unclosed"), vec!["unclosed"]);
+    }
+
+    #[test]
+    fn find_note_by_name_respects_depth_limit() {
+        let tmp = TempDir::new().unwrap();
+        // Create a deeply nested note: a/b/c/d/e/f/g/note.md
+        let deep_dir = tmp.path().join("a/b/c/d/e/f/g");
+        fs::create_dir_all(&deep_dir).unwrap();
+        fs::write(deep_dir.join("target.md"), "deep note").unwrap();
+
+        // depth=5 should NOT find it (7 levels deep)
+        assert!(find_note_by_name(tmp.path(), "target", 5).is_none());
+
+        // depth=8 should find it
+        assert!(find_note_by_name(tmp.path(), "target", 8).is_some());
+
+        // depth=0 always returns None
+        assert!(find_note_by_name(tmp.path(), "target", 0).is_none());
+    }
+
+    #[test]
+    fn resolve_wikilink_finds_direct_and_nested() {
+        let tmp = TempDir::new().unwrap();
+
+        // Direct file
+        fs::write(tmp.path().join("Direct.md"), "content").unwrap();
+        assert!(resolve_wikilink(tmp.path(), "Direct").is_some());
+
+        // Nested file
+        let sub = tmp.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("Nested.md"), "content").unwrap();
+        assert!(resolve_wikilink(tmp.path(), "Nested").is_some());
+
+        // Non-existent
+        assert!(resolve_wikilink(tmp.path(), "NonExistent").is_none());
     }
 }
