@@ -1,6 +1,6 @@
 {
-  "version": 113,
-  "generated_at": "2026-04-10T01:22:02.914584Z",
+  "version": 114,
+  "generated_at": "2026-04-10T01:22:04.980188Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -573,7 +573,7 @@
       "id": "issue-96",
       "title": "Theta cycle: auto-update SKILL.md from dream",
       "issue_number": 96,
-      "current_state": "reviewing",
+      "current_state": "merged",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
@@ -590,12 +590,12 @@
       "github_evidence": {
         "pr_number": 99,
         "pr_head_ref": "feature/issue-96-theta-skill-update",
-        "pr_state": "OPEN",
-        "merge_commit_sha": null,
-        "merged_at": null,
-        "review_decision": "REVIEW_REQUIRED",
-        "issue_state": "OPEN",
-        "issue_closed_by_pr": false
+        "pr_state": "MERGED",
+        "merge_commit_sha": "b05863248103580890f14ac9a097160728e4b60b",
+        "merged_at": "2026-04-10T01:22:04.979660Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
       },
       "completion_mode": "github_pr",
       "human_approval": null,
@@ -624,7 +624,7 @@
       ],
       "priority": 0,
       "created_at": "2026-04-10T01:12:44.820783Z",
-      "updated_at": "2026-04-10T01:14:01.750975Z"
+      "updated_at": "2026-04-10T01:22:04.979931Z"
     },
     {
       "id": "issue-100",
@@ -766,6 +766,12 @@
     }
   ],
   "file_locks": {
+    "crates/miyabi-core/src/store.rs": {
+      "task_id": "issue-100",
+      "agent": "claude-code",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T01:21:29.023205Z"
+    },
     "crates/miyabi-core/src/lock.rs": {
       "task_id": "issue-100",
       "agent": "claude-code",
@@ -773,12 +779,6 @@
       "expires_at": "2026-04-10T01:21:29.023205Z"
     },
     "crates/miyabi-core/Cargo.toml": {
-      "task_id": "issue-100",
-      "agent": "claude-code",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-10T01:21:29.023205Z"
-    },
-    "crates/miyabi-core/src/store.rs": {
       "task_id": "issue-100",
       "agent": "claude-code",
       "node": "macbook-pro",
