@@ -8,6 +8,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::process::Command;
 use tracing_subscriber::EnvFilter;
 
 /// Global feature flags manager
@@ -280,6 +281,17 @@ struct AssignExecutionPlan {
     completion_mode: String,
     context_attachments: Vec<AssignPlanAttachment>,
     next_steps: Vec<String>,
+}
+
+#[derive(Debug)]
+struct InitStatus {
+    initialized: bool,
+    current_dir: String,
+    created_path: String,
+    git_repo: bool,
+    github_remote: Option<String>,
+    gitignore_updated: bool,
+    github_project_detected: bool,
 }
 
 /// Collab canvas subcommands — wraps the collab CLI at ~/.local/bin/collab
@@ -1662,37 +1674,49 @@ fn initialize_gate_project(
     format: &OutputFormat,
     store_path: &std::path::Path,
 ) -> anyhow::Result<()> {
-    if store_path.exists() {
-        if matches!(format, OutputFormat::Json) {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "already_initialized",
-                    "store_path": store_path.display().to_string(),
-                }))?
-            );
-        } else {
-            println!("Already initialized");
-        }
-        return Ok(());
-    }
-
-    if let Some(parent) = store_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let snapshot = miyabi_core::store::TasksSnapshot::default();
-    fs::write(store_path, serde_json::to_vec_pretty(&snapshot)?)?;
-
     let current_dir = std::env::current_dir()?;
     let created_path = store_path.display().to_string();
+    let initialized = if store_path.exists() {
+        false
+    } else {
+        if let Some(parent) = store_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let snapshot = miyabi_core::store::TasksSnapshot::default();
+        fs::write(store_path, serde_json::to_vec_pretty(&snapshot)?)?;
+        true
+    };
+
+    let git_repo = is_git_repository();
+    let github_remote = git_origin_github_remote();
+    let gitignore_updated =
+        ensure_project_memory_gitignore_entries(&current_dir.join(".gitignore"))?;
+    let github_project_detected = github_remote
+        .as_deref()
+        .and_then(github_owner_from_remote)
+        .is_some_and(is_github_project_detected);
+    let status = InitStatus {
+        initialized,
+        current_dir: current_dir.display().to_string(),
+        created_path,
+        git_repo,
+        github_remote,
+        gitignore_updated,
+        github_project_detected,
+    };
+
     if matches!(format, OutputFormat::Json) {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
-                "status": "initialized",
-                "current_dir": current_dir.display().to_string(),
-                "created": created_path,
+                "status": if status.initialized { "initialized" } else { "already_initialized" },
+                "current_dir": status.current_dir,
+                "created": status.created_path,
+                "git_repository": status.git_repo,
+                "github_remote": status.github_remote,
+                "gitignore_updated": status.gitignore_updated,
+                "github_project_detected": status.github_project_detected,
                 "next_steps": [
                     "miyabi gate register --issue <N> --title ...",
                     "miyabi gate status",
@@ -1701,15 +1725,127 @@ fn initialize_gate_project(
             }))?
         );
     } else {
-        println!("Polaris initialized in {}", current_dir.display());
-        println!("Created: {}", created_path);
+        if status.initialized {
+            println!("Polaris initialized in {}", status.current_dir);
+            println!("Created: {}", status.created_path);
+        } else {
+            println!("Already initialized");
+        }
+        if !status.git_repo {
+            println!("⚠️ Not a git repository. Run: git init");
+        }
+        if status.github_remote.is_none() {
+            println!("⚠️ No GitHub remote. Run: gh repo create <name> --private");
+        }
         println!("Next steps:");
         println!("  miyabi gate register --issue <N> --title ...");
         println!("  miyabi gate status");
         println!("  miyabi gate --help");
+        print_init_checklist(&status);
     }
 
     Ok(())
+}
+
+fn print_init_checklist(status: &InitStatus) {
+    if status.git_repo {
+        println!("✅ Git repository");
+    } else {
+        println!("⚠️ Git repository");
+    }
+
+    if let Some(remote) = &status.github_remote {
+        println!("✅ GitHub remote: {}", remote);
+    } else {
+        println!("⚠️ GitHub remote");
+    }
+
+    println!("✅ project_memory/tasks.json initialized");
+
+    println!("✅ .gitignore updated");
+
+    if status.github_project_detected {
+        println!("✅ GitHub Project detected");
+    } else {
+        println!("⚠️ GitHub Project not detected (optional: gh project create)");
+    }
+}
+
+fn is_git_repository() -> bool {
+    command_stdout("git", &["rev-parse", "--git-dir"]).is_some()
+}
+
+fn git_origin_github_remote() -> Option<String> {
+    let remote = command_stdout("git", &["remote", "get-url", "origin"])?;
+    parse_github_remote(&remote)
+}
+
+fn parse_github_remote(remote: &str) -> Option<String> {
+    let trimmed = remote.trim();
+    let slug = if let Some(rest) = trimmed.strip_prefix("git@github.com:") {
+        rest
+    } else if let Some(index) = trimmed.find("github.com/") {
+        &trimmed[(index + "github.com/".len())..]
+    } else {
+        return None;
+    };
+
+    Some(slug.trim_end_matches(".git").trim_matches('/').to_string())
+}
+
+fn github_owner_from_remote(remote: &str) -> Option<&str> {
+    remote.split('/').next().filter(|owner| !owner.is_empty())
+}
+
+fn is_github_project_detected(owner: &str) -> bool {
+    command_stdout("gh", &["project", "list", "--owner", owner, "--limit", "1"])
+        .is_some_and(|stdout| !stdout.trim().is_empty())
+}
+
+fn ensure_project_memory_gitignore_entries(path: &std::path::Path) -> anyhow::Result<bool> {
+    let required_entries = [
+        "project_memory/task-events.jsonl",
+        "project_memory/tasks.snapshot.json",
+        "project_memory/.tasks.lock",
+    ];
+
+    let mut content = if path.exists() {
+        fs::read_to_string(path)?
+    } else {
+        String::new()
+    };
+    let original = content.clone();
+
+    for entry in required_entries {
+        if !content.lines().any(|line| line.trim() == entry) {
+            if !content.is_empty() && !content.ends_with('\n') {
+                content.push('\n');
+            }
+            content.push_str(entry);
+            content.push('\n');
+        }
+    }
+
+    if content != original {
+        fs::write(path, content)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() {
+        None
+    } else {
+        Some(stdout)
+    }
 }
 
 fn assign_plan_to_json(plan: &AssignExecutionPlan) -> serde_json::Value {
