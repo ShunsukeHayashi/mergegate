@@ -282,7 +282,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 
 # 実行
-cargo run -p miyabi-cli
+cargo run -p mergegate-cli --bin mergegate
 ```
 
 ## ライセンス

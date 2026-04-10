@@ -1,5 +1,5 @@
 [package]
-name = "miyabi-cli"
+name = "mergegate-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,16 +7,20 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Miyabi CLI - Main command-line interface"
+description = "MergeGate CLI - Main command-line interface for deterministic task execution and agent-assisted development"
 
 [[bin]]
 name = "miyabi"
 path = "src/main.rs"
 
+[[bin]]
+name = "mergegate"
+path = "src/bin/mergegate.rs"
+
 [dependencies]
 # Workspace crates
-miyabi-core = { path = "../miyabi-core" }
-miyabi-tui = { path = "../miyabi-tui" }
+miyabi-core = { package = "mergegate-core", path = "../mergegate-core" }
+miyabi-tui = { package = "mergegate-tui", path = "../mergegate-tui" }
 
 # CLI
 clap = { workspace = true }
@@ -32,6 +36,7 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 
 # Serialization
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Utilities

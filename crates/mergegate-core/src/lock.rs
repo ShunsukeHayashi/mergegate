@@ -475,13 +475,13 @@ mod tests {
             .unwrap();
 
         for file in &files {
-            let conflict = manager.has_conflict(&[file.clone()]).unwrap();
+            let conflict = manager.has_conflict(std::slice::from_ref(file)).unwrap();
             assert!(conflict.conflicting);
         }
 
         manager.release_lock("task-a").unwrap();
         for file in &files {
-            let conflict = manager.has_conflict(&[file.clone()]).unwrap();
+            let conflict = manager.has_conflict(std::slice::from_ref(file)).unwrap();
             assert!(!conflict.conflicting);
         }
     }
@@ -550,11 +550,11 @@ mod proptest_tests {
         ) {
             let (_tmp, ss, mgr) = setup();
             seed(&ss, "task-a");
-            mgr.acquire_lock("task-a", "agent", "node", &[file.clone()]).unwrap();
-            let c = mgr.has_conflict(&[file.clone()]).unwrap();
+            mgr.acquire_lock("task-a", "agent", "node", std::slice::from_ref(&file)).unwrap();
+            let c = mgr.has_conflict(std::slice::from_ref(&file)).unwrap();
             prop_assert!(c.conflicting);
             mgr.release_lock("task-a").unwrap();
-            let c = mgr.has_conflict(&[file]).unwrap();
+            let c = mgr.has_conflict(std::slice::from_ref(&file)).unwrap();
             prop_assert!(!c.conflicting);
         }
 
@@ -565,8 +565,8 @@ mod proptest_tests {
             let (_tmp, ss, mgr) = setup();
             seed(&ss, "task-a");
             seed(&ss, "task-b");
-            mgr.acquire_lock("task-a", "agent", "node", &[file.clone()]).unwrap();
-            let result = mgr.acquire_lock("task-b", "agent", "node", &[file]);
+            mgr.acquire_lock("task-a", "agent", "node", std::slice::from_ref(&file)).unwrap();
+            let result = mgr.acquire_lock("task-b", "agent", "node", std::slice::from_ref(&file));
             prop_assert!(result.is_err());
         }
 

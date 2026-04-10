@@ -626,7 +626,7 @@ impl DeterministicExecutionProtocol {
 
     pub fn dispatchable(&self) -> ProtocolResult<DispatchableReport> {
         let snapshot = self.snapshot_store.load().map_err(ProtocolError::from)?;
-        let tasks = snapshot
+        let tasks: Vec<ExecutionTask> = snapshot
             .tasks
             .iter()
             .filter(|task| matches!(task.current_state, TaskState::Pending | TaskState::Blocked))
@@ -645,7 +645,12 @@ impl DeterministicExecutionProtocol {
             })
             .cloned()
             .collect();
-        Ok(DispatchableReport { tasks })
+        let task_ids = tasks.iter().map(|task| task.id.clone()).collect();
+        Ok(DispatchableReport {
+            count: tasks.len(),
+            task_ids,
+            tasks,
+        })
     }
 
     fn attach_context_with_limit(
@@ -1087,6 +1092,8 @@ pub struct DagReport {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DispatchableReport {
+    pub count: usize,
+    pub task_ids: Vec<String>,
     pub tasks: Vec<ExecutionTask>,
 }
 
@@ -1789,6 +1796,8 @@ mod tests {
         }
 
         let dispatchable = protocol.dispatchable().unwrap();
+        assert_eq!(dispatchable.count, 1);
+        assert_eq!(dispatchable.task_ids, vec!["phase-a".to_string()]);
         assert_eq!(dispatchable.tasks.len(), 1);
         assert_eq!(dispatchable.tasks[0].id, "phase-a");
     }
@@ -2777,7 +2786,7 @@ mod tests {
         assert!(extract_wikilinks("no links here").is_empty());
         assert!(extract_wikilinks("[[]]").is_empty()); // empty name
         assert!(extract_wikilinks("[[ ]]").is_empty()); // whitespace only
-        // Unclosed link: should still extract the name
+                                                        // Unclosed link: should still extract the name
         assert_eq!(extract_wikilinks("[[unclosed"), vec!["unclosed"]);
     }
 

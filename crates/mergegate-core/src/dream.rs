@@ -154,7 +154,7 @@ where
 
 /// Append a "Common Rejection Patterns" section to SKILL.md if gate rejections are detected.
 fn update_skill_md_from_patterns(report: &DreamReport, repo_root: &Path) -> Result<()> {
-    let skill_path = repo_root.join("skills/polaris-ops/SKILL.md");
+    let skill_path = repo_root.join("skills/mergegate-ops/SKILL.md");
     if !skill_path.exists() {
         return Ok(());
     }
@@ -672,10 +672,10 @@ mod tests {
     #[test]
     fn update_skill_md_appends_when_no_marker() {
         let tmp = TempDir::new().unwrap();
-        let skills_dir = tmp.path().join("skills/polaris-ops");
+        let skills_dir = tmp.path().join("skills/mergegate-ops");
         fs::create_dir_all(&skills_dir).unwrap();
         let skill_path = skills_dir.join("SKILL.md");
-        fs::write(&skill_path, "# Polaris Ops\n\nExisting content.\n").unwrap();
+        fs::write(&skill_path, "# MergeGate Ops\n\nExisting content.\n").unwrap();
 
         let mut rejections = HashMap::new();
         rejections.insert("GATE 3".to_string(), 2);
@@ -690,7 +690,7 @@ mod tests {
 
         update_skill_md_from_patterns(&report, tmp.path()).unwrap();
         let content = fs::read_to_string(&skill_path).unwrap();
-        assert!(content.contains("# Polaris Ops"));
+        assert!(content.contains("# MergeGate Ops"));
         assert!(content.contains("Existing content."));
         assert!(content.contains("## よくある拒否パターン（自動生成）"));
         assert!(content.contains("GATE 3"));
@@ -699,12 +699,12 @@ mod tests {
     #[test]
     fn update_skill_md_replaces_marker_preserves_following_sections() {
         let tmp = TempDir::new().unwrap();
-        let skills_dir = tmp.path().join("skills/polaris-ops");
+        let skills_dir = tmp.path().join("skills/mergegate-ops");
         fs::create_dir_all(&skills_dir).unwrap();
         let skill_path = skills_dir.join("SKILL.md");
         fs::write(
             &skill_path,
-            "# Polaris Ops\n\n\
+            "# MergeGate Ops\n\n\
              ## よくある拒否パターン（自動生成）\n\n\
              | GATE | 回数 | 対処法 |\n|------|------|--------|\n| old | 1 | old |\n\n\
              ## 関連スキル\n\n- important link\n",

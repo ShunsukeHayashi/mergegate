@@ -1,5 +1,5 @@
 [package]
-name = "miyabi-tui"
+name = "mergegate-tui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Miyabi TUI - Terminal User Interface following Codex patterns"
+description = "MergeGate TUI - Terminal interface for MergeGate and agent-assisted development"
 
 [[bin]]
 name = "miyabi-tui"
@@ -19,7 +19,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Workspace dependencies
-miyabi-core = { path = "../miyabi-core" }
+miyabi-core = { package = "mergegate-core", path = "../mergegate-core" }
 arboard = { version = "3", optional = true }
 
 # TUI Framework

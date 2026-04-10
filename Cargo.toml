@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/miyabi-cli",
-    "crates/miyabi-tui",
-    "crates/miyabi-core",
+    "crates/mergegate-cli",
+    "crates/mergegate-tui",
+    "crates/mergegate-core",
 ]
 
 [workspace.package]
@@ -12,9 +12,9 @@ edition = "2021"
 rust-version = "1.75"
 authors = ["Miyabi Team"]
 license = "BUSL-1.1"
-repository = "https://github.com/ShunsukeHayashi/miyabi-cli-standalone"
-homepage = "https://github.com/ShunsukeHayashi/miyabi-cli-standalone"
-description = "Miyabi - Autonomous AI Development Framework"
+repository = "https://github.com/ShunsukeHayashi/mergegate"
+homepage = "https://github.com/ShunsukeHayashi/mergegate"
+description = "MergeGate - Deterministic task execution and merge workflow for AI-assisted development"
 keywords = ["ai", "cli", "tui", "autonomous", "development"]
 categories = ["command-line-utilities", "development-tools"]
 

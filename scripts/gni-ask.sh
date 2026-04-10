@@ -157,7 +157,7 @@ elif echo "$Q" | grep -qE "テスト|test|カバレッジ|coverage"; then
   echo ""
   echo "DTP モジュール別テスト数:"
   for f in gate.rs lock.rs store.rs protocol.rs; do
-    count=$(grep -c "#\[test\]" crates/miyabi-core/src/$f 2>/dev/null || echo "0")
+    count=$(grep -c "#\[test\]" crates/mergegate-core/src/$f 2>/dev/null || echo "0")
     echo "  $f: ${count}件"
   done
 

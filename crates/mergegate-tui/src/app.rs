@@ -101,7 +101,7 @@ impl App {
             });
 
         let welcome_message = if client.is_some() {
-            "Welcome to Miyabi CLI! Type your message and press Enter. Press Ctrl+P for commands, F1 for help."
+            "Welcome to MergeGate. Type your message and press Enter. Press Ctrl+P for commands, F1 for help."
         } else {
             "⚠ ANTHROPIC_API_KEY not set. Please set it in config or environment to use Claude API."
         };

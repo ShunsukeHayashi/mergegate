@@ -1,34 +1,62 @@
-# Miyabi CLI
+# MergeGate
 
-A powerful terminal-based AI assistant with TUI (Terminal User Interface) built in Rust.
+MergeGate is a deterministic execution protocol for AI-assisted development.
+It is the execution layer for GitNexus-style code intelligence: GitNexus helps agents understand what will break, and MergeGate makes them execute that work in a safe, verifiable order.
+
+In short:
+
+- `GitNexus`: understand the codebase
+- `MergeGate`: execute changes safely
+
+The project currently supports both `miyabi` and `mergegate` as CLI entrypoints. `miyabi` remains the legacy/default command, and `mergegate` is the product-aligned alias.
+
+This repository has two common entry points:
+
+- `miyabi tui` / `mergegate tui`: interactive terminal assistant
+- `miyabi gate` / `mergegate gate`: deterministic task execution and file-lock workflow for repo work
+
+If you arrived here because of deterministic execution, task locks, PR gates, or agent-safe repo work, start with `mergegate gate` or `miyabi gate`, not the TUI.
 
 ## 60-Second Setup
 
 ```bash
 # 1. Clone and build
-git clone https://github.com/ShunsukeHayashi/miyabi-cli-standalone.git
-cd miyabi-cli-standalone
+git clone https://github.com/ShunsukeHayashi/mergegate.git
+cd mergegate
 cargo build --release
 
 # 2. Set API key
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # 3. Run
-./target/release/miyabi tui
+./target/release/mergegate tui
 ```
 
-That's it! Start chatting with Claude in your terminal.
+That's it. Start with the TUI, or jump straight into `mergegate gate` for repo workflow control.
 
 ---
 
-## Features
+## Why MergeGate
 
-- **Interactive TUI** - Beautiful terminal interface with markdown rendering
-- **Chat Mode** - Conversational AI assistant
-- **Agent Mode** - Autonomous task execution with tool approval
-- **Session Management** - Persist and resume conversations
+- **Execution layer for code intelligence** - Pair blast-radius understanding with deterministic execution, not chat-only automation
+- **Deterministic task execution** - Register, analyze, lock, review, and merge in a verifiable order
+- **Repo-safe agent workflow** - File locks and gate checks reduce accidental overlap and unsafe edits
+- **Interactive TUI** - Terminal assistant for chat, prompts, and agent execution
+- **Agent mode** - Autonomous execution with tool approval
+- **Session management** - Persist and resume conversations
 - **Configurable** - TOML-based configuration
-- **Extended Thinking** - Support for Claude 4.5+ extended thinking
+
+## Positioning
+
+MergeGate was designed for teams that already believe code understanding is not enough.
+Knowing the blast radius of a change is only half of the problem. Agents also need a protocol for when work starts, which files are locked, what must be recorded before editing, and what counts as done.
+
+That is the role split:
+
+- `GitNexus`: query, context, impact, detect-changes, rename, wiki, graph exploration
+- `MergeGate`: register, impact record, assign, file lock, branch, PR, merge, completion discipline
+
+If GitNexus answers "what is this change connected to?", MergeGate answers "how do we carry it through safely?"
 
 ## Installation
 
@@ -40,16 +68,22 @@ That's it! Start chatting with Claude in your terminal.
 ### Build from Source
 
 ```bash
-git clone https://github.com/ShunsukeHayashi/miyabi-cli-standalone.git
-cd miyabi-cli-standalone
+git clone https://github.com/ShunsukeHayashi/mergegate.git
+cd mergegate
 cargo build --release
 ```
 
-Binary will be at `target/release/miyabi`.
+Binary will be at `target/release/miyabi` and `target/release/mergegate`.
 
 ## Quick Start
 
-### 1. Generate Config
+Choose the path that matches what you want to do.
+
+### A. Use MergeGate as a terminal assistant
+
+Run the TUI after configuring your API key.
+
+#### 1. Generate Config
 
 ```bash
 ./target/release/miyabi init
@@ -57,7 +91,7 @@ Binary will be at `target/release/miyabi`.
 
 This creates `~/.miyabi/config.toml`.
 
-### 2. Set API Key
+#### 2. Set API Key
 
 Edit `~/.miyabi/config.toml`:
 
@@ -72,7 +106,7 @@ Or use environment variable:
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-### 3. Launch TUI
+#### 3. Launch TUI
 
 ```bash
 ./target/release/miyabi tui
@@ -80,7 +114,54 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ./target/release/miyabi
 ```
 
+### B. Use MergeGate as a task execution gate
+
+If you are working inside a repository and want task registration, impact tracking, file locks, and PR/merge recording, use `mergegate gate` or `miyabi gate`.
+
+#### 1. Check whether the repo is already initialized
+
+```bash
+./target/release/miyabi gate status
+```
+
+If you see `tasks: 0`, that means the ledger exists but is currently empty.
+
+#### 2. Initialize MergeGate for this repo if needed
+
+```bash
+./target/release/miyabi gate init
+```
+
+This creates `project_memory/tasks.json` and prepares the repo for gate-managed work.
+
+#### 3. Read the built-in workflow guide
+
+```bash
+./target/release/miyabi gate guide
+```
+
+#### 4. Start a task
+
+```bash
+./target/release/miyabi gate register --issue 123 --title "Fix login redirect"
+./target/release/miyabi gate impact issue-123 --risk medium --symbols 3
+./target/release/miyabi gate assign issue-123 --agent codex --node macbook --files "src/auth.rs"
+```
+
+Typical flow:
+
+1. `register`
+2. `impact`
+3. `assign`
+4. implement
+5. `branch`
+6. `pr`
+7. `merge` or `manual-complete`
+
 ## Usage
+
+`MergeGate` is the product and documentation name.
+Both `miyabi` and `mergegate` work today.
 
 ### CLI Commands
 
@@ -94,6 +175,11 @@ miyabi sessions -d <id>   # Delete session
 miyabi sessions -e <id>   # Export session to JSON
 miyabi version            # Show version info
 miyabi agent <prompt>     # Run autonomous agent
+miyabi gate status        # Show task ledger status
+miyabi gate init          # Initialize MergeGate in the current repo
+miyabi gate guide         # Show the full gate workflow guide
+mergegate gate status     # Same gate workflow with product-aligned command
+mergegate tui             # Same TUI with product-aligned command
 ```
 
 ### CLI Options
@@ -187,7 +273,7 @@ Agent mode features:
 
 ## Core Library Features
 
-The `miyabi-core` crate provides powerful utilities for building AI applications.
+The `mergegate-core` crate provides powerful utilities for building AI applications.
 
 ### Git Utilities
 
@@ -373,10 +459,10 @@ flags.load_from_map(config);
 ## Project Structure
 
 ```
-miyabi-cli-standalone/
+mergegate/
 ├── crates/
-│   ├── miyabi-cli/         # CLI entry point
-│   ├── miyabi-core/        # Core library
+│   ├── mergegate-cli/      # CLI entry point
+│   ├── mergegate-core/     # Core library
 │   │   ├── agent.rs        # Agent system
 │   │   ├── anthropic.rs    # Anthropic API client
 │   │   ├── cache.rs        # TTL cache system
@@ -391,7 +477,7 @@ miyabi-cli-standalone/
 │   │   ├── session.rs      # Session management
 │   │   ├── tools.rs        # Built-in tools
 │   │   └── ...
-│   └── miyabi-tui/         # TUI implementation
+│   └── mergegate-tui/      # TUI implementation
 │       ├── app.rs          # Main application
 │       ├── views.rs        # UI views
 │       └── ...
@@ -482,7 +568,7 @@ RUST_LOG=debug ./target/release/miyabi tui
 
 - Check `miyabi --help` for CLI options
 - Press `F1` in TUI for keybindings
-- Open an issue: https://github.com/ShunsukeHayashi/miyabi-cli-standalone/issues
+- Open an issue: https://github.com/ShunsukeHayashi/mergegate/issues
 
 ## License
 

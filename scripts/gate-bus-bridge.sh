@@ -14,7 +14,7 @@ set -euo pipefail
 ACTION="${1:-}"
 TASK_ID="${2:-}"
 TITLE="${3:-}"
-REPO="Miyabi-G-K/miyabi-cli-standalone"
+REPO="ShunsukeHayashi/mergegate"
 
 case "$ACTION" in
   register)

@@ -1,4 +1,4 @@
-# Preparation Operations - miyabi-cli-standalone
+# Preparation Operations - MergeGate
 
 **Purpose**: Sprint 1開始前の準備作業チェックリスト
 **Target Date**: 2025-11-25 (Sprint 1 Start)
@@ -71,7 +71,7 @@
 
 - [ ] **必要なラベル確認**
   ```bash
-  gh label list --repo ShunsukeHayashi/miyabi-cli-standalone | wc -l
+  gh label list --repo ShunsukeHayashi/mergegate | wc -l
   # Expected: 45+ labels
   ```
 
@@ -85,7 +85,7 @@
 
 - [ ] **マイルストーン確認**
   ```bash
-  gh api repos/ShunsukeHayashi/miyabi-cli-standalone/milestones | jq '.[].title'
+  gh api repos/ShunsukeHayashi/mergegate/milestones | jq '.[].title'
   ```
 
   Expected:
@@ -98,7 +98,7 @@
 
 - [ ] **Issue一覧確認**
   ```bash
-  gh issue list --repo ShunsukeHayashi/miyabi-cli-standalone --state all | wc -l
+  gh issue list --repo ShunsukeHayashi/mergegate --state all | wc -l
   # Expected: 28 issues
   ```
 
@@ -266,7 +266,7 @@
 
 - [ ] **Pulse確認**
   ```
-  https://github.com/ShunsukeHayashi/miyabi-cli-standalone/pulse
+  https://github.com/ShunsukeHayashi/mergegate/pulse
   ```
 
 ---
@@ -277,7 +277,7 @@
 
 - [ ] **Issue #10 (MarkdownStream core)**
   ```bash
-  gh issue view 10 --repo ShunsukeHayashi/miyabi-cli-standalone
+  gh issue view 10 --repo ShunsukeHayashi/mergegate
   ```
 
 - [ ] **Issue #15 (DiffRender core)**
@@ -316,7 +316,7 @@
 
 ```bash
 # 1. 環境確認
-cd /Users/shunsuke/Dev/miyabi-cli-standalone
+cd /Users/shunsuke/Dev/mergegate
 miyabi status
 
 # 2. Critical Path 開始

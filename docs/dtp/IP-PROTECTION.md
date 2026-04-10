@@ -13,13 +13,13 @@
 
 ## リポジトリ
 
-- **Miyabi-G-K/miyabi-cli-standalone**: Private
+- **ShunsukeHayashi/mergegate**: Private
 - **Miyabi-G-K/deterministic-task-protocol**: Private
 - 公開しない。npm にも公開しない。
 
 ## 保護対象
 
-1. **Polaris (DTP) アーキテクチャ**
+1. **MergeGate (DTP) アーキテクチャ**
    - GATE チェーンによる確定的状態遷移
    - ファイルロック + DAG + ステートマシンの三位一体
    - ワークツリー不要の論理的並列分離
@@ -29,7 +29,7 @@
    - ドリーミング（event log → 学び昇格）
    - シータサイクル統合
 
-3. **miyabi gate CLI**
+3. **MergeGate CLI**
    - 11+ サブコマンドの実装
    - pre-commit / post-commit hook 統合
    - Bus ドッキングブリッジ

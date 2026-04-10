@@ -176,3 +176,6 @@ yarn-error.log*
 .ai/
 .env
 .gitnexus
+project_memory/task-events.jsonl
+project_memory/tasks.snapshot.json
+project_memory/.tasks.lock

@@ -1,4 +1,4 @@
-# Polaris — 分散エージェント実行・記憶モデル設計ビジョン
+# MergeGate — 分散エージェント実行・記憶モデル設計ビジョン
 
 _林 駿甫 | 2026-04-10 | 合同会社みやび_
 
@@ -11,7 +11,7 @@ LLM エージェントに「全部覚えていてね」と言うのをやめる�
 
 その仕組みの上で、**どのマシンのどのエージェントが動いても、同じ手順で同じ結果にたどり着く**状態を作る。
 
-これが Polaris（北極星）。全エージェントが従う唯一の指針。
+これが MergeGate。全エージェントが従う唯一の指針。
 
 ---
 
@@ -333,4 +333,4 @@ git merge              ← 確定。ここまで来て初めて「完了」
 ---
 
 _Created by 林 駿甫 (Shunsuke Hayashi) with Claude Opus 4.6_
-_Miyabi-G-K / miyabi-cli-standalone_
+_ShunsukeHayashi / miyabi-cli-standalone_

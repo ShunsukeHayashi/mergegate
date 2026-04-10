@@ -1,4 +1,4 @@
-# Miyabi CLI ユーザーマニュアル
+# MergeGate ユーザーマニュアル
 
 **Version**: 0.1.0
 **Last Updated**: 2025-11-23
@@ -22,7 +22,14 @@
 
 ## はじめに
 
-Miyabi CLIは、ターミナルで動作するAIアシスタントです。Claude APIを使用して、対話型のチャットや自律的なタスク実行が可能です。
+MergeGate は、AI-assisted development 向けの deterministic task execution and merge workflow です。CLI では `miyabi` と `mergegate` の両方を使え、対話型の TUI と `gate` ベースの repo workflow を提供します。
+
+設計思想はシンプルです。
+
+- `GitNexus`: コードベースを理解する
+- `MergeGate`: 変更を安全に実行する
+
+影響範囲が分かるだけでは、AI エージェントは安全に開発できません。どの task を登録し、どのファイルを lock し、どの順序で branch / PR / merge まで進めるかを protocol として固定するのが MergeGate の役割です。
 
 ### 主な機能
 
@@ -44,21 +51,21 @@ Miyabi CLIは、ターミナルで動作するAIアシスタントです。Claud
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/ShunsukeHayashi/miyabi-cli-standalone.git
-cd miyabi-cli-standalone
+git clone https://github.com/ShunsukeHayashi/mergegate.git
+cd mergegate
 
 # 2. リリースビルド
 cargo build --release
 
 # 3. バイナリの確認
-ls -la target/release/miyabi
+ls -la target/release/miyabi target/release/mergegate
 ```
 
 ### パスを通す（オプション）
 
 ```bash
 # ~/.bashrc または ~/.zshrc に追加
-export PATH="$PATH:/path/to/miyabi-cli-standalone/target/release"
+export PATH="$PATH:/path/to/mergegate/target/release"
 
 # 設定を反映
 source ~/.bashrc  # または source ~/.zshrc
@@ -528,7 +535,7 @@ max_retries = 5
 
 ### 問題報告
 
-GitHub Issues: https://github.com/ShunsukeHayashi/miyabi-cli-standalone/issues
+GitHub Issues: https://github.com/ShunsukeHayashi/mergegate/issues
 
 ### TUIでのヘルプ
 

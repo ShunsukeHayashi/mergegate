@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Rust workspace lives under `crates/`: `miyabi-cli` (CLI entry), `miyabi-tui` (UI), and `miyabi-core` (shared logic, config, sessions, Polaris/DTP: `gate`, `store`, `lock`, `protocol`). Shared workspace config in `Cargo.toml`.
+- Rust workspace lives under `crates/`: `mergegate-cli` (CLI entry), `mergegate-tui` (UI), and `mergegate-core` (shared logic, config, sessions, MergeGate/DTP: `gate`, `store`, `lock`, `protocol`). Shared workspace config in `Cargo.toml`.
 - ルートに `package.json` はない（過去テンプレート由来の記述は削除済み）。フロント系ツールが別ディレクトリにあれば、その README に従う。
 - Supporting assets: `.claude/` agent configs, `docs/` for design notes, `project_memory/` for Polaris タスク台帳（`tasks.json`）、`.github/` for CI workflows。
 

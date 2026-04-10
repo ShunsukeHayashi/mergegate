@@ -1002,10 +1002,16 @@ mod tests {
         assert_eq!(task.current_state, TaskState::Implementing);
         assert!(task.lock.is_some());
         assert!(task.impact.is_some());
-        assert_eq!(task.impact.as_ref().unwrap().risk_level, ImpactRiskLevel::High);
+        assert_eq!(
+            task.impact.as_ref().unwrap().risk_level,
+            ImpactRiskLevel::High
+        );
         assert!(task.github_evidence.is_some());
         assert_eq!(task.github_evidence.as_ref().unwrap().pr_number, 42);
-        assert_eq!(task.github_evidence.as_ref().unwrap().pr_state, GitHubPrState::Open);
+        assert_eq!(
+            task.github_evidence.as_ref().unwrap().pr_state,
+            GitHubPrState::Open
+        );
         // file_locks should be populated from legacy lock
         assert!(snapshot.file_locks.contains_key("src/main.rs"));
     }
@@ -1083,7 +1089,7 @@ mod proptest_tests {
 
     proptest! {
         #[test]
-        fn cas_rejects_stale_version(version in 1u64..100) {
+        fn cas_rejects_stale_version(_version in 1u64..100) {
             let tmp = TempDir::new().unwrap();
             let store = SnapshotStore::new(
                 tmp.path().join("snap.json"),
@@ -1101,7 +1107,7 @@ mod proptest_tests {
         #[test]
         fn upsert_is_idempotent(n in 1usize..10) {
             let tmp = TempDir::new().unwrap();
-            let store = SnapshotStore::new(
+            let _store = SnapshotStore::new(
                 tmp.path().join("snap.json"),
                 tmp.path().join(".lock"),
             );

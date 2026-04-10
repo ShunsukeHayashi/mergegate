@@ -4,7 +4,7 @@
 # コミットメッセージに (#52, #53) のような Issue 番号があれば、
 # 自動で gh issue comment を実行する。
 
-REPO="Miyabi-G-K/miyabi-cli-standalone"
+REPO="ShunsukeHayashi/mergegate"
 
 # 直前のコミット情報を取得
 COMMIT_HASH=$(git rev-parse --short HEAD)

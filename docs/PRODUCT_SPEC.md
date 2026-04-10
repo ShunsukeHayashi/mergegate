@@ -1,4 +1,4 @@
-# Product Specification - miyabi-cli-standalone
+# Product Specification - MergeGate
 
 **Version**: 1.0.0
 **Status**: Draft

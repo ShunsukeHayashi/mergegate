@@ -1,6 +1,6 @@
 # Work Breakdown Structure (WBS)
 
-**Project**: miyabi-cli-standalone
+**Project**: mergegate
 **Version**: v1.0.0
 **Created**: 2025-11-22
 

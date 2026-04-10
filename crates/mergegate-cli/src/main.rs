@@ -1,8 +1,9 @@
-//! Miyabi CLI - Main entry point
+/// MergeGate CLI - Main entry point
 
 use chrono::Duration as ChronoDuration;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
@@ -13,6 +14,7 @@ use tracing_subscriber::EnvFilter;
 
 /// Global feature flags manager
 static FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();
+static INVOKED_BINARY_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Get the global feature flags manager
 pub fn feature_flags() -> &'static FeatureFlagManager {
@@ -27,9 +29,40 @@ pub fn feature_flags() -> &'static FeatureFlagManager {
     })
 }
 
+fn detect_invoked_binary_name() -> String {
+    std::env::args()
+        .next()
+        .and_then(|path| {
+            std::path::Path::new(&path)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "miyabi".to_string())
+}
+
+fn current_binary_name() -> &'static str {
+    INVOKED_BINARY_NAME
+        .get_or_init(detect_invoked_binary_name)
+        .as_str()
+}
+
+fn gate_command(command: &str) -> String {
+    if command.is_empty() {
+        format!("{} gate", current_binary_name())
+    } else {
+        format!("{} gate {}", current_binary_name(), command)
+    }
+}
+
+fn agent_guide() -> String {
+    AGENT_GUIDE_TEMPLATE
+        .replace("{{GATE}}", &gate_command(""))
+        .replace("{{BINARY}}", current_binary_name())
+}
+
 #[derive(Parser)]
-#[command(name = "miyabi")]
-#[command(author, version, about = "Miyabi - Autonomous AI Development Framework", long_about = None)]
+#[command(author, version, about = "MergeGate - Deterministic task execution and merge workflow for AI-assisted development", long_about = None)]
 struct Cli {
     /// Model to use (overrides config)
     #[arg(short, long)]
@@ -102,12 +135,15 @@ enum Commands {
     },
     #[command(
         about = "Deterministic Task Protocol gate controls",
-        long_about = "Run miyabi gate init to set up a new project.\n\nDeterministic Task Protocol gate controls"
+        long_about = "Run the gate init command to set up a new project.\n\nDeterministic Task Protocol gate controls"
     )]
     Gate {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
+        /// Emit a hook-friendly JSON event envelope to stdout
+        #[arg(long)]
+        emit_event: bool,
         /// Path to the task ledger JSON file
         #[arg(long, default_value = "project_memory/tasks.json")]
         store_path: PathBuf,
@@ -278,7 +314,7 @@ enum GateCommand {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct AssignPlanAttachment {
     attachment_type: String,
     source: String,
@@ -286,7 +322,7 @@ struct AssignPlanAttachment {
     content: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct AssignExecutionPlan {
     task_title: String,
     risk_level: Option<String>,
@@ -296,7 +332,7 @@ struct AssignExecutionPlan {
     next_steps: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct InitStatus {
     initialized: bool,
     current_dir: String,
@@ -409,7 +445,11 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let cli = Cli::parse();
+    let invoked_binary_name = detect_invoked_binary_name();
+    let _ = INVOKED_BINARY_NAME.set(invoked_binary_name.clone());
+    let clap_binary_name: &'static str = Box::leak(invoked_binary_name.into_boxed_str());
+    let matches = Cli::command().name(clap_binary_name).get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
 
     match cli.command {
         Some(Commands::Tui) | None => {
@@ -874,10 +914,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Gate {
             format,
+            emit_event,
             store_path,
             command,
         }) => {
-            let code = handle_gate_command(&format, &store_path, command)?;
+            let code = handle_gate_command(&format, emit_event, &store_path, command)?;
             std::process::exit(code);
         }
         Some(Commands::Openclaw { command }) => {
@@ -1245,6 +1286,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn handle_gate_command(
     format: &OutputFormat,
+    emit_event: bool,
     store_path: &std::path::Path,
     command: GateCommand,
 ) -> anyhow::Result<i32> {
@@ -1263,7 +1305,10 @@ fn handle_gate_command(
 
     let result = match command {
         GateCommand::Init => {
-            initialize_gate_project(format, store_path)?;
+            let status = initialize_gate_project(format, emit_event, store_path)?;
+            if emit_event {
+                emit_gate_event("gate_initialized", None, &status);
+            }
             Ok(())
         }
         GateCommand::Register {
@@ -1297,7 +1342,9 @@ fn handle_gate_command(
                     &node,
                 )
                 .map(|task| {
-                    if matches!(format, OutputFormat::Json) {
+                    if emit_event {
+                        emit_gate_event("task_registered", Some(&task.id), &task);
+                    } else if matches!(format, OutputFormat::Json) {
                         println!("{}", serde_json::to_string_pretty(&task).unwrap());
                     } else {
                         println!("registered: {} ({})", task.id, task.title);
@@ -1312,20 +1359,22 @@ fn handle_gate_command(
                 .status(task_id.as_deref())
                 .map(|status| match status {
                     StatusReport::Task(task) => {
-                        if matches!(format, OutputFormat::Json) {
+                        if emit_event {
+                            emit_gate_event("task_status", Some(&task.id), &task);
+                        } else if matches!(format, OutputFormat::Json) {
                             println!("{}", serde_json::to_string_pretty(&task).unwrap());
                         } else {
-                            println!("{}: {:?} - {}", task.id, task.current_state, task.title);
+                            print_gate_task_status(&task);
                         }
                     }
                     StatusReport::Snapshot(snapshot) => {
-                        if matches!(format, OutputFormat::Json) {
+                        if emit_event {
+                            emit_gate_event("status_snapshot", None, &snapshot);
+                        } else if matches!(format, OutputFormat::Json) {
                             println!("{}", serde_json::to_string_pretty(&snapshot).unwrap());
                         } else {
-                            println!("tasks: {}", snapshot.tasks.len());
-                            for task in snapshot.tasks {
-                                println!("  {} [{:?}] {}", task.id, task.current_state, task.title);
-                            }
+                            let dispatchable = protocol.dispatchable().ok();
+                            print_gate_snapshot_status(&snapshot, dispatchable.as_ref());
                         }
                     }
                 })
@@ -1340,15 +1389,14 @@ fn handle_gate_command(
             .and_then(|result| {
                 let attachments = protocol.attach_context(&task_id, actor, &node)?;
                 let plan = build_assign_execution_plan(&result.task, attachments);
-                if matches!(format, OutputFormat::Json) {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "assignment": result,
-                            "plan": assign_plan_to_json(&plan),
-                        }))
-                        .unwrap()
-                    );
+                let output = serde_json::json!({
+                    "assignment": result,
+                    "plan": assign_plan_to_json(&plan),
+                });
+                if emit_event {
+                    emit_gate_event("lock_acquired", Some(&task_id), &output);
+                } else if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
                 } else {
                     println!("assigned: {} -> {}@{}", result.task.id, agent, agent_node);
                     print_assign_execution_plan(&result, &plan);
@@ -1383,7 +1431,9 @@ fn handle_gate_command(
                 &node,
             )
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("impact_recorded", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("impact recorded: {}", task.id);
@@ -1392,7 +1442,9 @@ fn handle_gate_command(
         GateCommand::Branch { task_id, name } => protocol
             .record_branch(&task_id, &name, actor, &node)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("branch_created", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("branch recorded: {} -> {}", task.id, name);
@@ -1402,7 +1454,9 @@ fn handle_gate_command(
             protocol
                 .attach_context(&task_id, actor, &node)
                 .map(|attachments| {
-                    if matches!(format, OutputFormat::Json) {
+                    if emit_event {
+                        emit_gate_event("context_attached", Some(&task_id), &attachments);
+                    } else if matches!(format, OutputFormat::Json) {
                         println!("{}", serde_json::to_string_pretty(&attachments).unwrap());
                     } else if attachments.is_empty() {
                         println!("no context attachments: {}", task_id);
@@ -1427,7 +1481,9 @@ fn handle_gate_command(
             protocol
                 .refresh_context(&task_id, actor, &node)
                 .map(|attachments| {
-                    if matches!(format, OutputFormat::Json) {
+                    if emit_event {
+                        emit_gate_event("context_refreshed", Some(&task_id), &attachments);
+                    } else if matches!(format, OutputFormat::Json) {
                         println!("{}", serde_json::to_string_pretty(&attachments).unwrap());
                     } else if attachments.is_empty() {
                         println!("no context attachments: {}", task_id);
@@ -1448,7 +1504,9 @@ fn handle_gate_command(
         GateCommand::Pr { task_id, number } => protocol
             .record_pr(&task_id, number, actor, &node)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("pr_created", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("pr recorded: {} -> #{}", task.id, number);
@@ -1457,7 +1515,9 @@ fn handle_gate_command(
         GateCommand::Merge { task_id, sha } => protocol
             .record_merge(&task_id, &sha, actor, &node)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("task_completed", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("merge recorded: {} -> {}", task.id, sha);
@@ -1466,7 +1526,9 @@ fn handle_gate_command(
         GateCommand::VerifyMerge { task_id, repo } => protocol
             .verify_merge(&task_id, &repo, actor, &node)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("task_completed", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     let sha = task
@@ -1484,7 +1546,9 @@ fn handle_gate_command(
         } => protocol
             .force_unlock(&task_id, &reason, &operator)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("lock_released", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("lock released: {} by {}", task.id, operator);
@@ -1497,14 +1561,18 @@ fn handle_gate_command(
         } => protocol
             .manual_complete(&task_id, &reason, &operator)
             .map(|task| {
-                if matches!(format, OutputFormat::Json) {
+                if emit_event {
+                    emit_gate_event("task_completed", Some(&task.id), &task);
+                } else if matches!(format, OutputFormat::Json) {
                     println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 } else {
                     println!("task completed manually: {} by {}", task.id, operator);
                 }
             }),
         GateCommand::Locks => protocol.locks().map(|locks| {
-            if matches!(format, OutputFormat::Json) {
+            if emit_event {
+                emit_gate_event("locks_reported", None, &locks);
+            } else if matches!(format, OutputFormat::Json) {
                 println!("{}", serde_json::to_string_pretty(&locks).unwrap());
             } else if locks.is_empty() {
                 println!("no active locks");
@@ -1515,7 +1583,9 @@ fn handle_gate_command(
             }
         }),
         GateCommand::Dag => protocol.dag().map(|report| {
-            if matches!(format, OutputFormat::Json) {
+            if emit_event {
+                emit_gate_event("dag_reported", None, &report);
+            } else if matches!(format, OutputFormat::Json) {
                 println!("{}", serde_json::to_string_pretty(&report).unwrap());
             } else {
                 for (index, level) in report.levels.iter().enumerate() {
@@ -1524,10 +1594,16 @@ fn handle_gate_command(
             }
         }),
         GateCommand::Dispatchable => protocol.dispatchable().map(|report| {
-            if matches!(format, OutputFormat::Json) {
+            if emit_event {
+                emit_gate_event("dispatchable_reported", None, &report);
+            } else if matches!(format, OutputFormat::Json) {
                 println!("{}", serde_json::to_string_pretty(&report).unwrap());
             } else if report.tasks.is_empty() {
                 println!("no dispatchable tasks");
+                println!("next:");
+                println!("  {}", gate_command("status"));
+                println!("  {}", gate_command("dag"));
+                println!("  {}", gate_command("guide"));
             } else {
                 for task in report.tasks {
                     println!("{} [{}] {}", task.id, task.priority, task.title);
@@ -1536,6 +1612,13 @@ fn handle_gate_command(
         }),
         GateCommand::Serve { port } => {
             serve_dashboard(store_path, port)?;
+            if emit_event {
+                emit_gate_event(
+                    "dashboard_started",
+                    None,
+                    serde_json::json!({ "port": port }),
+                );
+            }
             Ok(())
         }
         GateCommand::Dream {
@@ -1553,7 +1636,9 @@ fn handle_gate_command(
             protocol
                 .dream(since, auto, &repo_root, actor, &node)
                 .and_then(|report| {
-                    if matches!(format, OutputFormat::Json) {
+                    if emit_event {
+                        emit_gate_event("dream_recorded", None, &report);
+                    } else if matches!(format, OutputFormat::Json) {
                         println!("{}", serde_json::to_string_pretty(&report).unwrap());
                     } else {
                         print_dream_report(&report);
@@ -1586,15 +1671,14 @@ fn handle_gate_command(
                 Err(ProtocolError::input("heartbeat currently requires --all"))
             } else {
                 protocol.heartbeat_all().map(|renewed| {
-                    if matches!(format, OutputFormat::Json) {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&serde_json::json!({
-                                "renewed": renewed,
-                                "count": renewed.len(),
-                            }))
-                            .unwrap()
-                        );
+                    let output = serde_json::json!({
+                        "renewed": renewed,
+                        "count": renewed.len(),
+                    });
+                    if emit_event {
+                        emit_gate_event("heartbeat_renewed", None, &output);
+                    } else if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
                     } else {
                         println!("renewed leases: {}", renewed.len());
                         for task_id in renewed {
@@ -1605,7 +1689,7 @@ fn handle_gate_command(
             }
         }
         GateCommand::Guide => {
-            print!("{AGENT_GUIDE}");
+            print!("{}", agent_guide());
             Ok(())
         }
     };
@@ -1613,19 +1697,19 @@ fn handle_gate_command(
     Ok(match result {
         Ok(()) => 0,
         Err(ProtocolError::GateRejected(message)) => {
-            emit_gate_error(format, "gate_rejected", &message);
+            emit_gate_error(format, emit_event, "gate_rejected", &message);
             1
         }
         Err(ProtocolError::DependencyBlocked(message)) => {
-            emit_gate_error(format, "gate_rejected", &message);
+            emit_gate_error(format, emit_event, "gate_rejected", &message);
             1
         }
         Err(ProtocolError::Input(message)) => {
-            emit_gate_error(format, "input_error", &message);
+            emit_gate_error(format, emit_event, "input_error", &message);
             2
         }
         Err(ProtocolError::Internal(error)) => {
-            emit_gate_error(format, "internal_error", &error.to_string());
+            emit_gate_error(format, emit_event, "internal_error", &error.to_string());
             1
         }
     })
@@ -1678,17 +1762,23 @@ fn assign_next_steps(
         miyabi_core::store::CompletionMode::GithubPr => vec![
             "1. Create branch".to_string(),
             "2. Make changes".to_string(),
-            format!("3. miyabi gate branch {task_id} ..."),
-            format!("4. miyabi gate pr {task_id} ..."),
-            format!("5. miyabi gate merge {task_id} ..."),
+            format!("3. {} {task_id} ...", gate_command("branch")),
+            format!("4. {} {task_id} ...", gate_command("pr")),
+            format!("5. {} {task_id} ...", gate_command("merge")),
         ],
         miyabi_core::store::CompletionMode::Manual => vec![
             "1. Complete the work".to_string(),
-            format!("2. miyabi gate manual-complete {task_id} --reason ... --operator ..."),
+            format!(
+                "2. {} {task_id} --reason ... --operator ...",
+                gate_command("manual-complete")
+            ),
         ],
         miyabi_core::store::CompletionMode::ExternalOp => vec![
             "1. Complete external operation".to_string(),
-            format!("2. miyabi gate manual-complete {task_id} --reason ... --operator ..."),
+            format!(
+                "2. {} {task_id} --reason ... --operator ...",
+                gate_command("manual-complete")
+            ),
         ],
     }
 }
@@ -1737,10 +1827,145 @@ fn print_assign_execution_plan(
     }
 }
 
+fn print_gate_task_status(task: &miyabi_core::store::ExecutionTask) {
+    println!("task: {}", task.id);
+    println!("title: {}", task.title);
+    println!("state: {:?}", task.current_state);
+
+    if task.issue_number > 0 {
+        println!("issue: #{}", task.issue_number);
+    }
+    println!("completion mode: {:?}", task.completion_mode);
+
+    if let Some(impact) = &task.impact {
+        println!(
+            "impact: {:?} (symbols: {})",
+            impact.risk_level, impact.affected_symbols
+        );
+    } else {
+        println!("impact: not recorded");
+    }
+
+    match task.current_state {
+        miyabi_core::store::TaskState::Pending | miyabi_core::store::TaskState::Draft => {
+            if task.impact.is_none() {
+                println!("next:");
+                println!("  {} {} --risk low --symbols 0", gate_command("impact"), task.id);
+                println!(
+                    "  {} {} --agent <name> --node <machine> --files \"path/to/file\"",
+                    gate_command("assign"),
+                    task.id
+                );
+            } else {
+                println!("next:");
+                println!(
+                    "  {} {} --agent <name> --node <machine> --files \"path/to/file\"",
+                    gate_command("assign"),
+                    task.id
+                );
+            }
+        }
+        miyabi_core::store::TaskState::Implementing => {
+            println!("next:");
+            println!("  {} {} <branch-name>", gate_command("branch"), task.id);
+            println!("  {} {}", gate_command("attach"), task.id);
+        }
+        miyabi_core::store::TaskState::Reviewing => {
+            println!("next:");
+            println!("  {} {} <number>", gate_command("pr"), task.id);
+            println!("  {} {} <40-char-sha>", gate_command("merge"), task.id);
+        }
+        miyabi_core::store::TaskState::Merged | miyabi_core::store::TaskState::Done => {
+            println!("next:");
+            println!("  {}", gate_command("dispatchable"));
+        }
+        _ => {}
+    }
+}
+
+fn print_gate_snapshot_status(
+    snapshot: &miyabi_core::store::TasksSnapshot,
+    dispatchable: Option<&miyabi_core::protocol::DispatchableReport>,
+) {
+    if snapshot.tasks.is_empty() {
+        println!("tasks: 0");
+        println!("status: ready to initialize or register your first task");
+        println!("this is not an error. it means the ledger is empty.");
+        println!("next:");
+        println!("  {}", gate_command("init"));
+        println!("  {} --issue <N> --title \"Your task\"", gate_command("register"));
+        println!("  {}", gate_command("guide"));
+        return;
+    }
+
+    let total = snapshot.tasks.len();
+    let completed = snapshot
+        .tasks
+        .iter()
+        .filter(|task| {
+            matches!(
+                task.current_state,
+                miyabi_core::store::TaskState::Done | miyabi_core::store::TaskState::Merged
+            )
+        })
+        .count();
+    let active = snapshot
+        .tasks
+        .iter()
+        .filter(|task| {
+            matches!(
+                task.current_state,
+                miyabi_core::store::TaskState::Implementing
+                    | miyabi_core::store::TaskState::Reviewing
+                    | miyabi_core::store::TaskState::Analyzing
+            )
+        })
+        .count();
+    let waiting = total.saturating_sub(completed + active);
+    let dispatchable_count = dispatchable.map(|report| report.count).unwrap_or(0);
+
+    println!(
+        "tasks: {} (dispatchable: {}, locks: {})",
+        total,
+        dispatchable_count,
+        snapshot.file_locks.len()
+    );
+    println!(
+        "summary: {} completed, {} active, {} waiting",
+        completed, active, waiting
+    );
+
+    if let Some(report) = dispatchable {
+        if !report.tasks.is_empty() {
+            println!("next tasks:");
+            for task in report.tasks.iter().take(3) {
+                println!("  {} [{}] {}", task.id, task.priority, task.title);
+            }
+            println!("next:");
+            println!("  {} <task-id>", gate_command("status"));
+            println!(
+                "  {} <task-id> --agent <name> --node <machine> --files \"path/to/file\"",
+                gate_command("assign")
+            );
+        } else {
+            println!("next:");
+            println!("  {}", gate_command("dag"));
+            println!("  {}", gate_command("locks"));
+            println!("  {}", gate_command("guide"));
+        }
+    }
+
+    println!("all tasks:");
+    for task in &snapshot.tasks {
+        println!("  {} [{:?}] {}", task.id, task.current_state, task.title);
+    }
+}
+
 fn initialize_gate_project(
     format: &OutputFormat,
+    emit_event: bool,
     store_path: &std::path::Path,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<InitStatus> {
     let current_dir = std::env::current_dir()?;
     let created_path = store_path.display().to_string();
     let initialized = if store_path.exists() {
@@ -1773,6 +1998,10 @@ fn initialize_gate_project(
         github_project_detected,
     };
 
+    if emit_event {
+        return Ok(status);
+    }
+
     if matches!(format, OutputFormat::Json) {
         println!(
             "{}",
@@ -1785,15 +2014,15 @@ fn initialize_gate_project(
                 "gitignore_updated": status.gitignore_updated,
                 "github_project_detected": status.github_project_detected,
                 "next_steps": [
-                    "miyabi gate register --issue <N> --title ...",
-                    "miyabi gate status",
-                    "miyabi gate --help"
+                    gate_command("status"),
+                    gate_command("guide"),
+                    format!("{} --issue <N> --title ...", gate_command("register"))
                 ],
             }))?
         );
     } else {
         if status.initialized {
-            println!("Polaris initialized in {}", status.current_dir);
+            println!("MergeGate initialized in {}", status.current_dir);
             println!("Created: {}", status.created_path);
         } else {
             println!("Already initialized");
@@ -1805,13 +2034,13 @@ fn initialize_gate_project(
             println!("⚠️ No GitHub remote. Run: gh repo create <name> --private");
         }
         println!("Next steps:");
-        println!("  miyabi gate register --issue <N> --title ...");
-        println!("  miyabi gate status");
-        println!("  miyabi gate --help");
+        println!("  {}", gate_command("status"));
+        println!("  {}", gate_command("guide"));
+        println!("  {} --issue <N> --title ...", gate_command("register"));
         print_init_checklist(&status);
     }
 
-    Ok(())
+    Ok(status)
 }
 
 fn print_init_checklist(status: &InitStatus) {
@@ -2011,8 +2240,24 @@ fn print_dream_report(report: &miyabi_core::DreamReport) {
     }
 }
 
-fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {
-    if matches!(format, OutputFormat::Json) {
+fn emit_gate_event(event: &str, task_id: Option<&str>, payload: impl serde::Serialize) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "event": event,
+            "task_id": task_id,
+            "source": "miyabi-gate",
+            "ts": chrono::Utc::now(),
+            "payload": payload,
+        }))
+        .unwrap()
+    );
+}
+
+fn emit_gate_error(format: &OutputFormat, emit_event: bool, kind: &str, message: &str) {
+    if emit_event {
+        emit_gate_event(kind, None, serde_json::json!({ "message": message }));
+    } else if matches!(format, OutputFormat::Json) {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
@@ -2026,12 +2271,12 @@ fn emit_gate_error(format: &OutputFormat, kind: &str, message: &str) {
     }
 }
 
-const AGENT_GUIDE: &str = r#"
-# Polaris (miyabi-gate) — Agent Guide
+const AGENT_GUIDE_TEMPLATE: &str = r#"
+# MergeGate ({{GATE}}) — Agent Guide
 
 ## What is this?
 
-Polaris is a deterministic task execution protocol. It enforces a strict
+MergeGate is a deterministic task execution protocol. It enforces a strict
 workflow so that any agent on any machine produces the same verifiable result.
 Tasks are tracked in project_memory/tasks.json, not in conversation memory.
 
@@ -2047,53 +2292,53 @@ Tasks are tracked in project_memory/tasks.json, not in conversation memory.
 
 ```
 Step 1: Register
-  miyabi-gate gate register --issue <N> --title "Task description"
+  {{GATE}} register --issue <N> --title "Task description"
 
 Step 2: Impact analysis
-  miyabi-gate gate impact <task-id> --risk <low|medium|high|critical> --symbols <N>
+  {{GATE}} impact <task-id> --risk <low|medium|high|critical> --symbols <N>
   # Add --approve if risk is high or critical
 
 Step 3: Assign (acquires file locks)
-  miyabi-gate gate assign <task-id> --agent <your-name> --node <machine> --files "file1.rs,file2.rs"
+  {{GATE}} assign <task-id> --agent <your-name> --node <machine> --files "file1.rs,file2.rs"
   # This prints an execution plan and context attachments. Read them.
 
 Step 4: Work
   # Edit ONLY the locked files. Pre-commit hook blocks unlocked files.
 
 Step 5: Branch
-  miyabi-gate gate branch <task-id> feature/issue-<N>-<slug>
+  {{GATE}} branch <task-id> feature/issue-<N>-<slug>
 
 Step 6: PR
-  miyabi-gate gate pr <task-id> <PR-number>
+  {{GATE}} pr <task-id> <PR-number>
 
 Step 7: Merge
-  miyabi-gate gate merge <task-id> <merge-commit-sha>
+  {{GATE}} merge <task-id> <merge-commit-sha>
 ```
 
 ## For document-only tasks (no PR needed)
 
 ```
-miyabi-gate gate register --issue <N> --title "Doc task" --completion-mode manual
-miyabi-gate gate impact <task-id> --risk low --symbols 0
-miyabi-gate gate assign <task-id> --agent <name> --node <machine> --files "docs/file.md"
+{{GATE}} register --issue <N> --title "Doc task" --completion-mode manual
+{{GATE}} impact <task-id> --risk low --symbols 0
+{{GATE}} assign <task-id> --agent <name> --node <machine> --files "docs/file.md"
 # ... do the work ...
-miyabi-gate gate manual-complete <task-id> --reason "reason" --operator <name>
+{{GATE}} manual-complete <task-id> --reason "reason" --operator <name>
 ```
 
 ## Checking state
 
 ```
-miyabi-gate gate status              # All tasks
-miyabi-gate gate status <task-id>    # One task
-miyabi-gate gate locks               # Active file locks
-miyabi-gate gate dag                 # Dependency graph
-miyabi-gate gate dispatchable        # Tasks ready to work on
-miyabi-gate gate attach <task-id>    # View context attachments
+{{GATE}} status              # All tasks
+{{GATE}} status <task-id>    # One task
+{{GATE}} locks               # Active file locks
+{{GATE}} dag                 # Dependency graph
+{{GATE}} dispatchable        # Tasks ready to work on
+{{GATE}} attach <task-id>    # View context attachments
 ```
 
 ## Context attachments (auto-injected on assign)
 
-When you run `assign`, Polaris automatically attaches:
+When you run `assign`, MergeGate automatically attaches:
 - GitHub Issue body
 - Impact analysis result
 - Obsidian vault notes matching the task title (if OBSIDIAN_VAULT_PATH is set)
@@ -2101,15 +2346,17 @@ When you run `assign`, Polaris automatically attaches:
 - First 30 lines of each locked file
 - First 30 lines of depth-1 impact files (direct callers)
 
-Use `miyabi-gate gate attach <task-id> --format json` to get this as JSON
+Use `{{GATE}} attach <task-id>` to inspect the attachments.
+Use `{{GATE}} --format json status` or `{{GATE}} --format json locks`
+when you need machine-readable output from supported commands.
 for programmatic injection into prompts.
 
 ## Emergency commands
 
 ```
-miyabi-gate gate force-unlock <task-id> --reason "why" --operator <name>
-miyabi-gate gate manual-complete <task-id> --reason "why" --operator <name>
-miyabi-gate gate heartbeat --all    # Renew all lease heartbeats
+{{GATE}} force-unlock <task-id> --reason "why" --operator <name>
+{{GATE}} manual-complete <task-id> --reason "why" --operator <name>
+{{GATE}} heartbeat --all    # Renew all lease heartbeats
 ```
 
 ## Exit codes
@@ -2128,23 +2375,23 @@ cargo clippy --all-targets --all-features -- -D warnings
 ## Self-improvement
 
 ```
-miyabi-gate gate dream               # Extract learnings from event log
-miyabi-gate gate dream --auto        # Also write High learnings to docs/ and update SKILL.md
-miyabi-gate gate serve               # Web dashboard at localhost:4848
+{{GATE}} dream               # Extract learnings from event log
+{{GATE}} dream --auto        # Also write High learnings to docs/ and update SKILL.md
+{{GATE}} serve               # Web dashboard at localhost:4848
 ```
 
 ## Command Reference
 
 ### init
   Initialize project memory in the current repo.
-  miyabi-gate gate init
+  {{GATE}} init
 
 ### register
   Register a new task. Creates an entry in tasks.json.
-  miyabi-gate gate register --issue <N> --title "Title"
-  miyabi-gate gate register --issue <N> --title "Title" --completion-mode manual
-  miyabi-gate gate register --issue <N> --title "Title" --dependencies dep-1,dep-2
-  miyabi-gate gate register --issue <N> --title "Title" --no-bus
+  {{GATE}} register --issue <N> --title "Title"
+  {{GATE}} register --issue <N> --title "Title" --completion-mode manual
+  {{GATE}} register --issue <N> --title "Title" --dependencies dep-1,dep-2
+  {{GATE}} register --issue <N> --title "Title" --no-bus
   Options:
     --issue <N>              GitHub issue number (required, 0 = auto-create)
     --title <TEXT>           Task title (required)
@@ -2157,9 +2404,9 @@ miyabi-gate gate serve               # Web dashboard at localhost:4848
 
 ### impact
   Record impact analysis for a task.
-  miyabi-gate gate impact <task-id> --risk low --symbols 3
-  miyabi-gate gate impact <task-id> --risk high --symbols 12 --approve
-  miyabi-gate gate impact <task-id> --risk medium --symbols 5 --depth1 "src/a.rs,src/b.rs"
+  {{GATE}} impact <task-id> --risk low --symbols 3
+  {{GATE}} impact <task-id> --risk high --symbols 12 --approve
+  {{GATE}} impact <task-id> --risk medium --symbols 5 --depth1 "src/a.rs,src/b.rs"
   Options:
     --risk <LEVEL>           low | medium | high | critical
     --symbols <N>            Number of affected symbols
@@ -2170,7 +2417,7 @@ miyabi-gate gate serve               # Web dashboard at localhost:4848
 
 ### assign
   Acquire file locks and start implementation.
-  miyabi-gate gate assign <task-id> --agent codex --node macbook --files "src/main.rs,src/lib.rs"
+  {{GATE}} assign <task-id> --agent codex --node macbook --files "src/main.rs,src/lib.rs"
   Options:
     --agent <NAME>           Agent name (required)
     --node <NAME>            Machine name (required)
@@ -2178,63 +2425,61 @@ miyabi-gate gate serve               # Web dashboard at localhost:4848
 
 ### branch
   Record branch creation.
-  miyabi-gate gate branch <task-id> feature/issue-45-auth
+  {{GATE}} branch <task-id> feature/issue-45-auth
 
 ### pr
   Record PR creation.
-  miyabi-gate gate pr <task-id> 88
+  {{GATE}} pr <task-id> 88
 
 ### merge
   Record merge verification. Releases locks and unblocks dependents.
-  miyabi-gate gate merge <task-id> <40-char-SHA>
+  {{GATE}} merge <task-id> <40-char-SHA>
 
 ### status
   Show task status.
-  miyabi-gate gate status              # All tasks
-  miyabi-gate gate status <task-id>    # One task
-  miyabi-gate gate status --format json
+  {{GATE}} status              # All tasks
+  {{GATE}} status <task-id>    # One task
+  {{GATE}} --format json status
 
 ### locks
   List active file locks.
-  miyabi-gate gate locks
-  miyabi-gate gate locks --format json
+  {{GATE}} locks
+  {{GATE}} --format json locks
 
 ### dag
   Show DAG dependency levels.
-  miyabi-gate gate dag
+  {{GATE}} dag
 
 ### dispatchable
   Show tasks ready to be worked on (dependencies resolved, no lock).
-  miyabi-gate gate dispatchable
-  miyabi-gate gate dispatchable --format json
+  {{GATE}} dispatchable
 
 ### attach
   View context attachments for a task.
-  miyabi-gate gate attach <task-id>
-  miyabi-gate gate attach <task-id> --format json
+  {{GATE}} attach <task-id>
 
 ### refresh
   Force-refresh context attachments (clears cache).
-  miyabi-gate gate refresh <task-id>
+  {{GATE}} refresh <task-id>
 
 ### verify-merge
   Verify merge state via GitHub API.
-  miyabi-gate gate verify-merge <task-id> --repo owner/repo
+  {{GATE}} verify-merge <task-id> --repo owner/repo
 
 ### force-unlock
   Emergency: release a lock without completing the task.
-  miyabi-gate gate force-unlock <task-id> --reason "why" --operator "name"
+  {{GATE}} force-unlock <task-id> --reason "why" --operator "name"
 
 ### manual-complete
   Complete a task without merge verification (for doc/ops tasks).
-  miyabi-gate gate manual-complete <task-id> --reason "why" --operator "name"
+  {{GATE}} manual-complete <task-id> --reason "why" --operator "name"
 
 ### dream
   Analyze event logs and extract learnings.
-  miyabi-gate gate dream
-  miyabi-gate gate dream --since 24h
-  miyabi-gate gate dream --auto
-  miyabi-gate gate dream --auto --vault-path /path/to/obsidian
+  {{GATE}} dream
+  {{GATE}} dream --since 24h
+  {{GATE}} dream --auto
+  {{GATE}} dream --auto --vault-path /path/to/obsidian
   Options:
     --since <DURATION>       Filter events (e.g. 24h, 7d, 30m)
     --auto                   Write High learnings to docs/ + update SKILL.md
@@ -2242,18 +2487,18 @@ miyabi-gate gate serve               # Web dashboard at localhost:4848
 
 ### heartbeat
   Renew lock lease heartbeats.
-  miyabi-gate gate heartbeat --all
+  {{GATE}} heartbeat --all
 
 ### serve
   Start web dashboard.
-  miyabi-gate gate serve
-  miyabi-gate gate serve --port 8080
+  {{GATE}} serve
+  {{GATE}} serve --port 8080
   Options:
     --port <N>               Port number (default: 4848)
 
 ### guide
   Print this guide.
-  miyabi-gate gate guide
+  {{GATE}} guide
 
 ### Global options (apply to all gate commands)
   --format <text|json>       Output format (default: text)
@@ -2265,7 +2510,7 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Polaris Dashboard</title>
+  <title>MergeGate Dashboard</title>
   <style>
     :root {
       color-scheme: light;
@@ -2371,7 +2616,7 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
 <body>
   <div class="shell">
     <header>
-      <h1>Polaris Dashboard</h1>
+      <h1>MergeGate Dashboard</h1>
       <p class="subtitle">Deterministic Task Protocol live view</p>
       <p class="meta" id="meta">Loading...</p>
     </header>
@@ -2574,7 +2819,7 @@ fn serve_dashboard(store_path: &std::path::Path, port: u16) -> anyhow::Result<()
         store_path.to_path_buf(),
     );
     let listener = TcpListener::bind(("127.0.0.1", port))?;
-    println!("Polaris Dashboard listening on http://127.0.0.1:{port}");
+    println!("MergeGate Dashboard listening on http://127.0.0.1:{port}");
 
     for stream in listener.incoming() {
         match stream {
@@ -2706,7 +2951,7 @@ fn bus_enqueue(task_id: &str, title: &str, store_path: &std::path::Path) {
         let entry = serde_json::json!({
             "ts": chrono::Utc::now().to_rfc3339(),
             "agent": std::env::var("POLARIS_AGENT_ID").unwrap_or_else(|_| "system".into()),
-            "skill": "polaris-ops",
+            "skill": "mergegate-ops",
             "task": format!("register: {title} ({task_id})"),
             "result": "queued",
             "score": 0.0,
@@ -2718,7 +2963,11 @@ fn bus_enqueue(task_id: &str, title: &str, store_path: &std::path::Path) {
             .open(&path)
         {
             use std::io::Write;
-            let _ = writeln!(file, "{}", serde_json::to_string(&entry).unwrap_or_default());
+            let _ = writeln!(
+                file,
+                "{}",
+                serde_json::to_string(&entry).unwrap_or_default()
+            );
         }
     }
 }

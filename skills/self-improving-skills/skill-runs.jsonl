@@ -11,3 +11,19 @@
 {"ts":"2026-04-09T22:50:35.069Z","agent":"codex","skill":"obsidian-knowledge","task":"Add Obsidian vault integration to dream and attach_context modules","result":"success","score":1,"notes":""}
 {"ts":"2026-04-09T22:51:26.655Z","agent":"codex","skill":"polaris-ops","task":"theta cycle 統合確認: dream に自動記録 + 学び昇格 (#60)","result":"success","score":0.96,"notes":""}
 {"ts":"2026-04-09T23:10:47.489Z","agent":"codex","skill":"polaris-ops","task":"verify_merge + escape hatch 実装","result":"success","score":0.95,"notes":""}
+{"ts":"2026-04-09T23:52:23.029Z","agent":"codex","skill":"polaris-ops","task":"assign 後に実行プランを自動表示 (#73)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-10T00:02:35.170Z","agent":"codex","skill":"polaris-ops","task":"miyabi gate init: リポ初期化コマンド (#74)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-10T00:26:54.687Z","agent":"codex","skill":"polaris-ops","task":"miyabi gate init: Git/GitHub チェック + .gitignore 自動更新 (#75)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-10T00:46:25.955Z","agent":"codex","skill":"rust-development","task":"Implement Polaris DTP Sprint 5 features (#77-81)","result":"success","score":0.96,"notes":""}
+{"ts":"2026-04-10T00:47:59.825Z","agent":"codex","skill":"polaris-ops","task":"記憶の鮮度管理: 古い attach の自動破棄 (#76)","result":"success","score":0.97,"notes":""}
+{"ts":"2026-04-10T02:19:04.681Z","agent":"codex","skill":"claude-code-ops","task":"Claude Code のモデル設定とグローバル設定を確認し、実際の有効値を検証","result":"success","score":0.97,"notes":""}
+{"ts":"2026-04-10T02:22:56.872Z","agent":"codex","skill":"claude-code-ops","task":"Claude Code の壊れた Web Search MCP を除去し WebSearch 許可設定を追加","result":"success","score":0.99,"notes":""}
+{"ts":"2026-04-10T04:41:20.429Z","agent":"codex","skill":"rust-development","task":"Implement and verify miyabi gate --emit-event JSON envelopes for OpenClaw docking","result":"success","score":0.95,"notes":""}
+{"ts":"2026-04-10T04:41:20.440Z","agent":"codex","skill":"gitnexus","task":"Implement miyabi gate --emit-event JSON envelopes with pre-edit impact analysis","result":"success","score":0.95,"notes":""}
+{"ts":"2026-04-10T05:33:36.829Z","agent":"codex","skill":"github-marketing","task":"miyabi-cli-standalone に MergeGate ブランドと mergegate alias を追加","result":"success","score":0.98,"notes":""}
+{"ts":"2026-04-10T05:33:36.829Z","agent":"codex","skill":"rust-development","task":"miyabi と mergegate の二重CLI入口を Rust 側で整備","result":"success","score":0.97,"notes":""}
+{"ts":"2026-04-10T05:34:54.940Z","agent":"codex","skill":"github-marketing","task":"GitHub repo 名を mergegate へ変更し関連URLを整備","result":"success","score":0.99,"notes":""}
+{"ts":"2026-04-10T05:37:21.448Z","agent":"codex","skill":"rust-development","task":"mergegate へ crate package 名とローカルディレクトリ名を移行","result":"success","score":0.98,"notes":""}
+{"ts":"2026-04-10T05:46:55.868Z","agent":"codex","skill":"github-marketing","task":"MergeGate の README に GitNexus との思想的な位置づけを明文化","result":"success","score":0.99,"notes":""}
+{"ts":"2026-04-10T05:47:50.048Z","agent":"codex","skill":"github-marketing","task":"skills を mergegate-cli と mergegate-ops に改名し README コピーも調整","result":"success","score":0.99,"notes":""}
+{"ts":"2026-04-10T05:49:30.773Z","agent":"codex","skill":"github-marketing","task":"product-facing docs と GitHub metadata を MergeGate 基準へ整理","result":"success","score":0.99,"notes":""}

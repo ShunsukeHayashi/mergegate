@@ -1,5 +1,5 @@
 [package]
-name = "miyabi-core"
+name = "mergegate-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Miyabi Core - Shared types and utilities"
+description = "MergeGate Core - Shared types and utilities"
 
 [dependencies]
 tokio = { workspace = true }

@@ -1,6 +1,6 @@
-# Sprint Planning - miyabi-cli-standalone
+# Sprint Planning - MergeGate
 
-**Project**: miyabi-cli-standalone
+**Project**: mergegate
 **Total Sprints**: 4
 **Sprint Duration**: 5 days (1 week)
 **Start Date**: 2025-11-25
@@ -389,7 +389,7 @@ gh issue list --label "🏗️ state:implementing"
 ### Sprint 1 Quick Start
 
 ```bash
-cd /Users/shunsuke/Dev/miyabi-cli-standalone
+cd /Users/shunsuke/Dev/mergegate
 
 # Critical Path開始
 miyabi agent run coordinator --issue 19  # API Client

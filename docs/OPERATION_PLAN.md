@@ -1,6 +1,6 @@
-# Operation Plan - miyabi-cli-standalone
+# Operation Plan - MergeGate
 
-**Project**: miyabi-cli-standalone
+**Project**: mergegate
 **Created**: 2025-11-22
 **Execution Method**: Miyabi Autonomous Agents
 
@@ -49,11 +49,11 @@ miyabi agent run coordinator --issue 24  # Tool Trait
 miyabi status
 
 # Issue一覧
-gh issue list --repo ShunsukeHayashi/miyabi-cli-standalone \
+gh issue list --repo ShunsukeHayashi/mergegate \
   --label "🏗️ state:implementing"
 
 # PR確認
-gh pr list --repo ShunsukeHayashi/miyabi-cli-standalone
+gh pr list --repo ShunsukeHayashi/mergegate
 ```
 
 ---
@@ -64,7 +64,7 @@ gh pr list --repo ShunsukeHayashi/miyabi-cli-standalone
 
 ```bash
 # 1. 前日のPRをレビュー
-gh pr list --repo ShunsukeHayashi/miyabi-cli-standalone --state open
+gh pr list --repo ShunsukeHayashi/mergegate --state open
 
 # 2. ブロッカー確認
 gh issue list --label "🚫 state:blocked"
@@ -124,7 +124,7 @@ gh issue list --label "📥 state:pending" --milestone "v0.2.0 - Advanced Text R
 miyabi status
 
 # GitHub Issues
-gh issue list --repo ShunsukeHayashi/miyabi-cli-standalone
+gh issue list --repo ShunsukeHayashi/mergegate
 
 # ラベル別
 gh issue list --label "📊 priority:P0-Critical"
@@ -233,7 +233,7 @@ cargo clippy --all-targets
 
 ```bash
 # マイルストーン一覧
-gh api repos/ShunsukeHayashi/miyabi-cli-standalone/milestones
+gh api repos/ShunsukeHayashi/mergegate/milestones
 
 # 特定マイルストーンの進捗
 gh issue list --milestone "v0.2.0 - Advanced Text Rendering"
@@ -328,7 +328,7 @@ gh issue list --label "🚫 state:blocked"
 
 ```bash
 # 今すぐ開始
-cd /Users/shunsuke/Dev/miyabi-cli-standalone
+cd /Users/shunsuke/Dev/mergegate
 
 # Critical Path開始
 miyabi agent run coordinator --issue 19  # API Client (最重要)

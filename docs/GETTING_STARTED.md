@@ -1,4 +1,4 @@
-# Getting Started with miyabi-cli-standalone
+# Getting Started with MergeGate
 
 Miyabiプロジェクトへようこそ！このガイドでは、ゼロからMiyabiを使い始めるまでの手順を詳しく解説します。
 
@@ -66,18 +66,18 @@ echo $ANTHROPIC_API_KEY
 
 #### 2.1 GitHub CLI使用（推奨）
 ```bash
-cd miyabi-cli-standalone
-gh repo create miyabi-cli-standalone --private --source=. --remote=origin
+cd mergegate
+gh repo create mergegate --private --source=. --remote=origin
 ```
 
 #### 2.2 手動作成
 1. https://github.com/new にアクセス
-2. Repository nameに `miyabi-cli-standalone` を入力
+2. Repository nameに `mergegate` を入力
 3. "Private"を選択
 4. "Create repository"をクリック
 5. ローカルリポジトリと接続：
    ```bash
-   git remote add origin https://github.com/YOUR_USERNAME/miyabi-cli-standalone.git
+   git remote add origin https://github.com/YOUR_USERNAME/mergegate.git
    git branch -M main
    git add .
    git commit -m "feat: initial commit 🚀"
