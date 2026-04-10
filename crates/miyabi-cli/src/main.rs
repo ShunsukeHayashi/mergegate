@@ -4,6 +4,7 @@ use chrono::Duration as ChronoDuration;
 use clap::{Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
 use std::collections::HashMap;
+use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -98,7 +99,10 @@ enum Commands {
         #[arg(long)]
         system: Option<String>,
     },
-    /// Deterministic Task Protocol gate controls
+    #[command(
+        about = "Deterministic Task Protocol gate controls",
+        long_about = "Run miyabi gate init to set up a new project.\n\nDeterministic Task Protocol gate controls"
+    )]
     Gate {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
@@ -147,6 +151,8 @@ enum ImpactRiskArg {
 
 #[derive(Subcommand)]
 enum GateCommand {
+    /// Initialize project memory for the current repository
+    Init,
     /// Register a task in the execution ledger
     Register {
         /// GitHub issue number
@@ -1231,6 +1237,10 @@ fn handle_gate_command(
         .unwrap_or_else(|| "local".to_string());
 
     let result = match command {
+        GateCommand::Init => {
+            initialize_gate_project(format, store_path)?;
+            Ok(())
+        }
         GateCommand::Register {
             issue,
             title,
@@ -1646,6 +1656,60 @@ fn print_assign_execution_plan(
     if result.lock_conflict.conflicting {
         println!("lock conflict: true");
     }
+}
+
+fn initialize_gate_project(
+    format: &OutputFormat,
+    store_path: &std::path::Path,
+) -> anyhow::Result<()> {
+    if store_path.exists() {
+        if matches!(format, OutputFormat::Json) {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": "already_initialized",
+                    "store_path": store_path.display().to_string(),
+                }))?
+            );
+        } else {
+            println!("Already initialized");
+        }
+        return Ok(());
+    }
+
+    if let Some(parent) = store_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let snapshot = miyabi_core::store::TasksSnapshot::default();
+    fs::write(store_path, serde_json::to_vec_pretty(&snapshot)?)?;
+
+    let current_dir = std::env::current_dir()?;
+    let created_path = store_path.display().to_string();
+    if matches!(format, OutputFormat::Json) {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": "initialized",
+                "current_dir": current_dir.display().to_string(),
+                "created": created_path,
+                "next_steps": [
+                    "miyabi gate register --issue <N> --title ...",
+                    "miyabi gate status",
+                    "miyabi gate --help"
+                ],
+            }))?
+        );
+    } else {
+        println!("Polaris initialized in {}", current_dir.display());
+        println!("Created: {}", created_path);
+        println!("Next steps:");
+        println!("  miyabi gate register --issue <N> --title ...");
+        println!("  miyabi gate status");
+        println!("  miyabi gate --help");
+    }
+
+    Ok(())
 }
 
 fn assign_plan_to_json(plan: &AssignExecutionPlan) -> serde_json::Value {
