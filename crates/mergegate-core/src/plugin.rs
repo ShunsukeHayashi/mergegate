@@ -5,7 +5,7 @@
 //! # Example
 //!
 //! ```rust
-//! use miyabi_core::plugin::{Plugin, PluginManager, PluginMetadata, PluginContext, PluginResult};
+//! use mergegate_core::plugin::{Plugin, PluginManager, PluginMetadata, PluginContext, PluginResult};
 //! use anyhow::Result;
 //!
 //! struct MyPlugin;

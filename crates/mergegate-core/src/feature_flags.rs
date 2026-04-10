@@ -5,7 +5,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use miyabi_core::feature_flags::FeatureFlagManager;
+//! use mergegate_core::feature_flags::FeatureFlagManager;
 //!
 //! let manager = FeatureFlagManager::new();
 //! manager.set_flag("new_architecture", true);

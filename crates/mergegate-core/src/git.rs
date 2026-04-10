@@ -16,11 +16,11 @@ use std::path::{Path, PathBuf};
 /// # Examples
 ///
 /// ```no_run
-/// use miyabi_core::git::find_git_root;
+/// use mergegate_core::git::find_git_root;
 ///
 /// let root = find_git_root(None)?;
 /// println!("Git root: {:?}", root);
-/// # Ok::<(), miyabi_core::error::Error>(())
+/// # Ok::<(), mergegate_core::error::Error>(())
 /// ```
 pub fn find_git_root(start_path: Option<&Path>) -> Result<PathBuf> {
     let search_path = match start_path {

@@ -39,7 +39,7 @@ pub struct ApprovalRequest {
 /// # Example
 ///
 /// ```rust
-/// use miyabi_core::agent::{ApprovalCallback, ApprovalRequest, ApprovalDecision};
+/// use mergegate_core::agent::{ApprovalCallback, ApprovalRequest, ApprovalDecision};
 /// use async_trait::async_trait;
 ///
 /// struct AutoApprover;
@@ -49,7 +49,7 @@ pub struct ApprovalRequest {
 ///     async fn request_approval(&self, request: &ApprovalRequest) -> ApprovalDecision {
 ///         // Auto-approve low risk tools
 ///         match request.risk_level {
-///             miyabi_core::agent::RiskLevel::Low => ApprovalDecision::Approved,
+///             mergegate_core::agent::RiskLevel::Low => ApprovalDecision::Approved,
 ///             _ => ApprovalDecision::Rejected(Some("Manual approval required".to_string())),
 ///         }
 ///     }
