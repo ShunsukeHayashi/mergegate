@@ -1,6 +1,6 @@
 {
-  "version": 112,
-  "generated_at": "2026-04-10T01:22:00.857823Z",
+  "version": 113,
+  "generated_at": "2026-04-10T01:22:02.914584Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -516,7 +516,7 @@
       "id": "issue-97",
       "title": "Dashboard completion rate display",
       "issue_number": 97,
-      "current_state": "reviewing",
+      "current_state": "merged",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
@@ -533,12 +533,12 @@
       "github_evidence": {
         "pr_number": 98,
         "pr_head_ref": "feature/issue-97-dashboard-stats",
-        "pr_state": "OPEN",
-        "merge_commit_sha": null,
-        "merged_at": null,
-        "review_decision": "REVIEW_REQUIRED",
-        "issue_state": "OPEN",
-        "issue_closed_by_pr": false
+        "pr_state": "MERGED",
+        "merge_commit_sha": "61cdee2db82c3d4c7794eba8ab76f53796e4a9f6",
+        "merged_at": "2026-04-10T01:22:02.914159Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
       },
       "completion_mode": "github_pr",
       "human_approval": null,
@@ -567,7 +567,7 @@
       ],
       "priority": 0,
       "created_at": "2026-04-10T01:11:15.134258Z",
-      "updated_at": "2026-04-10T01:12:36.997536Z"
+      "updated_at": "2026-04-10T01:22:02.914395Z"
     },
     {
       "id": "issue-96",
@@ -766,6 +766,12 @@
     }
   ],
   "file_locks": {
+    "crates/miyabi-core/src/lock.rs": {
+      "task_id": "issue-100",
+      "agent": "claude-code",
+      "node": "macbook-pro",
+      "expires_at": "2026-04-10T01:21:29.023205Z"
+    },
     "crates/miyabi-core/Cargo.toml": {
       "task_id": "issue-100",
       "agent": "claude-code",
@@ -773,12 +779,6 @@
       "expires_at": "2026-04-10T01:21:29.023205Z"
     },
     "crates/miyabi-core/src/store.rs": {
-      "task_id": "issue-100",
-      "agent": "claude-code",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-10T01:21:29.023205Z"
-    },
-    "crates/miyabi-core/src/lock.rs": {
       "task_id": "issue-100",
       "agent": "claude-code",
       "node": "macbook-pro",
