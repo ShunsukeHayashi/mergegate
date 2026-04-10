@@ -1070,3 +1070,68 @@ mod tests {
         assert_eq!(result_zero, base);
     }
 }
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+
+    fn sample_task(id: &str) -> ExecutionTask {
+        ExecutionTask::new(id, format!("Task {id}"))
+    }
+
+    proptest! {
+        #[test]
+        fn cas_rejects_stale_version(version in 1u64..100) {
+            let tmp = TempDir::new().unwrap();
+            let store = SnapshotStore::new(
+                tmp.path().join("snap.json"),
+                tmp.path().join(".lock"),
+            );
+            let mut snap = TasksSnapshot::default();
+            snap.upsert_task(sample_task("t"));
+            store.save(&snap, 0).unwrap();
+
+            // Try saving with wrong version (0, already bumped to 1)
+            let result = store.save(&snap, 0);
+            prop_assert!(result.is_err());
+        }
+
+        #[test]
+        fn upsert_is_idempotent(n in 1usize..10) {
+            let tmp = TempDir::new().unwrap();
+            let store = SnapshotStore::new(
+                tmp.path().join("snap.json"),
+                tmp.path().join(".lock"),
+            );
+            let mut snap = TasksSnapshot::default();
+            for _ in 0..n {
+                snap.upsert_task(sample_task("same-id"));
+            }
+            prop_assert_eq!(snap.tasks.len(), 1);
+        }
+
+        #[test]
+        fn event_replay_is_deterministic(count in 1usize..20) {
+            let tmp = TempDir::new().unwrap();
+            let es = EventStore::new(tmp.path().join("events.jsonl"));
+            for i in 0..count {
+                es.append(&TaskEvent {
+                    id: format!("e-{i}"),
+                    ts: Utc::now(),
+                    event_type: TaskEventType::GatePassed,
+                    task_id: "task-a".into(),
+                    agent: "t".into(),
+                    node: "t".into(),
+                    payload: serde_json::json!({}),
+                    version: i as u64,
+                }).unwrap();
+            }
+            let r1 = es.replay(None).unwrap();
+            let r2 = es.replay(None).unwrap();
+            prop_assert_eq!(r1.len(), r2.len());
+            prop_assert_eq!(r1.len(), count);
+        }
+    }
+}

@@ -495,3 +495,91 @@ mod tests {
         assert!(sweep.active.is_empty());
     }
 }
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use crate::store::{CompletionMode, EventStore, ExecutionTask, SnapshotStore};
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+
+    fn arb_file_name() -> impl Strategy<Value = String> {
+        prop::string::string_regex("[a-z]{1,8}/[a-z]{1,8}\\.rs")
+            .unwrap()
+            .prop_filter("non-empty", |s| !s.is_empty())
+    }
+
+    fn arb_task_id() -> impl Strategy<Value = String> {
+        prop::string::string_regex("task-[a-z]{1,4}")
+            .unwrap()
+            .prop_filter("non-empty", |s| !s.is_empty())
+    }
+
+    fn setup() -> (TempDir, SnapshotStore, FileLockManager) {
+        let tmp = TempDir::new().unwrap();
+        let event_store = EventStore::new(tmp.path().join("events.jsonl"));
+        let snapshot_store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+        let manager = FileLockManager::new(
+            event_store,
+            snapshot_store.clone(),
+            LeaseConfig {
+                lease_duration_sec: 300,
+                heartbeat_interval_sec: 60,
+                stale_after_missed_heartbeats: 2,
+            },
+        );
+        (tmp, snapshot_store, manager)
+    }
+
+    fn seed(snapshot_store: &SnapshotStore, id: &str) {
+        let mut snapshot = snapshot_store.load().unwrap();
+        let mut task = ExecutionTask::new(id, format!("Task {id}"));
+        task.completion_mode = CompletionMode::GithubPr;
+        snapshot.upsert_task(task);
+        let version = snapshot.version;
+        snapshot_store.save(&snapshot, version).unwrap();
+    }
+
+    proptest! {
+        #[test]
+        fn acquire_then_release_always_clears(
+            file in arb_file_name()
+        ) {
+            let (_tmp, ss, mgr) = setup();
+            seed(&ss, "task-a");
+            mgr.acquire_lock("task-a", "agent", "node", &[file.clone()]).unwrap();
+            let c = mgr.has_conflict(&[file.clone()]).unwrap();
+            prop_assert!(c.conflicting);
+            mgr.release_lock("task-a").unwrap();
+            let c = mgr.has_conflict(&[file]).unwrap();
+            prop_assert!(!c.conflicting);
+        }
+
+        #[test]
+        fn two_tasks_cannot_lock_same_file(
+            file in arb_file_name()
+        ) {
+            let (_tmp, ss, mgr) = setup();
+            seed(&ss, "task-a");
+            seed(&ss, "task-b");
+            mgr.acquire_lock("task-a", "agent", "node", &[file.clone()]).unwrap();
+            let result = mgr.acquire_lock("task-b", "agent", "node", &[file]);
+            prop_assert!(result.is_err());
+        }
+
+        #[test]
+        fn renew_by_wrong_owner_always_fails(
+            task_id in arb_task_id(),
+            file in arb_file_name()
+        ) {
+            let (_tmp, ss, mgr) = setup();
+            seed(&ss, &task_id);
+            mgr.acquire_lock(&task_id, "owner", "node", &[file]).unwrap();
+            let result = mgr.renew_lease(&task_id, "intruder", "other");
+            prop_assert!(result.is_err());
+        }
+    }
+}
