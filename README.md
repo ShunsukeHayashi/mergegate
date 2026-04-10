@@ -204,3 +204,17 @@ That is usually safe. It means `project_memory/tasks.json` already exists.
 
 That is the intended model. MergeGate is the gate, not the engine.
 
+## Free Guide: AI Development Team Playbook
+
+Planning to introduce AI coding agents to your team? We wrote a practical guide covering:
+
+- How to choose between Claude Code, Codex, and Gemini CLI
+- 3 failure patterns that kill AI dev adoption
+- Review workflow and permission design for AI agents
+- How to run a low-risk 4-week PoC
+- Why you need a gate protocol like MergeGate
+
+**[Download the guide (PDF)](https://miyabi-assets.pages.dev/assets/ai-dev-team-guide.pdf)** — free, no signup required.
+
+Want a walkthrough customized to your team? **[Chat with us on LINE](https://miyabi-line-crm.supernovasyun.workers.dev/auth/line?ref=b2b-github)** for a free 30-min consultation.
+
