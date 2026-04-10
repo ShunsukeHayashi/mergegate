@@ -5,8 +5,10 @@
 # ここでは軽い状態表示のみ。
 
 TOOL_INPUT="$1"
-MIYABI_BIN="/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/target/release/miyabi"
-STORE="/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/project_memory/tasks.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+MIYABI_BIN="${MIYABI_BIN:-$REPO_ROOT/target/release/miyabi}"
+STORE="${POLARIS_TASK_STORE:-$REPO_ROOT/project_memory/tasks.json}"
 
 # miyabi バイナリがなければスキップ
 if [ ! -x "$MIYABI_BIN" ]; then

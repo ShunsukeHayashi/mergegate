@@ -5,8 +5,11 @@
 # ロックされていないファイルへの書き込みをブロックする。
 
 TOOL_INPUT="$1"
-MIYABI_BIN="/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/target/release/miyabi"
-STORE="/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/project_memory/tasks.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 上書き可: 別ビルドパスやインストール済み miyabi を指す
+MIYABI_BIN="${MIYABI_BIN:-$REPO_ROOT/target/release/miyabi}"
+STORE="${POLARIS_TASK_STORE:-$REPO_ROOT/project_memory/tasks.json}"
 
 # miyabi バイナリがなければスキップ
 if [ ! -x "$MIYABI_BIN" ]; then
@@ -33,7 +36,6 @@ if [ -z "$TARGET_FILE" ]; then
 fi
 
 # リポルートからの相対パスに変換
-REPO_ROOT="/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone"
 REL_PATH="${TARGET_FILE#$REPO_ROOT/}"
 
 # ロック一覧を取得
