@@ -1301,7 +1301,7 @@ fn handle_gate_command(
                         println!("registered: {} ({})", task.id, task.title);
                     }
                     if !no_bus {
-                        bus_enqueue(&task.id, &task_title);
+                        bus_enqueue(&task.id, &task_title, store_path);
                     }
                 })
         }
@@ -2454,12 +2454,15 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     }
 }
 
-fn bus_enqueue(task_id: &str, title: &str) {
-    let skill_runs_path = std::env::current_dir()
-        .ok()
-        .map(|cwd| cwd.join("skills/self-improving-skills/skill-runs.jsonl"));
+fn bus_enqueue(task_id: &str, title: &str, store_path: &std::path::Path) {
+    // Derive repo root from store_path (e.g. project_memory/tasks.json -> repo root)
+    let repo_root = store_path
+        .parent()
+        .and_then(|pm| pm.parent())
+        .unwrap_or(std::path::Path::new("."));
+    let skill_runs_path = repo_root.join("skills/self-improving-skills/skill-runs.jsonl");
 
-    if let Some(path) = skill_runs_path.filter(|p| p.parent().is_some_and(|d| d.exists())) {
+    if let Some(path) = Some(skill_runs_path).filter(|p| p.parent().is_some_and(|d| d.exists())) {
         let entry = serde_json::json!({
             "ts": chrono::Utc::now().to_rfc3339(),
             "agent": std::env::var("POLARIS_AGENT_ID").unwrap_or_else(|_| "system".into()),

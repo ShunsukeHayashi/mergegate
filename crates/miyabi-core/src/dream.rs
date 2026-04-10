@@ -161,29 +161,35 @@ fn update_skill_md_from_patterns(report: &DreamReport, repo_root: &Path) -> Resu
 
     let existing = fs::read_to_string(&skill_path)?;
     let marker = "## よくある拒否パターン（自動生成）";
-    if existing.contains(marker) {
-        // Already has auto-generated section — remove it for refresh
-        let before = existing.split(marker).next().unwrap_or(&existing);
-        let mut content = before.trim_end().to_string();
+    let new_section = build_rejection_section(&report.patterns.gate_rejections);
+
+    let content = if let Some(start_idx) = existing.find(marker) {
+        // Replace only the auto-generated section, preserving content after it
+        let after_marker = &existing[start_idx + marker.len()..];
+        // Find the next ## heading (or EOF) to determine section boundary
+        let section_end = after_marker
+            .find("\n## ")
+            .map(|i| start_idx + marker.len() + i + 1) // +1 to keep the newline before next heading
+            .unwrap_or(existing.len());
+        let mut content = existing[..start_idx].trim_end().to_string();
         content.push_str("\n\n");
-        content.push_str(&build_rejection_section(&report.patterns.gate_rejections));
-        content.push('\n');
-        let tmp = skill_path.with_extension("md.tmp");
-        fs::write(&tmp, &content)?;
-        fs::rename(&tmp, &skill_path)?;
+        content.push_str(&new_section);
+        content.push_str(&existing[section_end..]);
+        content
     } else {
         let mut content = existing;
         if !content.ends_with('\n') {
             content.push('\n');
         }
         content.push('\n');
-        content.push_str(&build_rejection_section(&report.patterns.gate_rejections));
+        content.push_str(&new_section);
         content.push('\n');
-        let tmp = skill_path.with_extension("md.tmp");
-        fs::write(&tmp, &content)?;
-        fs::rename(&tmp, &skill_path)?;
-    }
+        content
+    };
 
+    let tmp = skill_path.with_extension("md.tmp");
+    fs::write(&tmp, &content)?;
+    fs::rename(&tmp, &skill_path)?;
     Ok(())
 }
 
@@ -637,5 +643,94 @@ mod tests {
                 .any(|(program, args)| program == "git"
                     && args.first() == Some(&"commit".to_string()))
         );
+    }
+
+    #[test]
+    fn build_rejection_section_empty() {
+        let section = build_rejection_section(&HashMap::new());
+        assert!(section.contains("| GATE | 回数 | 対処法 |"));
+        // heading + blank + table header + separator = 4 lines, no data rows
+        assert_eq!(section.lines().count(), 4);
+    }
+
+    #[test]
+    fn build_rejection_section_sorted_by_count_desc() {
+        let mut rejections = HashMap::new();
+        rejections.insert("GATE 0".to_string(), 1);
+        rejections.insert("GATE 3".to_string(), 5);
+        rejections.insert("GATE 4".to_string(), 3);
+
+        let section = build_rejection_section(&rejections);
+        let lines: Vec<&str> = section.lines().collect();
+        // lines: [0]=heading, [1]=blank, [2]=table header, [3]=separator, [4..]=data
+        assert!(lines[4].contains("GATE 3"));
+        assert!(lines[4].contains("5"));
+        assert!(lines[5].contains("GATE 4"));
+        assert!(lines[6].contains("GATE 0"));
+    }
+
+    #[test]
+    fn update_skill_md_appends_when_no_marker() {
+        let tmp = TempDir::new().unwrap();
+        let skills_dir = tmp.path().join("skills/polaris-ops");
+        fs::create_dir_all(&skills_dir).unwrap();
+        let skill_path = skills_dir.join("SKILL.md");
+        fs::write(&skill_path, "# Polaris Ops\n\nExisting content.\n").unwrap();
+
+        let mut rejections = HashMap::new();
+        rejections.insert("GATE 3".to_string(), 2);
+        let report = DreamReport {
+            patterns: DreamPatterns {
+                gate_rejections: rejections,
+                ..Default::default()
+            },
+            learnings: Vec::new(),
+            events_processed: 0,
+        };
+
+        update_skill_md_from_patterns(&report, tmp.path()).unwrap();
+        let content = fs::read_to_string(&skill_path).unwrap();
+        assert!(content.contains("# Polaris Ops"));
+        assert!(content.contains("Existing content."));
+        assert!(content.contains("## よくある拒否パターン（自動生成）"));
+        assert!(content.contains("GATE 3"));
+    }
+
+    #[test]
+    fn update_skill_md_replaces_marker_preserves_following_sections() {
+        let tmp = TempDir::new().unwrap();
+        let skills_dir = tmp.path().join("skills/polaris-ops");
+        fs::create_dir_all(&skills_dir).unwrap();
+        let skill_path = skills_dir.join("SKILL.md");
+        fs::write(
+            &skill_path,
+            "# Polaris Ops\n\n\
+             ## よくある拒否パターン（自動生成）\n\n\
+             | GATE | 回数 | 対処法 |\n|------|------|--------|\n| old | 1 | old |\n\n\
+             ## 関連スキル\n\n- important link\n",
+        )
+        .unwrap();
+
+        let mut rejections = HashMap::new();
+        rejections.insert("GATE 4".to_string(), 7);
+        let report = DreamReport {
+            patterns: DreamPatterns {
+                gate_rejections: rejections,
+                ..Default::default()
+            },
+            learnings: Vec::new(),
+            events_processed: 0,
+        };
+
+        update_skill_md_from_patterns(&report, tmp.path()).unwrap();
+        let content = fs::read_to_string(&skill_path).unwrap();
+        // Old data should be gone
+        assert!(!content.contains("| old |"));
+        // New data should be present
+        assert!(content.contains("GATE 4"));
+        assert!(content.contains("7"));
+        // Following section MUST be preserved
+        assert!(content.contains("## 関連スキル"));
+        assert!(content.contains("- important link"));
     }
 }
