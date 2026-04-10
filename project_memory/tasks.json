@@ -1,30 +1,20 @@
 {
-  "version": 19,
-  "generated_at": "2026-04-09T21:33:23.166442Z",
+  "version": 109,
+  "generated_at": "2026-04-10T01:21:54.672416Z",
   "generated_from_event_id": null,
   "tasks": [
     {
       "id": "phase-a",
       "title": "GATE + Lock + Store + Protocol（4ファイル新規）",
-      "current_state": "implementing",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [],
       "dependents": [
         "phase-b",
         "phase-c"
       ],
       "soft_dependencies": [],
-      "lock": {
-        "locked_by": "codex-a@macbook-pro",
-        "locked_at": "2026-04-10T01:30:00Z",
-        "lease_duration_sec": 3600,
-        "last_heartbeat": "2026-04-10T01:30:00Z",
-        "affected_files": [
-          "crates/miyabi-core/src/gate.rs",
-          "crates/miyabi-core/src/lock.rs",
-          "crates/miyabi-core/src/protocol.rs",
-          "crates/miyabi-core/src/store.rs"
-        ]
-      },
+      "lock": null,
       "impact": {
         "risk_level": "LOW",
         "affected_symbols": 0,
@@ -37,14 +27,16 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
-      "updated_at": "2026-04-10T01:30:00Z"
+      "updated_at": "2026-04-10T01:04:06.348659Z"
     },
     {
       "id": "phase-b",
       "title": "CLI サブコマンド追加",
-      "current_state": "pending",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [
         "phase-a"
       ],
@@ -58,14 +50,16 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
-      "updated_at": "2026-04-10T01:30:00Z"
+      "updated_at": "2026-04-10T01:04:06.377223Z"
     },
     {
       "id": "phase-c",
       "title": "GitHub Evidence + E2E テスト",
-      "current_state": "pending",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [
         "phase-a",
         "phase-b"
@@ -78,26 +72,20 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-10T01:30:00Z",
-      "updated_at": "2026-04-10T01:30:00Z"
+      "updated_at": "2026-04-10T01:04:06.395353Z"
     },
     {
       "id": "issue-51",
       "title": "Add Agent mode to help documentation",
-      "current_state": "implementing",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
-      "lock": {
-        "locked_by": "claude@macbook-pro",
-        "locked_at": "2026-04-09T21:32:36.199414Z",
-        "lease_duration_sec": 300,
-        "last_heartbeat": "2026-04-09T21:32:36.199414Z",
-        "affected_files": [
-          "docs/USER_MANUAL.md"
-        ]
-      },
+      "lock": null,
       "impact": {
         "risk_level": "LOW",
         "affected_symbols": 0,
@@ -110,27 +98,20 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-09T21:32:36.183108Z",
-      "updated_at": "2026-04-09T21:32:36.210553Z"
+      "updated_at": "2026-04-10T01:04:11.998471Z"
     },
     {
       "id": "issue-50",
       "title": "Add progress indicator for long-running agent tasks",
-      "current_state": "implementing",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
-      "lock": {
-        "locked_by": "codex-b@macbook-pro",
-        "locked_at": "2026-04-09T21:33:14.098441Z",
-        "lease_duration_sec": 300,
-        "last_heartbeat": "2026-04-09T21:33:14.098441Z",
-        "affected_files": [
-          "crates/miyabi-tui/src/app.rs",
-          "crates/miyabi-tui/src/views.rs"
-        ]
-      },
+      "lock": null,
       "impact": {
         "risk_level": "MEDIUM",
         "affected_symbols": 5,
@@ -143,26 +124,20 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-09T21:33:03.117158Z",
-      "updated_at": "2026-04-09T21:33:14.098828Z"
+      "updated_at": "2026-04-10T01:04:11.980417Z"
     },
     {
       "id": "issue-49",
       "title": "Add interactive tool approval in TUI Agent mode",
-      "current_state": "implementing",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
-      "lock": {
-        "locked_by": "codex-c@macbook-pro",
-        "locked_at": "2026-04-09T21:33:14.107550Z",
-        "lease_duration_sec": 300,
-        "last_heartbeat": "2026-04-09T21:33:14.107550Z",
-        "affected_files": [
-          "crates/miyabi-tui/src/approval_overlay.rs"
-        ]
-      },
+      "lock": null,
       "impact": {
         "risk_level": "MEDIUM",
         "affected_symbols": 3,
@@ -175,26 +150,20 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-09T21:33:03.121698Z",
-      "updated_at": "2026-04-09T21:33:14.107940Z"
+      "updated_at": "2026-04-10T01:04:11.960575Z"
     },
     {
       "id": "issue-48",
       "title": "Implement Context Manager for memory management",
-      "current_state": "implementing",
+      "issue_number": 0,
+      "current_state": "done",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
-      "lock": {
-        "locked_by": "claude-sub@macbook-pro",
-        "locked_at": "2026-04-09T21:33:23.165977Z",
-        "lease_duration_sec": 300,
-        "last_heartbeat": "2026-04-09T21:33:23.165977Z",
-        "affected_files": [
-          "crates/miyabi-core/src/conversation.rs"
-        ]
-      },
+      "lock": null,
       "impact": {
         "risk_level": "HIGH",
         "affected_symbols": 8,
@@ -207,65 +176,613 @@
       "github_evidence": null,
       "completion_mode": "github_pr",
       "human_approval": null,
+      "context_attachments": [],
       "priority": 0,
       "created_at": "2026-04-09T21:33:03.126596Z",
-      "updated_at": "2026-04-09T21:33:23.166407Z"
+      "updated_at": "2026-04-10T01:04:11.902687Z"
+    },
+    {
+      "id": "issue-85",
+      "title": "L-Step Funnel Analytics 調査",
+      "issue_number": 85,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T00:43:30.288623Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/85",
+          "content": "Issue #85",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T00:51:35.113232Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-85",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T00:51:35.113233Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T00:43:30.278992Z",
+      "updated_at": "2026-04-10T00:44:24.430853Z"
+    },
+    {
+      "id": "issue-86",
+      "title": "改善サイクル: 残り20%プラン設計",
+      "issue_number": 86,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T00:51:35.121991Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/86",
+          "content": "Issue #86",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T00:51:35.130309Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-86",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T00:51:35.130310Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T00:51:35.113404Z",
+      "updated_at": "2026-04-10T00:52:50.166549Z"
+    },
+    {
+      "id": "issue-87",
+      "title": "Day 1: lock.rs/store.rs テスト補強",
+      "issue_number": 87,
+      "current_state": "merged",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 22,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T00:56:34.670978Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-87-test-reinforcement",
+      "github_evidence": {
+        "pr_number": 88,
+        "pr_head_ref": "feature/issue-87-test-reinforcement",
+        "pr_state": "MERGED",
+        "merge_commit_sha": "00c25e314b7ad21db8ba18a45455b5814fa7c126",
+        "merged_at": "2026-04-10T01:21:54.670652Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/87",
+          "content": "Issue #87",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T00:56:38.654635Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-87",
+          "content": "risk_level: Low\naffected_symbols: 22",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T00:56:38.654636Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/lock.rs",
+          "content": "//! File lock manager for deterministic task execution.\n\nuse crate::error::{Error, Result};\nuse crate::store::{\n    lease_expiry, EventStore, FileLockEntry, SnapshotStore, TaskEvent, TaskEventType,\n};\nuse chrono::{DateTime, Duration, Utc};\nuse serde::{Deserialize, Serialize};\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct LeaseConfig {\n    pub lease_duration_sec: u64,\n    pub heartbeat_interval_sec: u64,\n    pub stale_after_missed_heartbeats: u64,\n}\n\nimpl Default for LeaseConfig {\n    fn default() -> Self {\n        Self {\n            lease_duration_sec: 300,\n            heartbeat_interval_sec: 60,\n            stale_after_missed_heartbeats: 2,\n        }\n    }\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct LockConflict {\n    pub conflicting: bool,\n    pub held_by: Option<String>,",
+          "token_estimate": 212,
+          "attached_at": "2026-04-10T00:56:38.654784Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/store.rs",
+          "content": "//! Deterministic task protocol storage primitives.\n\nuse crate::error::{Error, Result};\nuse chrono::{DateTime, Duration, Utc};\nuse fs2::FileExt;\nuse serde::{Deserialize, Serialize};\nuse serde_json::Value;\nuse std::collections::HashMap;\nuse std::fs::{self, File, OpenOptions};\nuse std::io::{BufRead, BufReader, Write};\nuse std::path::{Path, PathBuf};\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]\npub enum TaskState {\n    Draft,\n    Pending,\n    Analyzing,\n    Implementing,\n    Reviewing,\n    Merged,\n    Deploying,\n    Done,\n    Blocked,\n    Failed,\n    Cancelled,\n    AwaitingGithubSync,\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]",
+          "token_estimate": 181,
+          "attached_at": "2026-04-10T00:56:38.654924Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T00:56:30.731948Z",
+      "updated_at": "2026-04-10T01:21:54.672142Z"
+    },
+    {
+      "id": "issue-89",
+      "title": "Day 3: attach depth1 files",
+      "issue_number": 89,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 3,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T00:59:41.320571Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-89-depth1-attach",
+      "github_evidence": {
+        "pr_number": 90,
+        "pr_head_ref": "feature/issue-89-depth1-attach",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/89",
+          "content": "Issue #89",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T00:59:41.325457Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-89",
+          "content": "risk_level: Low\naffected_symbols: 3",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T00:59:41.325458Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/protocol.rs",
+          "content": "//! Deterministic execution protocol entry point.\n\nuse crate::dream::DreamReport;\nuse crate::error::Error;\nuse crate::gate::{evaluate_gate, validate_branch_name, Gate, GateContext, GateReport};\nuse crate::lock::{FileLockManager, LeaseConfig, LockConflict};\nuse crate::store::{\n    CompletionMode, ContextAttachment, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState,\n    GitHubPrState, HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent,\n    TaskEventType, TaskImpact, TaskState, TasksSnapshot,\n};\nuse chrono::Utc;\nuse serde::{Deserialize, Serialize};\nuse serde_json::Value;\nuse std::collections::{HashMap, VecDeque};\nuse std::fs;\nuse std::io::{BufRead, BufReader};\nuse std::path::{Path, PathBuf};\nuse std::process::Command;\nuse std::time::{Duration, Instant};\n\nconst MAX_CONTEXT_TOKENS: usize = 4_000;\nconst FILE_SNIPPET_LINE_LIMIT: usize = 30;\nconst ANNOUNCE_CHAR_LIMIT: usize = 180;\nconst MAX_ATTACHMENT_AGE_HOURS: i64 = 24;\n\n#[derive(Debug, Clone)]\npub struct DeterministicExecutionProtocol {\n    event_store: EventStore,\n    snapshot_store: SnapshotStore,",
+          "token_estimate": 273,
+          "attached_at": "2026-04-10T00:59:41.325612Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T00:59:41.314948Z",
+      "updated_at": "2026-04-10T01:00:50.888724Z"
+    },
+    {
+      "id": "issue-91",
+      "title": "Obsidian automation system integration test",
+      "issue_number": 91,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:06:37.798281Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-91-obsidian-utf8-fix",
+      "github_evidence": {
+        "pr_number": 94,
+        "pr_head_ref": "feature/issue-91-obsidian-utf8-fix",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/91",
+          "content": "Issue #91",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:07:18.328003Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-91",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:07:18.328003Z"
+        },
+        {
+          "attachment_type": "obsidian_note",
+          "source": "/Users/shunsukehayashi/Documents/Obsidian/HAYASHI-Knowledge/Daily/2026-02-22-automation-system.md",
+          "content": "---",
+          "token_estimate": 1,
+          "attached_at": "2026-04-10T01:07:18.329172Z"
+        },
+        {
+          "attachment_type": "obsidian_note",
+          "source": "/Users/shunsukehayashi/Documents/Obsidian/HAYASHI-Knowledge/Daily/2026-02-22-external-integrations.md",
+          "content": "---\ntitle: \"Episode: 外部サービス統合完了\"\ndate: 2026-02-22\ncategory: general\ntags: [ai]\nsource: HAYASHI_SHUNSUKE\ncreated: 2026-02-22T19:38:59+09:00\n---\n\n# Episode: 外部サービス統合完了\n\n**日付**: 2026-02-22\n**セッション**: パーソナルアシスタント機能強化\n\n\n**記録者**: Claude Code (Opus 4.5)\n**バージョン**: 1.4.0",
+          "token_estimate": 66,
+          "attached_at": "2026-04-10T01:07:18.329377Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/docs/dtp/SESSION-HANDOFF.md",
+          "content": "# セッション引き継ぎ — 2026-04-10 (Cycle 1 完了)\n\n## 現在地\n\nビジョン達成度: 85%\n目標: 95%\n残り: 改善サイクル 2 を実行\n\n## Cycle 1 完了実績\n\n| Day | 内容 | 結果 |\n|-----|------|------|\n| Day 1 | lock.rs/store.rs テスト補強 | PR #88: +12 tests, 926 GREEN |\n| Day 3 | depth-1 impact ファイル自動アタッチ | PR #90: protocol.rs 改善 |\n| Day 5 | タスク台帳トリアージ (11→2 active) + SKILL.md 更新 | phase-a〜c, issue-48〜51 完了 |\n| Day 7 | ビジョン再計測 + 次サイクル Issue 3件 | #91, #92, #93 |\n\n## ビジョン達成度 (再計測)\n\n```\n          原則1  原則2  原則3  可視化  自己改善  全体\nCycle0:   60%   90%   70%    50%     20%      80%\nCycle1:   70%   95%   75%    60%     40%      85%\n目標:     90%   95%   85%    70%     80%      95%\n```\n\n## 次のセッションでやること (Cycle 2)\n\n```bash\n# 1. Obsidian 連携テスト (#91)",
+          "token_estimate": 170,
+          "attached_at": "2026-04-10T01:07:18.329549Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:06:37.793381Z",
+      "updated_at": "2026-04-10T01:08:07.737739Z"
+    },
+    {
+      "id": "issue-93",
+      "title": "Bus docking: auto-enqueue on register",
+      "issue_number": 93,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 2,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:08:56.667971Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-93-bus-docking",
+      "github_evidence": {
+        "pr_number": 95,
+        "pr_head_ref": "feature/issue-93-bus-docking",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/93",
+          "content": "Issue #93",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:08:56.675104Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-93",
+          "content": "risk_level: Low\naffected_symbols: 2",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:08:56.675105Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-cli/src/main.rs",
+          "content": "//! Miyabi CLI - Main entry point\n\nuse chrono::Duration as ChronoDuration;\nuse clap::{Parser, Subcommand, ValueEnum};\nuse miyabi_core::{FeatureFlagManager, RulesLoader};\nuse std::collections::HashMap;\nuse std::fs;\nuse std::io::{self, BufRead, BufReader, Write};\nuse std::net::{TcpListener, TcpStream};\nuse std::path::PathBuf;\nuse std::process::Command;\nuse tracing_subscriber::EnvFilter;\n\n/// Global feature flags manager\nstatic FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();\n\n/// Get the global feature flags manager\npub fn feature_flags() -> &'static FeatureFlagManager {\n    FEATURE_FLAGS.get_or_init(|| {\n        let manager = FeatureFlagManager::new();\n        // Default feature flags\n        manager.set_flag(\"extended_thinking\", true);\n        manager.set_flag(\"auto_save_sessions\", true);\n        manager.set_flag(\"syntax_highlighting\", true);\n        manager.set_flag(\"vim_mode\", false);\n        manager\n    })\n}\n\n#[derive(Parser)]",
+          "token_estimate": 245,
+          "attached_at": "2026-04-10T01:08:56.675163Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:08:56.660888Z",
+      "updated_at": "2026-04-10T01:10:41.066418Z"
+    },
+    {
+      "id": "issue-97",
+      "title": "Dashboard completion rate display",
+      "issue_number": 97,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 2,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:11:15.139759Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-97-dashboard-stats",
+      "github_evidence": {
+        "pr_number": 98,
+        "pr_head_ref": "feature/issue-97-dashboard-stats",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/97",
+          "content": "Issue #97",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:11:15.145155Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-97",
+          "content": "risk_level: Low\naffected_symbols: 2",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:11:15.145156Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-cli/src/main.rs",
+          "content": "//! Miyabi CLI - Main entry point\n\nuse chrono::Duration as ChronoDuration;\nuse clap::{Parser, Subcommand, ValueEnum};\nuse miyabi_core::{FeatureFlagManager, RulesLoader};\nuse std::collections::HashMap;\nuse std::fs;\nuse std::io::{self, BufRead, BufReader, Write};\nuse std::net::{TcpListener, TcpStream};\nuse std::path::PathBuf;\nuse std::process::Command;\nuse tracing_subscriber::EnvFilter;\n\n/// Global feature flags manager\nstatic FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();\n\n/// Get the global feature flags manager\npub fn feature_flags() -> &'static FeatureFlagManager {\n    FEATURE_FLAGS.get_or_init(|| {\n        let manager = FeatureFlagManager::new();\n        // Default feature flags\n        manager.set_flag(\"extended_thinking\", true);\n        manager.set_flag(\"auto_save_sessions\", true);\n        manager.set_flag(\"syntax_highlighting\", true);\n        manager.set_flag(\"vim_mode\", false);\n        manager\n    })\n}\n\n#[derive(Parser)]",
+          "token_estimate": 245,
+          "attached_at": "2026-04-10T01:11:15.145211Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:11:15.134258Z",
+      "updated_at": "2026-04-10T01:12:36.997536Z"
+    },
+    {
+      "id": "issue-96",
+      "title": "Theta cycle: auto-update SKILL.md from dream",
+      "issue_number": 96,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 3,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:12:44.824523Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-96-theta-skill-update",
+      "github_evidence": {
+        "pr_number": 99,
+        "pr_head_ref": "feature/issue-96-theta-skill-update",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/96",
+          "content": "Issue #96",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:12:44.829236Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-96",
+          "content": "risk_level: Low\naffected_symbols: 3",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:12:44.829236Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/dream.rs",
+          "content": "//! Dreaming over deterministic task events to extract patterns and learnings.\n\nuse crate::error::Result;\nuse crate::store::{EventStore, TaskEvent, TaskEventType};\nuse chrono::{Duration as ChronoDuration, Utc};\nuse serde::{Deserialize, Serialize};\nuse std::collections::HashMap;\nuse std::fs;\nuse std::path::{Path, PathBuf};\nuse std::process::Command;\nuse std::time::Duration;\n\nconst DREAM_TASK_ID: &str = \"__dream__\";\nconst LONG_COMPLETION_SECS: u64 = 60 * 60;\nconst VERY_LONG_COMPLETION_SECS: u64 = 4 * 60 * 60;\nconst FREQUENT_PATTERN_THRESHOLD: usize = 2;\nconst HIGH_PATTERN_THRESHOLD: usize = 3;\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct DreamReport {\n    pub patterns: DreamPatterns,\n    pub learnings: Vec<Learning>,\n    pub events_processed: usize,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]\npub struct DreamPatterns {\n    pub gate_rejections: HashMap<String, usize>,\n    pub lock_conflicts: HashMap<String, usize>,\n    pub completion_times: Vec<(String, Duration)>,",
+          "token_estimate": 260,
+          "attached_at": "2026-04-10T01:12:44.829491Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:12:44.820783Z",
+      "updated_at": "2026-04-10T01:14:01.750975Z"
+    },
+    {
+      "id": "issue-100",
+      "title": "proptest for lock/store",
+      "issue_number": 100,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": {
+        "locked_by": "claude-code@macbook-pro",
+        "locked_at": "2026-04-10T01:14:29.023205Z",
+        "lease_duration_sec": 300,
+        "last_heartbeat": "2026-04-10T01:14:29.023205Z",
+        "affected_files": [
+          "crates/miyabi-core/src/lock.rs",
+          "crates/miyabi-core/src/store.rs",
+          "crates/miyabi-core/Cargo.toml"
+        ]
+      },
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 6,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:14:29.017033Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-100-proptest",
+      "github_evidence": {
+        "pr_number": 101,
+        "pr_head_ref": "feature/issue-100-proptest",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/100",
+          "content": "Issue #100",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:14:29.024165Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-100",
+          "content": "risk_level: Low\naffected_symbols: 6",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:14:29.024165Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/lock.rs",
+          "content": "//! File lock manager for deterministic task execution.\n\nuse crate::error::{Error, Result};\nuse crate::store::{\n    lease_expiry, EventStore, FileLockEntry, SnapshotStore, TaskEvent, TaskEventType,\n};\nuse chrono::{DateTime, Duration, Utc};\nuse serde::{Deserialize, Serialize};\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct LeaseConfig {\n    pub lease_duration_sec: u64,\n    pub heartbeat_interval_sec: u64,\n    pub stale_after_missed_heartbeats: u64,\n}\n\nimpl Default for LeaseConfig {\n    fn default() -> Self {\n        Self {\n            lease_duration_sec: 300,\n            heartbeat_interval_sec: 60,\n            stale_after_missed_heartbeats: 2,\n        }\n    }\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct LockConflict {\n    pub conflicting: bool,\n    pub held_by: Option<String>,",
+          "token_estimate": 212,
+          "attached_at": "2026-04-10T01:14:29.024330Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/store.rs",
+          "content": "//! Deterministic task protocol storage primitives.\n\nuse crate::error::{Error, Result};\nuse chrono::{DateTime, Duration, Utc};\nuse fs2::FileExt;\nuse serde::{Deserialize, Serialize};\nuse serde_json::Value;\nuse std::collections::HashMap;\nuse std::fs::{self, File, OpenOptions};\nuse std::io::{BufRead, BufReader, Write};\nuse std::path::{Path, PathBuf};\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]\npub enum TaskState {\n    Draft,\n    Pending,\n    Analyzing,\n    Implementing,\n    Reviewing,\n    Merged,\n    Deploying,\n    Done,\n    Blocked,\n    Failed,\n    Cancelled,\n    AwaitingGithubSync,\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]",
+          "token_estimate": 181,
+          "attached_at": "2026-04-10T01:14:29.024469Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/Cargo.toml",
+          "content": "[package]\nname = \"miyabi-core\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nauthors.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\ndescription = \"Miyabi Core - Shared types and utilities\"\n\n[dependencies]\ntokio = { workspace = true }\nserde = { workspace = true }\nserde_json = { workspace = true }\nanyhow = { workspace = true }\nthiserror = { workspace = true }\ntracing = { workspace = true }\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"json\"] }\nchrono = { workspace = true }\nuuid = { workspace = true }\nreqwest = { workspace = true }\nfutures = { workspace = true }\nasync-trait = { workspace = true }\nglob = { workspace = true }\nregex = { workspace = true }\nfs2 = { workspace = true }\ngit2 = { version = \"0.19\", features = [\"vendored-openssl\"] }\nserde_yaml = \"0.9\"\ndirs = \"5\"",
+          "token_estimate": 220,
+          "attached_at": "2026-04-10T01:14:29.024591Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:14:29.010353Z",
+      "updated_at": "2026-04-10T01:19:12.773159Z"
+    },
+    {
+      "id": "issue-102",
+      "title": "Obsidian wikilink expansion in attach",
+      "issue_number": 102,
+      "current_state": "reviewing",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 3,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:19:56.520370Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-102-wikilink-expand",
+      "github_evidence": {
+        "pr_number": 103,
+        "pr_head_ref": "feature/issue-102-wikilink-expand",
+        "pr_state": "OPEN",
+        "merge_commit_sha": null,
+        "merged_at": null,
+        "review_decision": "REVIEW_REQUIRED",
+        "issue_state": "OPEN",
+        "issue_closed_by_pr": false
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/102",
+          "content": "Issue #102",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:19:56.526592Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-102",
+          "content": "risk_level: Low\naffected_symbols: 3",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:19:56.526593Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-core/src/protocol.rs",
+          "content": "//! Deterministic execution protocol entry point.\n\nuse crate::dream::DreamReport;\nuse crate::error::Error;\nuse crate::gate::{evaluate_gate, validate_branch_name, Gate, GateContext, GateReport};\nuse crate::lock::{FileLockManager, LeaseConfig, LockConflict};\nuse crate::store::{\n    CompletionMode, ContextAttachment, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState,\n    GitHubPrState, HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent,\n    TaskEventType, TaskImpact, TaskState, TasksSnapshot,\n};\nuse chrono::Utc;\nuse serde::{Deserialize, Serialize};\nuse serde_json::Value;\nuse std::collections::{HashMap, VecDeque};\nuse std::fs;\nuse std::io::{BufRead, BufReader};\nuse std::path::{Path, PathBuf};\nuse std::process::Command;\nuse std::time::{Duration, Instant};\n\nconst MAX_CONTEXT_TOKENS: usize = 4_000;\nconst FILE_SNIPPET_LINE_LIMIT: usize = 30;\nconst ANNOUNCE_CHAR_LIMIT: usize = 180;\nconst MAX_ATTACHMENT_AGE_HOURS: i64 = 24;\n\n#[derive(Debug, Clone)]\npub struct DeterministicExecutionProtocol {\n    event_store: EventStore,\n    snapshot_store: SnapshotStore,",
+          "token_estimate": 273,
+          "attached_at": "2026-04-10T01:19:56.526764Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:19:56.514241Z",
+      "updated_at": "2026-04-10T01:21:37.451767Z"
     }
   ],
   "file_locks": {
-    "crates/miyabi-core/src/gate.rs": {
-      "task_id": "phase-a",
-      "agent": "codex-a",
+    "crates/miyabi-core/Cargo.toml": {
+      "task_id": "issue-100",
+      "agent": "claude-code",
       "node": "macbook-pro",
-      "expires_at": "2026-04-10T02:30:00Z"
-    },
-    "crates/miyabi-tui/src/views.rs": {
-      "task_id": "issue-50",
-      "agent": "codex-b",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-09T21:40:14.098441Z"
-    },
-    "crates/miyabi-core/src/lock.rs": {
-      "task_id": "phase-a",
-      "agent": "codex-a",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-10T02:30:00Z"
-    },
-    "crates/miyabi-tui/src/approval_overlay.rs": {
-      "task_id": "issue-49",
-      "agent": "codex-c",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-09T21:40:14.107550Z"
-    },
-    "crates/miyabi-core/src/protocol.rs": {
-      "task_id": "phase-a",
-      "agent": "codex-a",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-10T02:30:00Z"
+      "expires_at": "2026-04-10T01:21:29.023205Z"
     },
     "crates/miyabi-core/src/store.rs": {
-      "task_id": "phase-a",
-      "agent": "codex-a",
+      "task_id": "issue-100",
+      "agent": "claude-code",
       "node": "macbook-pro",
-      "expires_at": "2026-04-10T02:30:00Z"
+      "expires_at": "2026-04-10T01:21:29.023205Z"
     },
-    "crates/miyabi-tui/src/app.rs": {
-      "task_id": "issue-50",
-      "agent": "codex-b",
+    "crates/miyabi-core/src/lock.rs": {
+      "task_id": "issue-100",
+      "agent": "claude-code",
       "node": "macbook-pro",
-      "expires_at": "2026-04-09T21:40:14.098441Z"
-    },
-    "crates/miyabi-core/src/conversation.rs": {
-      "task_id": "issue-48",
-      "agent": "claude-sub",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-09T21:40:23.165977Z"
-    },
-    "docs/USER_MANUAL.md": {
-      "task_id": "issue-51",
-      "agent": "claude",
-      "node": "macbook-pro",
-      "expires_at": "2026-04-09T21:39:36.199414Z"
+      "expires_at": "2026-04-10T01:21:29.023205Z"
     }
   }
 }
