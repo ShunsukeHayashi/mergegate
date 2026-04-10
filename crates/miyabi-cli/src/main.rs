@@ -177,6 +177,9 @@ enum GateCommand {
         /// Completion mode
         #[arg(long, value_enum, default_value_t = CompletionModeArg::GithubPr)]
         completion_mode: CompletionModeArg,
+        /// Skip skill-bus auto-enqueue
+        #[arg(long)]
+        no_bus: bool,
     },
     /// Show status for one task or the whole ledger
     Status {
@@ -1269,8 +1272,10 @@ fn handle_gate_command(
             soft_dependencies,
             priority,
             completion_mode,
+            no_bus,
         } => {
             let task_id = task_id.unwrap_or_else(|| derive_task_id(issue, &title));
+            let task_title = title.clone();
             protocol
                 .register(
                     RegisterTaskRequest {
@@ -1294,6 +1299,9 @@ fn handle_gate_command(
                         println!("{}", serde_json::to_string_pretty(&task).unwrap());
                     } else {
                         println!("registered: {} ({})", task.id, task.title);
+                    }
+                    if !no_bus {
+                        bus_enqueue(&task.id, &task_title);
                     }
                 })
         }
@@ -2416,5 +2424,31 @@ fn truncate_str(s: &str, max_len: usize) -> String {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     } else {
         s.to_string()
+    }
+}
+
+fn bus_enqueue(task_id: &str, title: &str) {
+    let skill_runs_path = std::env::current_dir()
+        .ok()
+        .map(|cwd| cwd.join("skills/self-improving-skills/skill-runs.jsonl"));
+
+    if let Some(path) = skill_runs_path.filter(|p| p.parent().is_some_and(|d| d.exists())) {
+        let entry = serde_json::json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "agent": std::env::var("POLARIS_AGENT_ID").unwrap_or_else(|_| "system".into()),
+            "skill": "polaris-ops",
+            "task": format!("register: {title} ({task_id})"),
+            "result": "queued",
+            "score": 0.0,
+            "notes": "auto-enqueued on register"
+        });
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            use std::io::Write;
+            let _ = writeln!(file, "{}", serde_json::to_string(&entry).unwrap_or_default());
+        }
     }
 }
