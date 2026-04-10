@@ -144,7 +144,66 @@ where
         )?;
     }
 
+    // θ6: Auto-update SKILL.md with drift corrections from gate rejections
+    if !report.patterns.gate_rejections.is_empty() {
+        update_skill_md_from_patterns(report, repo_root)?;
+    }
+
     Ok(())
+}
+
+/// Append a "Common Rejection Patterns" section to SKILL.md if gate rejections are detected.
+fn update_skill_md_from_patterns(report: &DreamReport, repo_root: &Path) -> Result<()> {
+    let skill_path = repo_root.join("skills/polaris-ops/SKILL.md");
+    if !skill_path.exists() {
+        return Ok(());
+    }
+
+    let existing = fs::read_to_string(&skill_path)?;
+    let marker = "## よくある拒否パターン（自動生成）";
+    if existing.contains(marker) {
+        // Already has auto-generated section — remove it for refresh
+        let before = existing.split(marker).next().unwrap_or(&existing);
+        let mut content = before.trim_end().to_string();
+        content.push_str("\n\n");
+        content.push_str(&build_rejection_section(&report.patterns.gate_rejections));
+        content.push('\n');
+        let tmp = skill_path.with_extension("md.tmp");
+        fs::write(&tmp, &content)?;
+        fs::rename(&tmp, &skill_path)?;
+    } else {
+        let mut content = existing;
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push('\n');
+        content.push_str(&build_rejection_section(&report.patterns.gate_rejections));
+        content.push('\n');
+        let tmp = skill_path.with_extension("md.tmp");
+        fs::write(&tmp, &content)?;
+        fs::rename(&tmp, &skill_path)?;
+    }
+
+    Ok(())
+}
+
+fn build_rejection_section(gate_rejections: &HashMap<String, usize>) -> String {
+    let mut section = String::from("## よくある拒否パターン（自動生成）\n\n");
+    section.push_str("| GATE | 回数 | 対処法 |\n|------|------|--------|\n");
+    let mut entries: Vec<_> = gate_rejections.iter().collect();
+    entries.sort_by(|a, b| b.1.cmp(a.1));
+    for (gate, count) in entries {
+        let remedy = match gate.as_str() {
+            "GATE 0" | "gate_0" => "Issue を先に作成する",
+            "GATE 2" | "gate_2" => "依存タスクを完了してから実行",
+            "GATE 3" | "gate_3" => "impact --approve で承認を付ける",
+            "GATE 4" | "gate_4" => "assign でロック獲得してから編集",
+            "GATE 5" | "gate_5" => "ブランチ名を feature/issue-N-slug 形式に",
+            _ => "手順を確認して条件を満たす",
+        };
+        section.push_str(&format!("| {gate} | {count} | {remedy} |\n"));
+    }
+    section
 }
 
 pub fn obsidian_export(learning: &Learning, vault_path: Option<&Path>) -> Result<PathBuf> {
