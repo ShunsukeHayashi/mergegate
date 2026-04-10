@@ -858,6 +858,36 @@ impl DeterministicExecutionProtocol {
             }
         }
 
+        // Attach depth-1 impact files (direct callers/importers)
+        if let Some(impact) = &task.impact {
+            let locked_files: std::collections::HashSet<&str> = task
+                .lock
+                .as_ref()
+                .map(|l| l.affected_files.iter().map(|f| f.as_str()).collect())
+                .unwrap_or_default();
+            for dep_file in &impact.depth1 {
+                if remaining_tokens == 0 {
+                    break;
+                }
+                if locked_files.contains(dep_file.as_str()) {
+                    continue;
+                }
+                let source_path = self.resolve_attachment_path(dep_file);
+                if !source_path.exists() {
+                    continue;
+                }
+                let content = read_file_snippet(&source_path, FILE_SNIPPET_LINE_LIMIT)
+                    .map_err(ProtocolError::from)?;
+                push_attachment(
+                    &mut attachments,
+                    &mut remaining_tokens,
+                    "impact_depth1",
+                    &source_path.display().to_string(),
+                    &content,
+                );
+            }
+        }
+
         Ok(attachments)
     }
 
