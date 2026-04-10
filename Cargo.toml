@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/mergegate-cli",
-    "crates/mergegate-tui",
     "crates/mergegate-core",
 ]
 
@@ -14,8 +13,8 @@ authors = ["Miyabi Team"]
 license = "BUSL-1.1"
 repository = "https://github.com/ShunsukeHayashi/mergegate"
 homepage = "https://github.com/ShunsukeHayashi/mergegate"
-description = "MergeGate - Deterministic task execution and merge workflow for AI-assisted development"
-keywords = ["ai", "cli", "tui", "autonomous", "development"]
+description = "MergeGate - Engine-agnostic gate CLI for deterministic task execution in AI-assisted development"
+keywords = ["ai", "cli", "workflow", "merge", "development"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
@@ -23,15 +22,6 @@ categories = ["command-line-utilities", "development-tools"]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync", "process", "signal"] }
 futures = "0.3"
 async-trait = "0.1"
-
-# TUI Framework
-ratatui = { version = "0.29.0", features = [
-    "scrolling-regions",
-    "unstable-backend-writer",
-    "unstable-rendered-line-info",
-    "unstable-widget-ref",
-] }
-crossterm = { version = "0.29.0", features = ["bracketed-paste", "event-stream"] }
 
 # Text Processing
 textwrap = "0.16"

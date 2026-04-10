@@ -1,13 +1,22 @@
 # MergeGate
-Deterministic execution protocol for AI-assisted development.
+Engine-agnostic gate CLI for AI-assisted development.
 
 Execution layer for GitNexus-style code intelligence:
 - `GitNexus`: understand the codebase
 - `MergeGate`: execute changes safely
 
-Current CLI entrypoints: `miyabi` and `mergegate`
+Core product:
+- `mergegate gate ...`
+- `miyabi gate ...` (compatibility alias)
 
-- `miyabi tui` / `mergegate tui`: terminal assistant
-- `miyabi gate` / `mergegate gate`: deterministic task execution, file locks, and PR/merge workflow
+MergeGate is designed to sit in front of Claude Code, Codex, Gemini CLI, and other coding agents. The engine can change. The gate protocol should not.
 
-Start with `cargo build --release`, then run `./target/release/mergegate --help` or `./target/release/mergegate gate guide`.
+Start with:
+
+```bash
+cargo build --release
+./target/release/mergegate gate status
+./target/release/mergegate gate init
+./target/release/mergegate gate guide
+```
+

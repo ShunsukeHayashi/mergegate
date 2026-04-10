@@ -62,36 +62,14 @@ fn agent_guide() -> String {
 }
 
 #[derive(Parser)]
-#[command(author, version, about = "MergeGate - Deterministic task execution and merge workflow for AI-assisted development", long_about = None)]
+#[command(author, version, about = "MergeGate - Engine-agnostic gate CLI for AI-assisted development", long_about = None)]
 struct Cli {
-    /// Model to use (overrides config)
-    #[arg(short, long)]
-    model: Option<String>,
-
-    /// Maximum tokens for responses (overrides config)
-    #[arg(long)]
-    max_tokens: Option<u32>,
-
-    /// Enable Extended Thinking (Claude 4.5+)
-    #[arg(long)]
-    thinking: bool,
-
-    /// Path to config file
-    #[arg(short, long)]
-    config: Option<PathBuf>,
-
-    /// Session ID to load on startup
-    #[arg(short, long)]
-    session: Option<String>,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the TUI interface
-    Tui,
     /// Show status
     Status,
     /// Generate default config file
@@ -115,23 +93,6 @@ enum Commands {
         /// Show detailed rule information
         #[arg(short, long)]
         verbose: bool,
-    },
-    /// Run agent with a prompt (autonomous execution)
-    Agent {
-        /// The prompt to execute
-        prompt: String,
-        /// Maximum iterations (default: 10)
-        #[arg(long, default_value = "10")]
-        max_iterations: usize,
-        /// Auto-approve all tool executions
-        #[arg(long)]
-        auto_approve: bool,
-        /// Output format: text or json
-        #[arg(long, default_value = "text")]
-        format: String,
-        /// System prompt for the agent
-        #[arg(long)]
-        system: Option<String>,
     },
     #[command(
         about = "Deterministic Task Protocol gate controls",
@@ -452,78 +413,35 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
 
     match cli.command {
-        Some(Commands::Tui) | None => {
-            // Run TUI
-            use crossterm::{
-                event::{DisableMouseCapture, EnableMouseCapture},
-                execute,
-                terminal::{
-                    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-                },
-            };
-            use miyabi_core::config::Config;
-            use miyabi_tui::App;
-            use ratatui::prelude::*;
-            use std::io;
-
-            // Load config (from custom path or default)
-            let mut config = if let Some(config_path) = &cli.config {
-                Config::load_from(config_path)?
-            } else {
-                Config::load().unwrap_or_default()
-            };
-
-            // Apply CLI overrides
-            if let Some(model) = &cli.model {
-                config.api.model = model.clone();
-            }
-            if let Some(max_tokens) = cli.max_tokens {
-                config.api.max_tokens = max_tokens;
-            }
-            if cli.thinking {
-                config.api.thinking = true;
-            }
-
-            enable_raw_mode()?;
-            let mut stdout = io::stdout();
-            execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-            let backend = CrosstermBackend::new(stdout);
-            let mut terminal = Terminal::new(backend)?;
-
-            let mut app = App::with_config(config);
-
-            // Load session if specified
-            if let Some(session_id) = &cli.session {
-                if let Err(e) = app.load_session(session_id) {
-                    eprintln!("Warning: Failed to load session {}: {}", session_id, e);
-                }
-            }
-
-            let res = app.run(&mut terminal).await;
-
-            disable_raw_mode()?;
-            execute!(
-                terminal.backend_mut(),
-                LeaveAlternateScreen,
-                DisableMouseCapture
-            )?;
-            terminal.show_cursor()?;
-
-            if let Err(err) = res {
-                eprintln!("Error: {}", err);
-            }
+        None => {
+            let mut command = Cli::command();
+            command = command.name(current_binary_name());
+            command.print_help()?;
+            println!();
+            println!();
+            println!("Start here:");
+            println!("  {}", gate_command("status"));
+            println!("  {}", gate_command("init"));
+            println!("  {}", gate_command("guide"));
         }
         Some(Commands::Status) => {
             use miyabi_core::config::Config;
 
             let config = Config::load().unwrap_or_default();
 
-            println!("Miyabi Status: Ready");
+            println!("MergeGate Status: Ready");
             println!();
+            println!("Binary:   {}", current_binary_name());
             println!("Config:   {}", Config::default_path().display());
-            println!("Sessions: {}", config.sessions_dir().display());
-            println!("Model:    {}", config.api.model);
             println!();
+            println!("Core workflow:");
+            println!("  {}", gate_command("status"));
+            println!("  {}", gate_command("init"));
+            println!("  {}", gate_command("guide"));
+            println!();
+            println!("Direct runtime config remains on disk for compatibility.");
+            println!("Model:    {}", config.api.model);
+            println!("Sessions: {}", config.sessions_dir().display());
 
             // Load and show rules info
             let cwd = std::env::current_dir().unwrap_or_default();
@@ -762,152 +680,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     eprintln!("Error loading rules: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Some(Commands::Agent {
-            prompt,
-            max_iterations,
-            auto_approve,
-            format,
-            system,
-        }) => {
-            use miyabi_core::{
-                config::Config, Agent, AgentConfig, AgentEvent, AnthropicClient, ExecutorRegistry,
-            };
-            use tokio::sync::mpsc;
-
-            // Load config
-            let mut config = if let Some(config_path) = &cli.config {
-                Config::load_from(config_path)?
-            } else {
-                Config::load().unwrap_or_default()
-            };
-
-            // Apply CLI overrides
-            if let Some(model) = &cli.model {
-                config.api.model = model.clone();
-            }
-            if let Some(max_tokens) = cli.max_tokens {
-                config.api.max_tokens = max_tokens;
-            }
-            if cli.thinking {
-                config.api.thinking = true;
-            }
-
-            // Get API key
-            let api_key = config
-                .api
-                .api_key
-                .clone()
-                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-                .ok_or_else(|| {
-                    anyhow::anyhow!("No API key found. Set ANTHROPIC_API_KEY or add to config.")
-                })?;
-
-            // Create client
-            let client = AnthropicClient::new(api_key)?
-                .with_model(&config.api.model)
-                .with_max_tokens(config.api.max_tokens)
-                .with_thinking(config.api.thinking);
-
-            // Create executor registry with standard tools
-            let registry = ExecutorRegistry::with_standard_tools();
-
-            // Configure agent
-            let agent_config = AgentConfig {
-                max_iterations,
-                max_tokens_per_turn: config.api.max_tokens,
-                require_approval: !auto_approve,
-                auto_approve_patterns: if auto_approve {
-                    vec![
-                        "read".to_string(),
-                        "glob".to_string(),
-                        "grep".to_string(),
-                        "write".to_string(),
-                        "edit".to_string(),
-                        "bash".to_string(),
-                    ]
-                } else {
-                    vec!["read".to_string(), "glob".to_string(), "grep".to_string()]
-                },
-                ..Default::default()
-            };
-
-            // Create agent
-            let mut agent = Agent::new(client, registry).with_config(agent_config);
-
-            // Set system prompt
-            if let Some(sys) = system {
-                agent = agent.with_system_prompt(sys);
-            } else if let Some(sys) = config.api.system_prompt {
-                agent = agent.with_system_prompt(sys);
-            }
-
-            // Create event channel for progress
-            let (tx, mut rx) = mpsc::channel(100);
-            let agent = agent.with_event_channel(tx);
-
-            // Spawn agent execution
-            let agent_handle = tokio::spawn(async move { agent.run(&prompt).await });
-
-            // Process events
-            while let Some(event) = rx.recv().await {
-                match &event {
-                    AgentEvent::Started { prompt } => {
-                        if format != "json" {
-                            eprintln!("🚀 Agent started with prompt: {}", truncate_str(prompt, 50));
-                        }
-                    }
-                    AgentEvent::Thinking { iteration } => {
-                        if format != "json" {
-                            eprintln!("💭 Iteration {}", iteration + 1);
-                        }
-                    }
-                    AgentEvent::ToolDetected { name, .. } => {
-                        if format != "json" {
-                            eprintln!("🔧 Tool detected: {}", name);
-                        }
-                    }
-                    AgentEvent::ToolExecuting { name, .. } => {
-                        if format != "json" {
-                            eprintln!("⚡ Executing: {}", name);
-                        }
-                    }
-                    AgentEvent::ToolCompleted { name, .. } => {
-                        if format != "json" {
-                            eprintln!("✅ Completed: {}", name);
-                        }
-                    }
-                    AgentEvent::ToolFailed { name, error } => {
-                        if format != "json" {
-                            eprintln!("❌ Failed {}: {}", name, error);
-                        }
-                    }
-                    AgentEvent::Completed { result } => {
-                        if format == "json" {
-                            println!("{}", serde_json::to_string_pretty(&result)?);
-                        } else {
-                            println!("\n{}", result.output);
-                            eprintln!(
-                                "\n📊 Stats: {} iterations, {} tool calls, {} tokens",
-                                result.iterations, result.tool_calls, result.total_tokens
-                            );
-                        }
-                    }
-                    AgentEvent::Failed { error } => {
-                        eprintln!("❌ Agent failed: {}", error);
-                    }
-                    _ => {}
-                }
-            }
-
-            // Wait for agent to complete
-            match agent_handle.await? {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("Agent error: {}", e);
                     std::process::exit(1);
                 }
             }

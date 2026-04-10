@@ -1,578 +1,172 @@
 # MergeGate ユーザーマニュアル
 
 **Version**: 0.1.0
-**Last Updated**: 2025-11-23
-
----
-
-## 目次
-
-1. [はじめに](#はじめに)
-2. [インストール](#インストール)
-3. [初期設定](#初期設定)
-4. [基本的な使い方](#基本的な使い方)
-5. [TUIモード](#tuiモード)
-6. [Agentモード](#agentモード)
-7. [セッション管理](#セッション管理)
-8. [設定ファイル](#設定ファイル)
-9. [プロジェクトルール](#プロジェクトルール)
-10. [トラブルシューティング](#トラブルシューティング)
-
----
+**Last Updated**: 2026-04-10
 
 ## はじめに
 
-MergeGate は、AI-assisted development 向けの deterministic task execution and merge workflow です。CLI では `miyabi` と `mergegate` の両方を使え、対話型の TUI と `gate` ベースの repo workflow を提供します。
+MergeGate は、AI-assisted development 向けの engine-agnostic gate CLI です。
 
-設計思想はシンプルです。
+このツールはエージェント本体ではありません。TUI や direct backend を前提にせず、repo 作業を安全に進めるための protocol を提供します。
+
+役割は次の通りです。
+
+- task を登録する
+- impact を記録する
+- file lock を取る
+- branch / PR / merge 状態を結び付ける
+- completion を記録する
+
+設計思想:
 
 - `GitNexus`: コードベースを理解する
 - `MergeGate`: 変更を安全に実行する
 
-影響範囲が分かるだけでは、AI エージェントは安全に開発できません。どの task を登録し、どのファイルを lock し、どの順序で branch / PR / merge まで進めるかを protocol として固定するのが MergeGate の役割です。
+## 何をするツールか
 
-### 主な機能
+MergeGate の中心機能は `gate` です。
 
-- **TUIモード**: 美しいターミナルUIでの対話
-- **Agentモード**: ファイル操作やコマンド実行を含む自律実行
-- **セッション管理**: 会話履歴の保存・再開
-- **プロジェクトルール**: .miyabirulesによるカスタムルール
+```bash
+mergegate gate ...
+```
 
----
+または互換 alias として:
+
+```bash
+miyabi gate ...
+```
+
+実行エンジンは Claude Code、Codex、Gemini CLI など、どれでも構いません。MergeGate はその前後で repo workflow を制御します。
 
 ## インストール
 
 ### 必要要件
 
 - Rust 1.70以上
-- Anthropic APIキー
 
-### ビルド手順
+### ビルド
 
 ```bash
-# 1. リポジトリをクローン
 git clone https://github.com/ShunsukeHayashi/mergegate.git
 cd mergegate
-
-# 2. リリースビルド
 cargo build --release
-
-# 3. バイナリの確認
-ls -la target/release/miyabi target/release/mergegate
 ```
 
-### パスを通す（オプション）
+## 最初にやること
+
+### 1. repo の状態確認
 
 ```bash
-# ~/.bashrc または ~/.zshrc に追加
-export PATH="$PATH:/path/to/mergegate/target/release"
-
-# 設定を反映
-source ~/.bashrc  # または source ~/.zshrc
+./target/release/mergegate gate status
 ```
 
----
+`tasks: 0` は正常です。ledger はあるが task がまだ無い状態です。
 
-## 初期設定
-
-### 1. 設定ファイルの生成
+### 2. 初期化
 
 ```bash
-./target/release/miyabi init
+./target/release/mergegate gate init
 ```
 
-これにより `~/.miyabi/config.toml` が作成されます。
+これで `project_memory/tasks.json` が作成されます。
 
-### 2. APIキーの設定
-
-**方法1: 環境変数（推奨）**
-```bash
-export ANTHROPIC_API_KEY="sk-ant-api03-..."
-```
-
-永続化する場合は `~/.bashrc` や `~/.zshrc` に追加：
-```bash
-echo 'export ANTHROPIC_API_KEY="sk-ant-api03-..."' >> ~/.zshrc
-```
-
-**方法2: 設定ファイル**
-```bash
-vim ~/.miyabi/config.toml
-```
-
-```toml
-[api]
-api_key = "sk-ant-api03-..."
-```
-
-### 3. 設定の確認
+### 3. ガイド確認
 
 ```bash
-./target/release/miyabi status
+./target/release/mergegate gate guide
 ```
 
-出力例：
+## 基本フロー
+
+```bash
+./target/release/mergegate gate register --issue 123 --title "Fix login redirect"
+./target/release/mergegate gate impact issue-123 --risk medium --symbols 3
+./target/release/mergegate gate assign issue-123 --agent codex --node macbook --files "src/auth.rs"
+./target/release/mergegate gate branch issue-123 codex/fix-login-redirect
+./target/release/mergegate gate pr issue-123 456
+./target/release/mergegate gate merge issue-123 <sha>
 ```
-Miyabi Status: Ready
 
-Config:   /Users/you/.miyabi/config.toml
-Sessions: /Users/you/.miyabi/sessions
-Model:    claude-sonnet-4-5-20250929
+典型的な順番:
 
-Rules:    0 rules loaded
-```
+1. `register`
+2. `impact`
+3. `assign`
+4. 実装
+5. `branch`
+6. `pr`
+7. `merge` または `manual-complete`
 
----
-
-## 基本的な使い方
-
-### コマンド一覧
+## コマンド一覧
 
 | コマンド | 説明 |
 |---------|------|
-| `miyabi tui` | TUIモードを起動 |
-| `miyabi agent <prompt>` | Agentモードで実行 |
-| `miyabi status` | ステータス表示 |
-| `miyabi version` | バージョン情報 |
-| `miyabi init` | 設定ファイル生成 |
-| `miyabi sessions` | セッション一覧 |
-| `miyabi rules` | プロジェクトルール表示 |
+| `mergegate gate status` | ledger 全体または task 状態を表示 |
+| `mergegate gate init` | ledger を初期化 |
+| `mergegate gate guide` | workflow ガイドを表示 |
+| `mergegate gate register` | task を登録 |
+| `mergegate gate impact` | impact を記録 |
+| `mergegate gate assign` | task を割り当てて lock を取得 |
+| `mergegate gate branch` | branch を記録 |
+| `mergegate gate pr` | PR 番号を記録 |
+| `mergegate gate merge` | merge を記録 |
+| `mergegate gate manual-complete` | 手動完了を記録 |
+| `mergegate gate locks` | active lock を表示 |
+| `mergegate gate dispatchable` | 今着手できる task を表示 |
+| `mergegate gate dag` | 依存順序を表示 |
 
-### グローバルオプション
+## 実行エンジンとの関係
 
-| オプション | 説明 |
-|-----------|------|
-| `-m, --model <MODEL>` | 使用するモデルを指定 |
-| `--max-tokens <N>` | 最大トークン数 |
-| `--thinking` | Extended Thinking有効化 |
-| `-c, --config <PATH>` | 設定ファイルパス |
-| `-s, --session <ID>` | セッションID指定 |
+MergeGate は coding agent を置き換えるものではありません。
 
-### 使用例
+想定している使い方:
 
-```bash
-# バージョン確認
-./target/release/miyabi version
+- Claude Code が実装する
+- Codex が実装する
+- Gemini CLI が実装する
+- MergeGate が task / lock / merge discipline を管理する
 
-# ステータス確認
-./target/release/miyabi status
+つまり:
 
-# モデル指定でTUI起動
-./target/release/miyabi tui --model claude-sonnet-4-5-20250929
+- エージェントは交換可能
+- gate protocol は固定
 
-# Extended Thinking有効でTUI起動
-./target/release/miyabi tui --thinking
-```
+## よくある質問
 
----
+### API キーは必要ですか
 
-## TUIモード
+`gate` workflow だけなら不要です。
 
-### 起動
+### TUI は必要ですか
 
-```bash
-./target/release/miyabi tui
-```
+不要です。MergeGate の本体ではありません。
 
-### キーバインド
+### built-in backend は必要ですか
 
-#### 基本操作
+不要です。MergeGate の本体ではありません。
 
-| キー | 動作 |
-|------|------|
-| `Enter` | メッセージ送信 |
-| `Ctrl+C` | 終了 |
-| `Esc` | オーバーレイを閉じる / キャンセル |
-| `F1` | ヘルプ表示 |
+### `miyabi` と `mergegate` のどちらを使えばいいですか
 
-#### ナビゲーション
-
-| キー | 動作 |
-|------|------|
-| `j` / `↓` | 下にスクロール |
-| `k` / `↑` | 上にスクロール |
-| `Page Down` | ページ下へ |
-| `Page Up` | ページ上へ |
-| `g` | 先頭へ |
-| `G` | 末尾へ |
-
-#### コマンド
-
-| キー | 動作 |
-|------|------|
-| `Ctrl+P` | コマンドパレット |
-| `Ctrl+N` | 新規セッション |
-| `Ctrl+O` | セッションを開く |
-| `Ctrl+S` | セッション保存 |
-
-### Vimモード
-
-設定で有効化できます：
-
-```toml
-[ui]
-vim_mode = true
-```
-
-有効にすると、テキスト入力でVimキーバインドが使用可能になります。
-
----
-
-## Agentモード
-
-Agentモードは、プロンプトに基づいて自律的にタスクを実行します。
-
-### 基本使用
-
-```bash
-./target/release/miyabi agent "タスクの説明"
-```
-
-### オプション
-
-| オプション | 説明 | デフォルト |
-|-----------|------|-----------|
-| `--max-iterations <N>` | 最大イテレーション数 | 10 |
-| `--auto-approve` | ツール実行を自動承認 | false |
-| `--format <FORMAT>` | 出力形式 (text/json) | text |
-| `--system <PROMPT>` | システムプロンプト | なし |
-
-### 使用例
-
-```bash
-# 基本的な実行
-./target/release/miyabi agent "Create a Python script that prints hello world"
-
-# 自動承認モード（注意して使用）
-./target/release/miyabi agent --auto-approve "List all .rs files in src/"
-
-# イテレーション数を増やす
-./target/release/miyabi agent --max-iterations 20 "Refactor the utils module"
-
-# JSON出力
-./target/release/miyabi agent --format json "Show current directory"
-
-# カスタムシステムプロンプト
-./target/release/miyabi agent --system "You are an expert Rust developer" "Review main.rs"
-```
-
-### 利用可能なツール
-
-Agentモードでは以下のツールが使用可能です：
-
-- **Bash**: シェルコマンドの実行
-- **Read**: ファイルの読み取り
-- **Write**: ファイルの書き込み
-- **Edit**: ファイルの編集
-- **Glob**: ファイルパターン検索
-- **Grep**: テキスト検索
-
-### セキュリティ
-
-- デフォルトでは危険な操作は承認を求められます
-- `--auto-approve` は信頼できるタスクのみに使用してください
-- `--max-iterations` で無限ループを防止
-
----
-
-## セッション管理
-
-### セッション一覧の表示
-
-```bash
-./target/release/miyabi sessions
-```
-
-出力例：
-```
-ID                                   Title                Messages Tokens     Updated
-------------------------------------------------------------------------------------------
-133b91bf-99c9-4097-974c-c60c9abd2495 test                 6        246        2025-11-22 14:36
-19af5958-183f-4b39-be2e-b14b0809181c test                 2        21         2025-11-22 14:03
-```
-
-### セッションの操作
-
-```bash
-# セッションを削除
-./target/release/miyabi sessions -d <session-id>
-
-# JSONにエクスポート
-./target/release/miyabi sessions -e <session-id>
-
-# Markdownにエクスポート
-./target/release/miyabi sessions -m <session-id>
-```
-
-### セッションの再開
-
-```bash
-# 特定のセッションからTUIを起動
-./target/release/miyabi tui -s <session-id>
-```
-
-### 保存場所
-
-セッションは `~/.miyabi/sessions/` に保存されます。
-
----
-
-## 設定ファイル
-
-### 設定ファイルの場所
-
-```
-~/.miyabi/config.toml
-```
-
-### 完全な設定例
-
-```toml
-[api]
-# Anthropic APIキー（環境変数ANTHROPIC_API_KEYでも設定可能）
-api_key = "sk-ant-api03-..."
-
-# 使用するモデル
-model = "claude-sonnet-4-5-20250929"
-
-# 最大トークン数
-max_tokens = 8192
-
-# Extended Thinking（Claude 4.5+）
-thinking = false
-
-# システムプロンプト
-system_prompt = "You are a helpful AI assistant."
-
-# リクエストタイムアウト（秒）
-timeout_secs = 120
-
-# 最大リトライ回数
-max_retries = 3
-
-[ui]
-# サイドバー表示
-show_sidebar = false
-
-# ステータスバー表示
-show_status_bar = true
-
-# パンくずリスト表示
-show_breadcrumb = true
-
-# カラーテーマ
-theme = "tokyo-night"
-
-# Vimモード
-vim_mode = false
-
-# コードブロックの行番号
-show_line_numbers = true
-
-[session]
-# セッションの自動保存
-auto_save = true
-
-# 自動保存間隔（秒）
-auto_save_interval = 30
-
-# 最大セッション数
-max_sessions = 100
-
-[tools]
-# Bashツールを有効化
-enable_bash = true
-
-# ファイルツール（read/write/edit）を有効化
-enable_file_tools = true
-
-# 検索ツール（glob/grep）を有効化
-enable_search_tools = true
-
-# 低リスクツールの自動承認
-auto_approve_low_risk = false
-
-# Bashコマンドのタイムアウト（秒）
-bash_timeout = 120
-```
-
-### 環境変数による上書き
-
-| 環境変数 | 説明 |
-|---------|------|
-| `ANTHROPIC_API_KEY` | APIキー |
-| `MIYABI_MODEL` | モデル名 |
-| `MIYABI_MAX_TOKENS` | 最大トークン数 |
-| `MIYABI_THINKING` | Extended Thinking (true/false) |
-
----
-
-## プロジェクトルール
-
-### .miyabirulesファイル
-
-プロジェクトルートに `.miyabirules` ファイルを作成することで、プロジェクト固有のルールを定義できます。
-
-### ファイル形式
-
-```yaml
-version: 1
-
-rules:
-  - name: "no-unwrap"
-    pattern: ".unwrap()"
-    suggestion: "Use ? operator or proper error handling"
-    file_extensions: ["rs"]
-    severity: "warning"
-
-  - name: "no-println-debug"
-    pattern: "println!"
-    suggestion: "Use tracing macros for logging"
-    file_extensions: ["rs"]
-    severity: "info"
-
-agent_preferences:
-  codegen:
-    style: "functional"
-    error_handling: "result"
-    min_score: 80
-  review:
-    min_score: 70
-```
-
-### ルールの確認
-
-```bash
-./target/release/miyabi rules
-```
-
-### 重要度レベル
-
-| レベル | 説明 |
-|--------|------|
-| `error` | 重大な問題（赤） |
-| `warning` | 警告（黄） |
-| `info` | 情報（青） |
-
----
+新規利用では `mergegate` を推奨します。`miyabi` は互換 alias です。
 
 ## トラブルシューティング
 
-### "API key not found" エラー
+### `tasks: 0`
+
+異常ではありません。task が未登録なだけです。
+
+### どの task から始めればよいか分からない
 
 ```bash
-# 環境変数を確認
-echo $ANTHROPIC_API_KEY
-
-# 設定されていない場合
-export ANTHROPIC_API_KEY="sk-ant-..."
+./target/release/mergegate gate dispatchable
+./target/release/mergegate gate dag
+./target/release/mergegate gate guide
 ```
 
-### "Device not configured" エラー
-
-ターミナルがTUIをサポートしていない可能性があります：
+### 既存 repo に導入済みか分からない
 
 ```bash
-# 別のターミナルを試す（iTerm2, Alacritty等）
-
-# または明示的にTERM設定
-TERM=xterm-256color ./target/release/miyabi tui
+./target/release/mergegate gate status
 ```
 
-### ビルドエラー
-
-```bash
-# Rustを最新版に更新
-rustup update
-
-# クリーンビルド
-cargo clean
-cargo build --release
-```
-
-### セッションが保存されない
-
-```bash
-# ディレクトリの確認
-ls -la ~/.miyabi/sessions/
-
-# なければ作成
-mkdir -p ~/.miyabi/sessions
-```
-
-### デバッグモード
-
-詳細なログを表示：
-
-```bash
-RUST_LOG=debug ./target/release/miyabi tui
-```
-
-### ネットワークエラー
-
-```bash
-# タイムアウトを延長
-# ~/.miyabi/config.toml
-[api]
-timeout_secs = 300
-max_retries = 5
-```
-
----
-
-## サポート
-
-### ヘルプの確認
-
-```bash
-# 全体のヘルプ
-./target/release/miyabi --help
-
-# サブコマンドのヘルプ
-./target/release/miyabi agent --help
-./target/release/miyabi sessions --help
-```
-
-### 問題報告
-
-GitHub Issues: https://github.com/ShunsukeHayashi/mergegate/issues
-
-### TUIでのヘルプ
-
-TUI起動中に `F1` キーでヘルプを表示できます。
-
----
-
-## 付録
-
-### 対応モデル
-
-- `claude-sonnet-4-5-20250929` (デフォルト)
-- `claude-haiku-4-5-20251001`
-- `claude-sonnet-4-20250514`
-
-### ファイル構成
-
-```
-~/.miyabi/
-├── config.toml      # 設定ファイル
-└── sessions/        # セッションデータ
-    ├── xxx.json
-    └── yyy.json
-```
-
-### ショートカット早見表
-
-| 操作 | キー |
-|------|------|
-| 送信 | Enter |
-| 終了 | Ctrl+C |
-| ヘルプ | F1 |
-| コマンドパレット | Ctrl+P |
-| 新規セッション | Ctrl+N |
-| セッションを開く | Ctrl+O |
-| 保存 | Ctrl+S |
-
----
-
-**Built with Rust, Ratatui, and Claude API**
+ledger が無ければ `gate init` に進めます。

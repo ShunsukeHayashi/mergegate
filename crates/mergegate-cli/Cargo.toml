@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "MergeGate CLI - Main command-line interface for deterministic task execution and agent-assisted development"
+description = "MergeGate CLI - Engine-agnostic gate workflow for deterministic task execution"
 
 [[bin]]
 name = "miyabi"
@@ -20,14 +20,9 @@ path = "src/bin/mergegate.rs"
 [dependencies]
 # Workspace crates
 miyabi-core = { package = "mergegate-core", path = "../mergegate-core" }
-miyabi-tui = { package = "mergegate-tui", path = "../mergegate-tui" }
 
 # CLI
 clap = { workspace = true }
-
-# TUI Framework
-ratatui = { workspace = true }
-crossterm = { workspace = true }
 
 # Async Runtime
 tokio = { workspace = true }
