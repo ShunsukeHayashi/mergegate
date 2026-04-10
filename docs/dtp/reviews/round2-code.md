@@ -1,5 +1,8 @@
 # Round 2 Code Review: Deterministic Task Protocol Rust Codebase
 
+> **アーカイブ・スコープ注意（2026-04-10）**  
+> 本文は **当時の作業ディレクトリ**（`openclaw-workspace`）向けの調査記録であり、**本リポジトリ `miyabi-cli-standalone` の `crates/miyabi-core` / `crates/miyabi-cli` に対するコードレビュー結果ではありません**。ここに書かれた「Rust が無い」等の記述は **そのワークスペース限定**です。現行実装・レビューは `docs/dtp/PLAYBOOK-v2.md` および `crates/**/*.rs` を正としてください。
+
 対象依頼:
 - Read all Rust source files in `src/`: `lib.rs`, `types.rs`, `state.rs`, `dag.rs`, `lock.rs`, `store.rs`, `protocol.rs`, `gate.rs`, `main.rs`
 - Check:

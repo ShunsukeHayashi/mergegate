@@ -821,12 +821,16 @@ impl DeterministicExecutionProtocol {
         }
 
         if let Some(vault_path) = obsidian_vault_path() {
+            let mut attached_notes: std::collections::HashSet<PathBuf> =
+                std::collections::HashSet::new();
             for note in find_obsidian_notes(&vault_path, &task.title, 3)? {
                 if remaining_tokens == 0 {
                     break;
                 }
                 let content = read_file_snippet(&note, FILE_SNIPPET_LINE_LIMIT)
                     .map_err(ProtocolError::from)?;
+                // Expand wikilinks from this note
+                let linked = extract_wikilinks(&content);
                 push_attachment(
                     &mut attachments,
                     &mut remaining_tokens,
@@ -834,6 +838,29 @@ impl DeterministicExecutionProtocol {
                     &note.display().to_string(),
                     &content,
                 );
+                attached_notes.insert(note);
+
+                for link_name in linked {
+                    if remaining_tokens == 0 {
+                        break;
+                    }
+                    if let Some(linked_path) = resolve_wikilink(&vault_path, &link_name) {
+                        if attached_notes.contains(&linked_path) {
+                            continue;
+                        }
+                        let linked_content =
+                            read_file_snippet(&linked_path, FILE_SNIPPET_LINE_LIMIT)
+                                .map_err(ProtocolError::from)?;
+                        push_attachment(
+                            &mut attachments,
+                            &mut remaining_tokens,
+                            "obsidian_wikilink",
+                            &linked_path.display().to_string(),
+                            &linked_content,
+                        );
+                        attached_notes.insert(linked_path);
+                    }
+                }
             }
         }
 
@@ -1467,6 +1494,62 @@ fn collect_obsidian_matches(
     }
 
     Ok(())
+}
+
+fn extract_wikilinks(content: &str) -> Vec<String> {
+    let mut links = Vec::new();
+    let mut chars = content.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '[' && chars.peek() == Some(&'[') {
+            chars.next(); // consume second '['
+            let mut name = String::new();
+            for inner in chars.by_ref() {
+                if inner == ']' {
+                    break;
+                }
+                if inner == '|' {
+                    // [[Note|Display]] — take the note part before |
+                    break;
+                }
+                name.push(inner);
+            }
+            let trimmed = name.trim().to_string();
+            if !trimmed.is_empty() {
+                links.push(trimmed);
+            }
+        }
+    }
+    links
+}
+
+fn resolve_wikilink(vault_path: &Path, link_name: &str) -> Option<PathBuf> {
+    // Try exact match first
+    let exact = vault_path.join(format!("{link_name}.md"));
+    if exact.exists() {
+        return Some(exact);
+    }
+    // Search recursively for the note
+    find_note_by_name(vault_path, link_name)
+}
+
+fn find_note_by_name(directory: &Path, name: &str) -> Option<PathBuf> {
+    let target = format!("{}.md", name.to_ascii_lowercase());
+    for entry in fs::read_dir(directory).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_note_by_name(&path, name) {
+                return Some(found);
+            }
+        } else if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.to_ascii_lowercase() == target)
+        {
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn title_keywords(title: &str) -> Vec<String> {
