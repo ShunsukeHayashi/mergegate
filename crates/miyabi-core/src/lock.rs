@@ -419,4 +419,79 @@ mod tests {
         let snapshot = snapshot_store.load().unwrap();
         assert!(snapshot.get_task("task-a").unwrap().lock.is_none());
     }
+
+    #[test]
+    fn acquire_unknown_task_returns_error() {
+        let (_tmp, _events, _snapshot_store, manager) = fixture();
+        let err = manager
+            .acquire_lock("nonexistent", "codex", "macbook", &[String::from("a.rs")])
+            .unwrap_err();
+        assert!(matches!(err, Error::Validation(_)));
+    }
+
+    #[test]
+    fn renew_wrong_owner_returns_permission_denied() {
+        let (_tmp, _events, snapshot_store, manager) = fixture();
+        seed_task(&snapshot_store, "task-a");
+        manager
+            .acquire_lock("task-a", "codex", "macbook", &[String::from("a.rs")])
+            .unwrap();
+        let err = manager
+            .renew_lease("task-a", "other-agent", "other-node")
+            .unwrap_err();
+        assert!(matches!(err, Error::PermissionDenied(_)));
+    }
+
+    #[test]
+    fn release_without_lock_is_noop() {
+        let (_tmp, _events, snapshot_store, manager) = fixture();
+        seed_task(&snapshot_store, "task-a");
+        // release on a task with no lock should succeed (noop)
+        manager.release_lock("task-a").unwrap();
+    }
+
+    #[test]
+    fn has_conflict_no_locks_returns_false() {
+        let (_tmp, _events, _snapshot_store, manager) = fixture();
+        let conflict = manager
+            .has_conflict(&[String::from("src/main.rs")])
+            .unwrap();
+        assert!(!conflict.conflicting);
+        assert!(conflict.held_by.is_none());
+        assert!(conflict.task_id.is_none());
+    }
+
+    #[test]
+    fn acquire_multiple_files_locks_all() {
+        let (_tmp, _events, snapshot_store, manager) = fixture();
+        seed_task(&snapshot_store, "task-a");
+        let files = vec![
+            String::from("a.rs"),
+            String::from("b.rs"),
+            String::from("c.rs"),
+        ];
+        manager
+            .acquire_lock("task-a", "codex", "macbook", &files)
+            .unwrap();
+
+        for file in &files {
+            let conflict = manager.has_conflict(&[file.clone()]).unwrap();
+            assert!(conflict.conflicting);
+        }
+
+        manager.release_lock("task-a").unwrap();
+        for file in &files {
+            let conflict = manager.has_conflict(&[file.clone()]).unwrap();
+            assert!(!conflict.conflicting);
+        }
+    }
+
+    #[test]
+    fn release_expired_with_no_locks_returns_empty() {
+        let (_tmp, _events, snapshot_store, manager) = fixture();
+        seed_task(&snapshot_store, "task-a");
+        let sweep = manager.release_expired_leases().unwrap();
+        assert!(sweep.released.is_empty());
+        assert!(sweep.active.is_empty());
+    }
 }

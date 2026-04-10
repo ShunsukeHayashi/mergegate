@@ -864,4 +864,209 @@ mod tests {
         let snapshot = snapshot_store.load().unwrap();
         assert_eq!(snapshot.tasks[0].context_attachments.len(), 1);
     }
+
+    #[test]
+    fn event_store_replay_since_id() {
+        let tmp = TempDir::new().unwrap();
+        let store = EventStore::new(tmp.path().join("events.jsonl"));
+
+        for i in 1..=5 {
+            store
+                .append(&TaskEvent {
+                    id: format!("evt-{i}"),
+                    ts: Utc::now(),
+                    event_type: TaskEventType::GatePassed,
+                    task_id: "task-a".into(),
+                    agent: "codex".into(),
+                    node: "macbook".into(),
+                    payload: serde_json::json!({}),
+                    version: i,
+                })
+                .unwrap();
+        }
+
+        // replay since evt-3 should return evt-4 and evt-5
+        let events = store.replay(Some("evt-3")).unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].id, "evt-4");
+        assert_eq!(events[1].id, "evt-5");
+    }
+
+    #[test]
+    fn event_store_replay_empty_file() {
+        let tmp = TempDir::new().unwrap();
+        let store = EventStore::new(tmp.path().join("nonexistent.jsonl"));
+        let events = store.replay(None).unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn snapshot_upsert_replaces_existing() {
+        let tmp = TempDir::new().unwrap();
+        let store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let mut snapshot = TasksSnapshot::default();
+        snapshot.upsert_task(sample_task("task-a"));
+        store.save(&snapshot, 0).unwrap();
+
+        let mut snapshot = store.load().unwrap();
+        let mut updated = sample_task("task-a");
+        updated.title = "Updated Title".into();
+        updated.current_state = TaskState::Implementing;
+        snapshot.upsert_task(updated);
+        let version = snapshot.version;
+        store.save(&snapshot, version).unwrap();
+
+        let final_snapshot = store.load().unwrap();
+        assert_eq!(final_snapshot.tasks.len(), 1);
+        assert_eq!(final_snapshot.tasks[0].title, "Updated Title");
+        assert_eq!(
+            final_snapshot.tasks[0].current_state,
+            TaskState::Implementing
+        );
+    }
+
+    #[test]
+    fn snapshot_remove_task() {
+        let tmp = TempDir::new().unwrap();
+        let store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let mut snapshot = TasksSnapshot::default();
+        snapshot.upsert_task(sample_task("task-a"));
+        snapshot.upsert_task(sample_task("task-b"));
+        store.save(&snapshot, 0).unwrap();
+
+        let mut snapshot = store.load().unwrap();
+        let removed = snapshot.remove_task("task-a");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, "task-a");
+        assert_eq!(snapshot.tasks.len(), 1);
+        assert_eq!(snapshot.tasks[0].id, "task-b");
+
+        // removing nonexistent returns None
+        assert!(snapshot.remove_task("task-z").is_none());
+    }
+
+    #[test]
+    fn legacy_task_file_loads_as_snapshot() {
+        let tmp = TempDir::new().unwrap();
+        let store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let legacy_json = serde_json::json!({
+            "version": 5,
+            "tasks": [
+                {
+                    "id": "task-legacy",
+                    "title": "Legacy Task",
+                    "state": "implementing",
+                    "dependencies": ["dep-1"],
+                    "dependents": [],
+                    "soft_dependencies": [],
+                    "lock": {
+                        "locked_by": "agent@node",
+                        "locked_at": "2026-01-01T00:00:00Z",
+                        "ttl_secs": 300,
+                        "affected_files": ["src/main.rs"]
+                    },
+                    "impact": {
+                        "risk_level": "HIGH",
+                        "affected_symbols": 10,
+                        "depth1": ["fn_a"],
+                        "analyzed_at": "2026-01-01T00:00:00Z"
+                    },
+                    "branch_name": "feature/legacy",
+                    "pr_number": 42,
+                    "merge_commit": null
+                }
+            ]
+        });
+        fs::write(
+            store.path(),
+            serde_json::to_vec_pretty(&legacy_json).unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = store.load().unwrap();
+        assert_eq!(snapshot.tasks.len(), 1);
+        let task = &snapshot.tasks[0];
+        assert_eq!(task.id, "task-legacy");
+        assert_eq!(task.current_state, TaskState::Implementing);
+        assert!(task.lock.is_some());
+        assert!(task.impact.is_some());
+        assert_eq!(task.impact.as_ref().unwrap().risk_level, ImpactRiskLevel::High);
+        assert!(task.github_evidence.is_some());
+        assert_eq!(task.github_evidence.as_ref().unwrap().pr_number, 42);
+        assert_eq!(task.github_evidence.as_ref().unwrap().pr_state, GitHubPrState::Open);
+        // file_locks should be populated from legacy lock
+        assert!(snapshot.file_locks.contains_key("src/main.rs"));
+    }
+
+    #[test]
+    fn apply_lock_released_event_clears_locks() {
+        let tmp = TempDir::new().unwrap();
+        let event_store = EventStore::new(tmp.path().join("events.jsonl"));
+        let snapshot_store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let mut snapshot = TasksSnapshot::default();
+        snapshot.upsert_task(sample_task("task-a"));
+        snapshot_store.save(&snapshot, 0).unwrap();
+
+        let now = Utc::now();
+        // acquire
+        event_store
+            .append(&TaskEvent {
+                id: "1".into(),
+                ts: now,
+                event_type: TaskEventType::LockAcquired,
+                task_id: "task-a".into(),
+                agent: "codex".into(),
+                node: "macbook".into(),
+                payload: serde_json::json!({
+                    "files": ["src/lib.rs", "src/main.rs"],
+                    "expires_at": now + Duration::seconds(300),
+                    "lease_duration_sec": 300
+                }),
+                version: 1,
+            })
+            .unwrap();
+        // release
+        event_store
+            .append(&TaskEvent {
+                id: "2".into(),
+                ts: now + Duration::seconds(10),
+                event_type: TaskEventType::LockReleased,
+                task_id: "task-a".into(),
+                agent: "system".into(),
+                node: "system".into(),
+                payload: serde_json::json!({}),
+                version: 2,
+            })
+            .unwrap();
+
+        let rebuilt = snapshot_store.rebuild(&event_store).unwrap();
+        assert!(rebuilt.get_task("task-a").unwrap().lock.is_none());
+        assert!(rebuilt.file_locks.is_empty());
+    }
+
+    #[test]
+    fn lease_expiry_calculates_correctly() {
+        let base = Utc::now();
+        let result = lease_expiry(base, 300);
+        assert_eq!(result, base + Duration::seconds(300));
+
+        let result_zero = lease_expiry(base, 0);
+        assert_eq!(result_zero, base);
+    }
 }
