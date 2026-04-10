@@ -2136,6 +2136,10 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
       <p class="meta" id="meta">Loading...</p>
     </header>
     <section class="grid">
+      <article class="panel" id="stats-panel">
+        <h2>Completion Stats</h2>
+        <div id="stats" class="empty">Loading stats...</div>
+      </article>
       <article class="panel">
         <h2>Tasks</h2>
         <ul id="tasks" class="task-list"><li class="empty">Loading tasks...</li></ul>
@@ -2262,6 +2266,27 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
       }
     }
 
+    function renderStats(snapshot) {
+      const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+      if (tasks.length === 0) {
+        document.getElementById("stats").innerHTML = '<span class="empty">No tasks</span>';
+        return;
+      }
+      const done = tasks.filter(t => t.current_state === "done" || t.current_state === "merged").length;
+      const active = tasks.filter(t => t.current_state === "implementing" || t.current_state === "reviewing").length;
+      const pending = tasks.filter(t => t.current_state === "pending" || t.current_state === "draft" || t.current_state === "blocked").length;
+      const total = tasks.length;
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+      const bar = '<div style="background:#e5e7eb;border-radius:8px;height:20px;margin:8px 0;overflow:hidden">' +
+        '<div style="background:#15803d;height:100%;width:' + pct + '%;transition:width .3s"></div></div>';
+
+      document.getElementById("stats").innerHTML =
+        '<div style="font-size:2rem;font-weight:700">' + pct + '%</div>' +
+        '<div class="task-meta">completed</div>' + bar +
+        '<div class="task-meta">' + done + ' done / ' + active + ' active / ' + pending + ' pending / ' + total + ' total</div>';
+    }
+
     async function refresh() {
       try {
         const [statusRes, locksRes, dagRes] = await Promise.all([
@@ -2280,6 +2305,7 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
           dagRes.json()
         ]);
 
+        renderStats(status);
         renderTasks(status);
         renderLocks(locks);
         renderDag(dag);
@@ -2289,6 +2315,7 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
           " | auto-refresh every 3s";
       } catch (error) {
         document.getElementById("meta").textContent = "Refresh failed: " + error.message;
+        document.getElementById("stats").innerHTML = '<span class="empty">Failed to load</span>';
         setEmpty("tasks", "Failed to load tasks");
         setEmpty("dag", "Failed to load DAG");
         setEmpty("locks", "Failed to load locks");
