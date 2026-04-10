@@ -1,6 +1,6 @@
 {
-  "version": 135,
-  "generated_at": "2026-04-10T01:48:40.158739Z",
+  "version": 144,
+  "generated_at": "2026-04-10T01:51:14.902141Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -881,6 +881,63 @@
       "priority": 0,
       "created_at": "2026-04-10T01:46:16.561276Z",
       "updated_at": "2026-04-10T01:48:40.158575Z"
+    },
+    {
+      "id": "issue-113",
+      "title": "Command reference in guide",
+      "issue_number": 113,
+      "current_state": "merged",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 1,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T01:49:41.253629Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-113-cmd-ref",
+      "github_evidence": {
+        "pr_number": 114,
+        "pr_head_ref": "feature/issue-113-cmd-ref",
+        "pr_state": "MERGED",
+        "merge_commit_sha": "5ff734970c7984bd4250258da9afabda170ec8dd",
+        "merged_at": "2026-04-10T01:51:14.899755Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
+      },
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/113",
+          "content": "Issue #113",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T01:49:41.260632Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-113",
+          "content": "risk_level: Low\naffected_symbols: 1",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T01:49:41.260633Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/platform/miyabi-cli-standalone/crates/miyabi-cli/src/main.rs",
+          "content": "//! Miyabi CLI - Main entry point\n\nuse chrono::Duration as ChronoDuration;\nuse clap::{Parser, Subcommand, ValueEnum};\nuse miyabi_core::{FeatureFlagManager, RulesLoader};\nuse std::collections::HashMap;\nuse std::fs;\nuse std::io::{self, BufRead, BufReader, Write};\nuse std::net::{TcpListener, TcpStream};\nuse std::path::PathBuf;\nuse std::process::Command;\nuse tracing_subscriber::EnvFilter;\n\n/// Global feature flags manager\nstatic FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();\n\n/// Get the global feature flags manager\npub fn feature_flags() -> &'static FeatureFlagManager {\n    FEATURE_FLAGS.get_or_init(|| {\n        let manager = FeatureFlagManager::new();\n        // Default feature flags\n        manager.set_flag(\"extended_thinking\", true);\n        manager.set_flag(\"auto_save_sessions\", true);\n        manager.set_flag(\"syntax_highlighting\", true);\n        manager.set_flag(\"vim_mode\", false);\n        manager\n    })\n}\n\n#[derive(Parser)]",
+          "token_estimate": 245,
+          "attached_at": "2026-04-10T01:49:41.260697Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T01:49:41.247259Z",
+      "updated_at": "2026-04-10T01:51:14.901976Z"
     }
   ],
   "file_locks": {}
