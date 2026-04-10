@@ -1,6 +1,6 @@
 {
-  "version": 116,
-  "generated_at": "2026-04-10T01:22:21.063421Z",
+  "version": 117,
+  "generated_at": "2026-04-10T01:22:23.087303Z",
   "generated_from_event_id": null,
   "tasks": [
     {
@@ -701,7 +701,7 @@
       "id": "issue-102",
       "title": "Obsidian wikilink expansion in attach",
       "issue_number": 102,
-      "current_state": "reviewing",
+      "current_state": "merged",
       "dependencies": [],
       "dependents": [],
       "soft_dependencies": [],
@@ -718,12 +718,12 @@
       "github_evidence": {
         "pr_number": 103,
         "pr_head_ref": "feature/issue-102-wikilink-expand",
-        "pr_state": "OPEN",
-        "merge_commit_sha": null,
-        "merged_at": null,
-        "review_decision": "REVIEW_REQUIRED",
-        "issue_state": "OPEN",
-        "issue_closed_by_pr": false
+        "pr_state": "MERGED",
+        "merge_commit_sha": "b87282e211e43754432ea5dc2314ddda8daeca07",
+        "merged_at": "2026-04-10T01:22:23.086887Z",
+        "review_decision": "APPROVED",
+        "issue_state": "CLOSED",
+        "issue_closed_by_pr": true
       },
       "completion_mode": "github_pr",
       "human_approval": null,
@@ -752,7 +752,7 @@
       ],
       "priority": 0,
       "created_at": "2026-04-10T01:19:56.514241Z",
-      "updated_at": "2026-04-10T01:21:37.451767Z"
+      "updated_at": "2026-04-10T01:22:23.087110Z"
     }
   ],
   "file_locks": {}
