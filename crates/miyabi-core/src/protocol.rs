@@ -1241,7 +1241,13 @@ fn read_file_snippet(path: &Path, max_lines: usize) -> Result<String, Error> {
     let reader = BufReader::new(file);
     let mut lines = Vec::new();
     for line in reader.lines().take(max_lines) {
-        lines.push(line?);
+        match line {
+            Ok(l) => lines.push(l),
+            Err(_) => {
+                // Non-UTF-8 file (binary) — return what we have so far
+                break;
+            }
+        }
     }
     Ok(lines.join("\n"))
 }
