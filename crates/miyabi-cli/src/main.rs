@@ -213,6 +213,8 @@ enum GateCommand {
     Branch { task_id: String, name: String },
     /// Attach task context for execution
     Attach { task_id: String },
+    /// Force-refresh task context attachments
+    Refresh { task_id: String },
     /// Record PR creation
     Pr { task_id: String, number: u64 },
     /// Record merge verification
@@ -262,6 +264,12 @@ enum GateCommand {
         /// Persist High learnings into docs/learnings/
         #[arg(long)]
         auto: bool,
+    },
+    /// Renew active lock heartbeats
+    Heartbeat {
+        /// Renew all implementing task leases
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -1405,6 +1413,28 @@ fn handle_gate_command(
                     }
                 })
         }
+        GateCommand::Refresh { task_id } => {
+            protocol
+                .refresh_context(&task_id, actor, &node)
+                .map(|attachments| {
+                    if matches!(format, OutputFormat::Json) {
+                        println!("{}", serde_json::to_string_pretty(&attachments).unwrap());
+                    } else if attachments.is_empty() {
+                        println!("no context attachments: {}", task_id);
+                    } else {
+                        println!("context refreshed: {}", task_id);
+                        for attachment in attachments {
+                            println!(
+                                "--- [{}] {} ({} tokens)",
+                                attachment.attachment_type,
+                                attachment.source,
+                                attachment.token_estimate
+                            );
+                            println!("{}", attachment.content);
+                        }
+                    }
+                })
+        }
         GateCommand::Pr { task_id, number } => protocol
             .record_pr(&task_id, number, actor, &node)
             .map(|task| {
@@ -1540,6 +1570,29 @@ fn handle_gate_command(
 
                     Ok(())
                 })
+        }
+        GateCommand::Heartbeat { all } => {
+            if !all {
+                Err(ProtocolError::input("heartbeat currently requires --all"))
+            } else {
+                protocol.heartbeat_all().map(|renewed| {
+                    if matches!(format, OutputFormat::Json) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "renewed": renewed,
+                                "count": renewed.len(),
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("renewed leases: {}", renewed.len());
+                        for task_id in renewed {
+                            println!("  {}", task_id);
+                        }
+                    }
+                })
+            }
         }
     };
 

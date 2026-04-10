@@ -112,6 +112,8 @@ pub struct ContextAttachment {
     pub source: String,
     pub content: String,
     pub token_estimate: usize,
+    #[serde(default = "default_attachment_attached_at")]
+    pub attached_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,6 +137,10 @@ pub struct ExecutionTask {
     pub priority: u32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+fn default_attachment_attached_at() -> DateTime<Utc> {
+    Utc::now()
 }
 
 impl ExecutionTask {
@@ -820,5 +826,42 @@ mod tests {
         assert_eq!(snapshot.tasks.len(), 1);
         assert_eq!(snapshot.tasks[0].issue_number, 0);
         assert!(snapshot.tasks[0].context_attachments.is_empty());
+    }
+
+    #[test]
+    fn snapshot_load_defaults_missing_attachment_timestamp() {
+        let tmp = TempDir::new().unwrap();
+        let snapshot_store = SnapshotStore::new(
+            tmp.path().join("tasks.snapshot.json"),
+            tmp.path().join(".tasks.lock"),
+        );
+
+        let mut task_value = serde_json::to_value(sample_task("task-a")).unwrap();
+        let task_object = task_value.as_object_mut().unwrap();
+        task_object.insert(
+            "context_attachments".into(),
+            serde_json::json!([{
+                "attachment_type": "issue",
+                "source": "github://issue/1",
+                "content": "Issue #1",
+                "token_estimate": 2
+            }]),
+        );
+
+        let raw = serde_json::json!({
+            "version": 1,
+            "generated_at": Utc::now(),
+            "generated_from_event_id": null,
+            "tasks": [task_value],
+            "file_locks": {}
+        });
+        fs::write(
+            snapshot_store.path(),
+            serde_json::to_vec_pretty(&raw).unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = snapshot_store.load().unwrap();
+        assert_eq!(snapshot.tasks[0].context_attachments.len(), 1);
     }
 }
