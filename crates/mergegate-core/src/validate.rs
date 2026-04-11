@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+fn state_str(state: TaskState) -> String {
+    serde_json::to_value(state)
+        .expect("failed to serialize TaskState to JSON value")
+        .as_str()
+        .expect("TaskState serialized to a non-string JSON value")
+        .to_owned()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationReport {
     pub orphaned_locks: Vec<String>,
@@ -58,8 +66,9 @@ pub fn validate_snapshot(snapshot: &TasksSnapshot) -> ValidationReport {
         if let Some(lock) = &task.lock {
             if task.current_state != TaskState::Implementing {
                 report.invalid_transitions.push(format!(
-                    "task '{}' is {:?} but still holds a lock",
-                    task.id, task.current_state
+                    "task '{}' is {} but still holds a lock",
+                    task.id,
+                    state_str(task.current_state)
                 ));
             }
 
@@ -116,9 +125,9 @@ pub fn validate_snapshot(snapshot: &TasksSnapshot) -> ValidationReport {
             )
         {
             report.invalid_transitions.push(format!(
-                "task '{}' is {:?} with unresolved dependencies: {}",
+                "task '{}' is {} with unresolved dependencies: {}",
                 task.id,
-                task.current_state,
+                state_str(task.current_state),
                 unresolved_dependencies.join(", ")
             ));
         }
@@ -306,6 +315,59 @@ mod tests {
         assert_eq!(report.invalid_transitions.len(), 1);
         assert!(report.invalid_transitions[0].contains("without an active lock"));
     }
+
+    #[test]
+    fn invalid_transition_message_uses_serialised_state_name() {
+        // State messages must use snake_case (serialised form), not {:?} Debug output.
+        let snapshot = TasksSnapshot {
+            tasks: vec![task("task-a", TaskState::Implementing, vec![])],
+            ..TasksSnapshot::default()
+        };
+
+        let report = validate_snapshot(&snapshot);
+
+        assert!(
+            report.invalid_transitions[0].contains("implementing"),
+            "expected 'implementing' (snake_case), got: {}",
+            report.invalid_transitions[0]
+        );
+        assert!(
+            !report.invalid_transitions[0].contains("Implementing"),
+            "message must not use Debug (PascalCase) formatting"
+        );
+    }
+
+    #[test]
+    fn dependency_transition_message_uses_serialised_state_name() {
+        // The "unresolved dependencies" path (line ~128) must also use snake_case.
+        // task-b is Pending (unresolved), and task-a is Implementing which is an
+        // active state → triggers the unresolved-dependencies invalid_transition message.
+        let snapshot = TasksSnapshot {
+            tasks: vec![
+                task("task-a", TaskState::Implementing, vec!["task-b"]),
+                task("task-b", TaskState::Pending, vec![]),
+            ],
+            ..TasksSnapshot::default()
+        };
+
+        let report = validate_snapshot(&snapshot);
+
+        let dep_msg = report
+            .invalid_transitions
+            .iter()
+            .find(|msg| msg.contains("unresolved dependencies"))
+            .expect("expected an unresolved-dependencies message");
+
+        assert!(
+            dep_msg.contains("implementing"),
+            "expected 'implementing' (snake_case), got: {dep_msg}"
+        );
+        assert!(
+            !dep_msg.contains("Implementing"),
+            "message must not use Debug (PascalCase) formatting"
+        );
+    }
+
 
     #[test]
     fn circular_dependency() {

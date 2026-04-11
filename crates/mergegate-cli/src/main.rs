@@ -1581,8 +1581,11 @@ fn parse_export_filter(
     let since = args.since.as_deref().map(parse_export_since).transpose()?;
 
     Ok(Some(miyabi_core::export::ExportFilter {
-        state: args.state,
-        risk_level: args.risk,
+        // TaskState serialises as snake_case; normalise to lowercase so users can pass
+        // either "Implementing" or "implementing" interchangeably.
+        state: args.state.map(|s| s.to_ascii_lowercase()),
+        // ImpactRiskLevel serialises as SCREAMING_SNAKE_CASE; normalise to uppercase.
+        risk_level: args.risk.map(|r| r.to_ascii_uppercase()),
         since,
     }))
 }
@@ -3306,6 +3309,21 @@ mod tests {
 
         assert!(filter.is_none());
     }
+
+    #[test]
+    fn parse_export_filter_normalises_state_and_risk_case() {
+        let filter = parse_export_filter(ExportFilterArgs {
+            state: Some("Implementing".to_string()),
+            risk: Some("high".to_string()),
+            since: None,
+        })
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(filter.state.as_deref(), Some("implementing"));
+        assert_eq!(filter.risk_level.as_deref(), Some("HIGH"));
+    }
+
 
     #[test]
     fn validate_returns_warning_exit_code_for_missing_dependency_reference() {

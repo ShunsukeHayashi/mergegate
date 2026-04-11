@@ -40,12 +40,10 @@ pub fn export_markdown(snapshot: &TasksSnapshot, filter: Option<&ExportFilter>) 
 }
 
 fn truncate_title(title: &str) -> String {
-    let mut chars = title.chars();
     if title.chars().count() <= TITLE_LIMIT {
         return title.to_string();
     }
-
-    let truncated: String = chars.by_ref().take(TITLE_LIMIT - 3).collect();
+    let truncated: String = title.chars().take(TITLE_LIMIT - 3).collect();
     format!("{truncated}...")
 }
 
