@@ -26,14 +26,16 @@ pub fn export_markdown(snapshot: &TasksSnapshot, filter: Option<&ExportFilter>) 
     let completed = tasks.iter().filter(|task| is_completed(task)).count();
     let active = tasks.iter().filter(|task| is_active(task)).count();
     let waiting = tasks.iter().filter(|task| is_waiting(task)).count();
+    let failed = tasks.iter().filter(|task| is_failed(task)).count();
 
     lines.push(String::new());
     lines.push(format!(
-        "Total: {} tasks ({} completed, {} active, {} waiting)",
+        "Total: {} tasks ({} completed, {} active, {} waiting, {} failed)",
         tasks.len(),
         completed,
         active,
-        waiting
+        waiting,
+        failed
     ));
 
     lines.join("\n")
@@ -93,6 +95,10 @@ fn is_waiting(task: &ExecutionTask) -> bool {
         task.current_state,
         TaskState::Draft | TaskState::Pending | TaskState::Blocked | TaskState::AwaitingGithubSync
     )
+}
+
+fn is_failed(task: &ExecutionTask) -> bool {
+    matches!(task.current_state, TaskState::Failed)
 }
 
 fn title_case(value: &str) -> String {
@@ -182,7 +188,7 @@ mod tests {
         assert!(markdown.contains(
             "| task-2 | Merge snapshot writer | 🔀 Merged | HIGH | branch/task-2 | 2026-04-10 |"
         ));
-        assert!(markdown.ends_with("Total: 2 tasks (1 completed, 1 active, 0 waiting)"));
+        assert!(markdown.ends_with("Total: 2 tasks (1 completed, 1 active, 0 waiting, 0 failed)"));
     }
 
     #[test]
@@ -191,7 +197,7 @@ mod tests {
 
         assert_eq!(
             markdown,
-            "| ID | Title | State | Risk | Branch | Created |\n| --- | --- | --- | --- | --- | --- |\n\nTotal: 0 tasks (0 completed, 0 active, 0 waiting)"
+            "| ID | Title | State | Risk | Branch | Created |\n| --- | --- | --- | --- | --- | --- |\n\nTotal: 0 tasks (0 completed, 0 active, 0 waiting, 0 failed)"
         );
     }
 
@@ -206,7 +212,7 @@ mod tests {
 
         assert!(markdown
             .contains("| task-1 | Ship feature | ✅ Done | - | branch/task-1 | 2026-04-10 |"));
-        assert!(markdown.ends_with("Total: 1 tasks (1 completed, 0 active, 0 waiting)"));
+        assert!(markdown.ends_with("Total: 1 tasks (1 completed, 0 active, 0 waiting, 0 failed)"));
     }
 
     #[test]
@@ -231,7 +237,7 @@ mod tests {
         assert!(markdown
             .contains("| pending | Pending task | ⏳ Pending | - | branch/pending | 2026-04-10 |"));
         assert!(markdown.contains("| draft | Draft task | Draft | - | branch/draft | 2026-04-10 |"));
-        assert!(markdown.ends_with("Total: 5 tasks (2 completed, 1 active, 2 waiting)"));
+        assert!(markdown.ends_with("Total: 5 tasks (2 completed, 1 active, 2 waiting, 0 failed)"));
     }
 
     #[test]
@@ -281,6 +287,6 @@ mod tests {
 
         assert!(markdown.contains("| task-1 | Implement markdown export |"));
         assert!(!markdown.contains("| task-2 | Ship release |"));
-        assert!(markdown.ends_with("Total: 1 tasks (0 completed, 1 active, 0 waiting)"));
+        assert!(markdown.ends_with("Total: 1 tasks (0 completed, 1 active, 0 waiting, 0 failed)"));
     }
 }

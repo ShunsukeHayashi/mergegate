@@ -11,6 +11,7 @@
 ### 1.1 Product Vision
 AIコーディングエージェントの前段に置く、engine-agnostic な gate CLI を提供する。
 現在の製品中心は TUI ではなく `mergegate gate ...` であり、ledger の記録・検証・可視化を最優先に進める。
+本流方針として、MergeGate は Rust-first の deterministic execution protocol product として進め、cross-source PM dashboard 化は本体スコープに含めない。
 
 ### 1.2 Target Users
 - ソフトウェア開発者
@@ -34,7 +35,14 @@ AIコーディングエージェントの前段に置く、engine-agnostic な g
 - `mergegate gate stats`
 - `mergegate gate serve`
 
+直近の固定契約:
+
+- `mergegate gate validate` は text 先頭に `clean` / `warning` / `error` を出し、JSON では severity / exit_code / issue_count を返す
+- `mergegate gate export-json` と `mergegate gate export-md` は共通 filter `--state` / `--risk` / `--since` を使う
+- dashboard は `/api/tasks` `/api/stats` `/api/validate` を使い、CLI と同じ ledger 定義を表示する
+
 TUI / built-in chat runtime / vendor-specific execution機能は将来拡張であり、現段階では必須スコープではない。
+また、portfolio / cross-source orchestration / PM cockpit は上位レイヤーとして扱い、MergeGate 本体の定義には含めない。
 
 ---
 

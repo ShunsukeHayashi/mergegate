@@ -1,32 +1,62 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::store::{ExecutionTask, TasksSnapshot};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportFilter {
     pub state: Option<String>,
     pub risk_level: Option<String>,
     pub since: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize)]
-struct ExportedTask<'a> {
-    id: &'a str,
-    title: &'a str,
-    state: String,
-    impact_risk: Option<String>,
-    branch: Option<&'a str>,
-    created_at: DateTime<Utc>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportedTask {
+    pub id: String,
+    pub title: String,
+    pub state: String,
+    pub current_state: String,
+    pub impact_risk: Option<String>,
+    pub branch: Option<String>,
+    pub dependencies: Vec<String>,
+    pub priority: u32,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportedTasksPayload {
+    pub version: u64,
+    pub generated_at: DateTime<Utc>,
+    pub generated_from_event_id: Option<String>,
+    pub task_count: usize,
+    pub tasks: Vec<ExportedTask>,
 }
 
 pub fn export_json(snapshot: &TasksSnapshot, filter: Option<ExportFilter>) -> String {
-    let tasks: Vec<ExportedTask<'_>> = filtered_tasks(snapshot, filter.as_ref())
-        .into_iter()
-        .map(ExportedTask::from_task)
-        .collect();
+    let tasks = export_tasks(snapshot, filter.as_ref());
 
     serde_json::to_string_pretty(&tasks).expect("task export should serialize")
+}
+
+pub fn export_tasks(snapshot: &TasksSnapshot, filter: Option<&ExportFilter>) -> Vec<ExportedTask> {
+    filtered_tasks(snapshot, filter)
+        .into_iter()
+        .map(ExportedTask::from_task)
+        .collect()
+}
+
+pub fn export_payload(
+    snapshot: &TasksSnapshot,
+    filter: Option<&ExportFilter>,
+) -> ExportedTasksPayload {
+    let tasks = export_tasks(snapshot, filter);
+    ExportedTasksPayload {
+        version: snapshot.version,
+        generated_at: snapshot.generated_at,
+        generated_from_event_id: snapshot.generated_from_event_id.clone(),
+        task_count: tasks.len(),
+        tasks,
+    }
 }
 
 pub fn filtered_tasks<'a>(
@@ -84,14 +114,18 @@ fn task_risk(task: &ExecutionTask) -> Option<String> {
     })
 }
 
-impl<'a> ExportedTask<'a> {
-    fn from_task(task: &'a ExecutionTask) -> Self {
+impl ExportedTask {
+    fn from_task(task: &ExecutionTask) -> Self {
+        let state = task_state(task);
         Self {
-            id: &task.id,
-            title: &task.title,
-            state: task_state(task),
+            id: task.id.clone(),
+            title: task.title.clone(),
+            state: state.clone(),
+            current_state: state,
             impact_risk: task_risk(task),
-            branch: task.branch_name.as_deref(),
+            branch: task.branch_name.clone(),
+            dependencies: task.dependencies.clone(),
+            priority: task.priority,
             created_at: task.created_at,
         }
     }
@@ -99,7 +133,7 @@ impl<'a> ExportedTask<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{export_json, ExportFilter};
+    use super::{export_json, export_payload, ExportFilter};
     use crate::store::{ExecutionTask, ImpactRiskLevel, TaskImpact, TaskState, TasksSnapshot};
     use chrono::{Duration, TimeZone, Utc};
     use serde_json::Value;
@@ -174,6 +208,7 @@ mod tests {
         assert_eq!(tasks.len(), 3);
         assert_eq!(tasks[0]["id"], "task-1");
         assert_eq!(tasks[0]["state"], "draft");
+        assert_eq!(tasks[0]["current_state"], "draft");
         assert_eq!(tasks[0]["impact_risk"], "LOW");
         assert_eq!(tasks[0]["branch"], "branch/task-1");
         assert_eq!(tasks[0]["created_at"], "2026-04-01T00:00:00Z");
@@ -242,5 +277,26 @@ mod tests {
         );
 
         assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn exports_payload_with_snapshot_metadata() {
+        let snapshot = sample_snapshot();
+
+        let payload = export_payload(
+            &snapshot,
+            Some(&ExportFilter {
+                state: Some("implementing".to_string()),
+                risk_level: None,
+                since: None,
+            }),
+        );
+
+        assert_eq!(payload.version, 1);
+        assert_eq!(payload.generated_at, snapshot.generated_at);
+        assert_eq!(payload.generated_from_event_id.as_deref(), Some("event-1"));
+        assert_eq!(payload.task_count, 1);
+        assert_eq!(payload.tasks[0].id, "task-2");
+        assert_eq!(payload.tasks[0].current_state, "implementing");
     }
 }

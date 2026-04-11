@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use tracing_subscriber::EnvFilter;
 
@@ -1402,7 +1402,7 @@ fn handle_gate_command(
                 } else if matches!(format, OutputFormat::Json) {
                     println!(
                         "{}",
-                        serde_json::to_string_pretty(&validation_report_json(&report)).unwrap()
+                        serde_json::to_string_pretty(&report.to_json_report()).unwrap()
                     );
                 } else {
                     println!("{report}");
@@ -1574,20 +1574,7 @@ fn load_snapshot(
 fn parse_export_filter(
     args: ExportFilterArgs,
 ) -> anyhow::Result<Option<miyabi_core::export::ExportFilter>> {
-    if args.state.is_none() && args.risk.is_none() && args.since.is_none() {
-        return Ok(None);
-    }
-
-    let since = args.since.as_deref().map(parse_export_since).transpose()?;
-
-    Ok(Some(miyabi_core::export::ExportFilter {
-        // TaskState serialises as snake_case; normalise to lowercase so users can pass
-        // either "Implementing" or "implementing" interchangeably.
-        state: args.state.map(|s| s.to_ascii_lowercase()),
-        // ImpactRiskLevel serialises as SCREAMING_SNAKE_CASE; normalise to uppercase.
-        risk_level: args.risk.map(|r| r.to_ascii_uppercase()),
-        since,
-    }))
+    parse_export_filter_parts(args.state, args.risk, args.since)
 }
 
 fn parse_export_since(value: &str) -> anyhow::Result<DateTime<Utc>> {
@@ -1600,15 +1587,54 @@ fn parse_export_since(value: &str) -> anyhow::Result<DateTime<Utc>> {
     Ok(parsed)
 }
 
-fn validation_report_json(report: &miyabi_core::validate::ValidationReport) -> serde_json::Value {
-    serde_json::json!({
-        "severity": report.severity(),
-        "exit_code": report.exit_code(),
-        "orphaned_locks": report.orphaned_locks,
-        "invalid_transitions": report.invalid_transitions,
-        "circular_dependencies": report.circular_dependencies,
-        "warnings": report.warnings,
-    })
+fn parse_export_filter_parts(
+    state: Option<String>,
+    risk: Option<String>,
+    since: Option<String>,
+) -> anyhow::Result<Option<miyabi_core::export::ExportFilter>> {
+    if state.is_none() && risk.is_none() && since.is_none() {
+        return Ok(None);
+    }
+
+    let since = since.as_deref().map(parse_export_since).transpose()?;
+
+    Ok(Some(miyabi_core::export::ExportFilter {
+        // TaskState serialises as snake_case; normalise to lowercase so users can pass
+        // either "Implementing" or "implementing" interchangeably.
+        state: state.map(|s| s.to_ascii_lowercase()),
+        // ImpactRiskLevel serialises as SCREAMING_SNAKE_CASE; normalise to uppercase.
+        risk_level: risk.map(|r| r.to_ascii_uppercase()),
+        since,
+    }))
+}
+
+fn parse_query_string(query: &str) -> HashMap<String, String> {
+    query
+        .split('&')
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| {
+            let (key, value) = entry.split_once('=').unwrap_or((entry, ""));
+            if key.is_empty() {
+                None
+            } else {
+                Some((key.to_string(), value.to_string()))
+            }
+        })
+        .collect()
+}
+
+fn parse_dashboard_filter(path: &str) -> anyhow::Result<Option<miyabi_core::export::ExportFilter>> {
+    let query = path.split_once('?').map(|(_, query)| query);
+    let Some(query) = query else {
+        return Ok(None);
+    };
+
+    let params = parse_query_string(query);
+    parse_export_filter_parts(
+        params.get("state").cloned(),
+        params.get("risk").cloned(),
+        params.get("since").cloned(),
+    )
 }
 
 fn build_assign_execution_plan(
@@ -3141,58 +3167,215 @@ fn handle_dashboard_connection(
 
     let mut parts = request_line.split_whitespace();
     let method = parts.next().unwrap_or_default();
-    let path = parts.next().unwrap_or("/");
+    let raw_path = parts.next().unwrap_or("/");
+    let response = build_dashboard_response(protocol, store_path, method, raw_path)?;
+    write_http_response(
+        stream,
+        &response.status,
+        &response.content_type,
+        &response.body,
+    )?;
+
+    Ok(())
+}
+
+struct DashboardResponse {
+    status: String,
+    content_type: String,
+    body: Vec<u8>,
+}
+
+fn build_dashboard_response(
+    protocol: &miyabi_core::protocol::DeterministicExecutionProtocol,
+    store_path: &Path,
+    method: &str,
+    raw_path: &str,
+) -> anyhow::Result<DashboardResponse> {
+    let path = raw_path
+        .split_once('?')
+        .map(|(path, _)| path)
+        .unwrap_or(raw_path);
 
     if method != "GET" {
-        write_http_response(
-            stream,
+        return Ok(text_response(
             "405 Method Not Allowed",
-            "text/plain; charset=utf-8",
-            b"method not allowed",
-        )?;
-        return Ok(());
+            "method not allowed",
+        ));
     }
 
     match path {
-        "/" => write_http_response(
-            stream,
-            "200 OK",
-            "text/html; charset=utf-8",
-            POLARIS_DASHBOARD_HTML.as_bytes(),
-        )?,
-        "/api/tasks" | "/api/status" => {
+        "/api/tasks" => {
+            let snapshot = load_snapshot(store_path)?;
+            let filter = parse_dashboard_filter(raw_path)?;
+            let body = serde_json::to_vec_pretty(&miyabi_core::export::export_payload(
+                &snapshot,
+                filter.as_ref(),
+            ))
+            .map_err(io::Error::other)?;
+            Ok(json_response(body))
+        }
+        "/api/status" => {
             let body =
                 serde_json::to_vec_pretty(&load_snapshot(store_path)?).map_err(io::Error::other)?;
-            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+            Ok(json_response(body))
         }
         "/api/stats" => {
             let stats = miyabi_core::stats::compute_stats(&load_snapshot(store_path)?);
             let body = serde_json::to_vec_pretty(&stats).map_err(io::Error::other)?;
-            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+            Ok(json_response(body))
         }
         "/api/validate" => {
             let report = miyabi_core::validate::validate_snapshot(&load_snapshot(store_path)?);
-            let body = serde_json::to_vec_pretty(&validation_report_json(&report))
-                .map_err(io::Error::other)?;
-            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+            let body =
+                serde_json::to_vec_pretty(&report.to_json_report()).map_err(io::Error::other)?;
+            Ok(json_response(body))
         }
         "/api/locks" => {
             let body = serde_json::to_vec_pretty(&protocol.locks()?).map_err(io::Error::other)?;
-            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+            Ok(json_response(body))
         }
         "/api/dag" => {
             let body = serde_json::to_vec_pretty(&protocol.dag()?).map_err(io::Error::other)?;
-            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+            Ok(json_response(body))
         }
-        _ => write_http_response(
-            stream,
-            "404 Not Found",
-            "text/plain; charset=utf-8",
-            b"not found",
-        )?,
+        "/api/dispatchable" => {
+            let body =
+                serde_json::to_vec_pretty(&protocol.dispatchable()?).map_err(io::Error::other)?;
+            Ok(json_response(body))
+        }
+        _ if path.starts_with("/api/task/") => task_detail_response(protocol, path),
+        _ => static_dashboard_response(store_path, path),
+    }
+}
+
+fn json_response(body: Vec<u8>) -> DashboardResponse {
+    DashboardResponse {
+        status: "200 OK".to_string(),
+        content_type: "application/json; charset=utf-8".to_string(),
+        body,
+    }
+}
+
+fn text_response(status: &str, body: &str) -> DashboardResponse {
+    DashboardResponse {
+        status: status.to_string(),
+        content_type: "text/plain; charset=utf-8".to_string(),
+        body: body.as_bytes().to_vec(),
+    }
+}
+
+fn task_detail_response(
+    protocol: &miyabi_core::protocol::DeterministicExecutionProtocol,
+    path: &str,
+) -> anyhow::Result<DashboardResponse> {
+    let Some(task_id) = path
+        .strip_prefix("/api/task/")
+        .filter(|task_id| !task_id.is_empty())
+    else {
+        return Ok(text_response("404 Not Found", "not found"));
+    };
+
+    match protocol.status(Some(task_id))? {
+        miyabi_core::protocol::StatusReport::Task(task) => {
+            let body = serde_json::to_vec_pretty(&task).map_err(io::Error::other)?;
+            Ok(json_response(body))
+        }
+        miyabi_core::protocol::StatusReport::Snapshot(_) => {
+            Ok(text_response("404 Not Found", "not found"))
+        }
+    }
+}
+
+fn static_dashboard_response(store_path: &Path, path: &str) -> anyhow::Result<DashboardResponse> {
+    if let Some(static_dir) = dashboard_static_dir(store_path) {
+        if let Some(file_path) = dashboard_asset_path(&static_dir, path) {
+            let body = fs::read(&file_path)?;
+            return Ok(DashboardResponse {
+                status: "200 OK".to_string(),
+                content_type: dashboard_content_type(&file_path).to_string(),
+                body,
+            });
+        }
+
+        if should_fallback_to_dashboard_index(path) {
+            let index_path = static_dir.join("index.html");
+            if index_path.exists() {
+                return Ok(DashboardResponse {
+                    status: "200 OK".to_string(),
+                    content_type: "text/html; charset=utf-8".to_string(),
+                    body: fs::read(index_path)?,
+                });
+            }
+        }
+
+        return Ok(text_response("404 Not Found", "not found"));
     }
 
-    Ok(())
+    if path == "/" {
+        return Ok(DashboardResponse {
+            status: "200 OK".to_string(),
+            content_type: "text/html; charset=utf-8".to_string(),
+            body: POLARIS_DASHBOARD_HTML.as_bytes().to_vec(),
+        });
+    }
+
+    Ok(text_response("404 Not Found", "not found"))
+}
+
+fn dashboard_static_dir(store_path: &Path) -> Option<PathBuf> {
+    if let Some(override_path) = std::env::var_os("MERGEGATE_DASHBOARD_STATIC_DIR") {
+        let path = PathBuf::from(override_path);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    let repo_root = store_path
+        .parent()
+        .and_then(|path| path.parent())
+        .unwrap_or_else(|| Path::new("."));
+    let default_path = repo_root.join("web/dashboard/dist");
+    default_path.is_dir().then_some(default_path)
+}
+
+fn dashboard_asset_path(static_dir: &Path, path: &str) -> Option<PathBuf> {
+    let relative = if path == "/" {
+        PathBuf::from("index.html")
+    } else {
+        let stripped = path.trim_start_matches('/');
+        let mut relative = PathBuf::new();
+        for component in Path::new(stripped).components() {
+            match component {
+                Component::Normal(part) => relative.push(part),
+                Component::CurDir => {}
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir => return None,
+            }
+        }
+        relative
+    };
+
+    let candidate = static_dir.join(relative);
+    candidate.is_file().then_some(candidate)
+}
+
+fn should_fallback_to_dashboard_index(path: &str) -> bool {
+    path == "/" || !path.rsplit('/').next().unwrap_or_default().contains('.')
+}
+
+fn dashboard_content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        _ => "application/octet-stream",
+    }
 }
 
 fn write_http_response(
@@ -3283,7 +3466,8 @@ fn bus_enqueue(task_id: &str, title: &str, store_path: &std::path::Path) {
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use miyabi_core::store::{ExecutionTask, TaskState, TasksSnapshot};
+    use miyabi_core::protocol::{DeterministicExecutionProtocol, RegisterTaskRequest};
+    use miyabi_core::store::{CompletionMode, ExecutionTask, TaskState, TasksSnapshot};
     use miyabi_core::validate::validate_snapshot;
 
     #[test]
@@ -3324,7 +3508,20 @@ mod tests {
         assert_eq!(filter.risk_level.as_deref(), Some("HIGH"));
     }
 
+    #[test]
+    fn parse_dashboard_filter_reads_same_keys_as_export_commands() {
+        let filter =
+            parse_dashboard_filter("/api/tasks?state=implementing&risk=HIGH&since=2026-04-12")
+                .unwrap()
+                .expect("filter should exist");
 
+        assert_eq!(filter.state.as_deref(), Some("implementing"));
+        assert_eq!(filter.risk_level.as_deref(), Some("HIGH"));
+        assert_eq!(
+            filter.since,
+            Some(Utc.with_ymd_and_hms(2026, 4, 12, 0, 0, 0).unwrap())
+        );
+    }
     #[test]
     fn validate_returns_warning_exit_code_for_missing_dependency_reference() {
         let path = write_snapshot(TasksSnapshot {
@@ -3358,7 +3555,7 @@ mod tests {
     }
 
     #[test]
-    fn validation_report_json_includes_severity_and_exit_code() {
+    fn validation_report_json_includes_fixed_counts() {
         let report = validate_snapshot(&TasksSnapshot {
             tasks: vec![{
                 let mut task = ExecutionTask::new("task-a", "Task A");
@@ -3368,11 +3565,92 @@ mod tests {
             ..TasksSnapshot::default()
         });
 
-        let value = validation_report_json(&report);
+        let value = serde_json::to_value(report.to_json_report()).unwrap();
 
         assert_eq!(value["severity"], "error");
         assert_eq!(value["exit_code"], 2);
+        assert_eq!(value["issue_count"], 1);
+        assert_eq!(value["error_count"], 1);
+        assert_eq!(value["warning_count"], 0);
         assert!(value["invalid_transitions"].is_array());
+    }
+
+    #[test]
+    fn dashboard_dispatchable_endpoint_returns_protocol_owned_payload() {
+        let fixture = DashboardFixture::new();
+        fixture.register_task("task-a", "Task A");
+
+        let response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/dispatchable",
+        )
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+
+        assert_eq!(response.status, "200 OK");
+        assert_eq!(value["count"], 1);
+        assert_eq!(value["task_ids"][0], "task-a");
+        assert_eq!(value["tasks"][0]["id"], "task-a");
+    }
+
+    #[test]
+    fn dashboard_task_detail_endpoint_returns_registered_task() {
+        let fixture = DashboardFixture::new();
+        fixture.register_task("task-a", "Task A");
+
+        let response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/task/task-a",
+        )
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+
+        assert_eq!(response.status, "200 OK");
+        assert_eq!(value["id"], "task-a");
+        assert_eq!(value["title"], "Task A");
+        assert_eq!(value["current_state"], "pending");
+    }
+
+    #[test]
+    fn dashboard_static_dir_serves_assets_and_spa_fallback() {
+        let fixture = DashboardFixture::new();
+        let static_dir = fixture.tempdir.path().join("dist");
+        std::fs::create_dir_all(static_dir.join("assets")).unwrap();
+        std::fs::write(static_dir.join("index.html"), "<html>gate</html>").unwrap();
+        std::fs::write(static_dir.join("assets/app.js"), "console.log('gate');").unwrap();
+        let _guard = EnvVarGuard::set("MERGEGATE_DASHBOARD_STATIC_DIR", &static_dir);
+
+        let asset_response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/assets/app.js",
+        )
+        .unwrap();
+        let spa_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/tasks")
+                .unwrap();
+
+        assert_eq!(asset_response.status, "200 OK");
+        assert_eq!(
+            asset_response.content_type,
+            "application/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            String::from_utf8(asset_response.body).unwrap(),
+            "console.log('gate');"
+        );
+
+        assert_eq!(spa_response.status, "200 OK");
+        assert_eq!(spa_response.content_type, "text/html; charset=utf-8");
+        assert_eq!(
+            String::from_utf8(spa_response.body).unwrap(),
+            "<html>gate</html>"
+        );
     }
 
     fn write_snapshot(snapshot: TasksSnapshot) -> PathBuf {
@@ -3390,5 +3668,97 @@ mod tests {
         task.dependencies = vec!["missing-task".to_string()];
         task.current_state = TaskState::Pending;
         task
+    }
+
+    struct DashboardFixture {
+        tempdir: TestTempDir,
+        store_path: PathBuf,
+        protocol: DeterministicExecutionProtocol,
+    }
+
+    impl DashboardFixture {
+        fn new() -> Self {
+            let tempdir = TestTempDir::new();
+            let store_path = tempdir.path().join("project_memory/tasks.json");
+            std::fs::create_dir_all(store_path.parent().unwrap()).unwrap();
+            std::fs::write(
+                &store_path,
+                serde_json::to_vec_pretty(&TasksSnapshot::default()).unwrap(),
+            )
+            .unwrap();
+            let protocol = DeterministicExecutionProtocol::from_store_path(store_path.clone());
+            Self {
+                tempdir,
+                store_path,
+                protocol,
+            }
+        }
+
+        fn register_task(&self, task_id: &str, title: &str) {
+            self.protocol
+                .register(
+                    RegisterTaskRequest {
+                        issue: 0,
+                        task_id: task_id.to_string(),
+                        title: title.to_string(),
+                        dependencies: Vec::new(),
+                        soft_dependencies: Vec::new(),
+                        priority: 1,
+                        completion_mode: CompletionMode::Manual,
+                    },
+                    "tester",
+                    "node",
+                )
+                .unwrap();
+        }
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let original = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.original {
+                std::env::set_var(self.key, value);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    struct TestTempDir {
+        path: PathBuf,
+    }
+
+    impl TestTempDir {
+        fn new() -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("mergegate-cli-test-{unique}"));
+            std::fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestTempDir {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.path).ok();
+        }
     }
 }

@@ -27,6 +27,19 @@ pub enum ValidationSeverity {
     Error,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidationJsonReport {
+    pub severity: ValidationSeverity,
+    pub exit_code: i32,
+    pub issue_count: usize,
+    pub error_count: usize,
+    pub warning_count: usize,
+    pub orphaned_locks: Vec<String>,
+    pub invalid_transitions: Vec<String>,
+    pub circular_dependencies: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
 pub fn validate_snapshot(snapshot: &TasksSnapshot) -> ValidationReport {
     let mut report = ValidationReport::default();
     let task_map = snapshot
@@ -165,6 +178,30 @@ impl ValidationReport {
             + self.circular_dependencies.len()
             + self.warnings.len()
     }
+
+    pub fn error_count(&self) -> usize {
+        self.orphaned_locks.len()
+            + self.invalid_transitions.len()
+            + self.circular_dependencies.len()
+    }
+
+    pub fn warning_count(&self) -> usize {
+        self.warnings.len()
+    }
+
+    pub fn to_json_report(&self) -> ValidationJsonReport {
+        ValidationJsonReport {
+            severity: self.severity(),
+            exit_code: self.exit_code(),
+            issue_count: self.issue_count(),
+            error_count: self.error_count(),
+            warning_count: self.warning_count(),
+            orphaned_locks: self.orphaned_locks.clone(),
+            invalid_transitions: self.invalid_transitions.clone(),
+            circular_dependencies: self.circular_dependencies.clone(),
+            warnings: self.warnings.clone(),
+        }
+    }
 }
 
 impl fmt::Display for ValidationReport {
@@ -176,10 +213,10 @@ impl fmt::Display for ValidationReport {
         };
 
         if self.severity() == ValidationSeverity::Clean {
-            return write!(f, "Validation: {severity} (0 issues)");
+            return write!(f, "{severity} (0 issues)");
         }
 
-        writeln!(f, "Validation: {severity} ({} issues)", self.issue_count())?;
+        writeln!(f, "{severity} ({} issues)", self.issue_count())?;
         write_section(f, "orphaned_locks", &self.orphaned_locks)?;
         write_section(f, "invalid_transitions", &self.invalid_transitions)?;
         write_section(f, "circular_dependencies", &self.circular_dependencies)?;
@@ -418,7 +455,7 @@ mod tests {
         let report = validate_snapshot(&snapshot);
 
         assert_eq!(report, ValidationReport::default());
-        assert_eq!(report.to_string(), "Validation: clean (0 issues)");
+        assert_eq!(report.to_string(), "clean (0 issues)");
     }
 
     #[test]
@@ -448,6 +485,22 @@ mod tests {
 
         assert_eq!(report.severity(), ValidationSeverity::Error);
         assert_eq!(report.exit_code(), 2);
+    }
+
+    #[test]
+    fn json_report_includes_fixed_counts() {
+        let snapshot = TasksSnapshot {
+            tasks: vec![task("task-a", TaskState::Implementing, vec![])],
+            ..TasksSnapshot::default()
+        };
+
+        let report = validate_snapshot(&snapshot).to_json_report();
+
+        assert_eq!(report.severity, ValidationSeverity::Error);
+        assert_eq!(report.exit_code, 2);
+        assert_eq!(report.issue_count, 1);
+        assert_eq!(report.error_count, 1);
+        assert_eq!(report.warning_count, 0);
     }
 
     fn task(id: &str, state: TaskState, dependencies: Vec<&str>) -> ExecutionTask {

@@ -119,7 +119,9 @@ This creates `project_memory/tasks.json`.
 
 ```bash
 ./target/release/mergegate gate validate
-./target/release/mergegate gate export-json --state implementing
+./target/release/mergegate gate --format json validate
+./target/release/mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
+./target/release/mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
 ./target/release/mergegate gate stats --format json
 ```
 
@@ -154,9 +156,11 @@ mergegate gate branch issue-123 codex/fix-login-redirect
 mergegate gate pr issue-123 456
 mergegate gate merge issue-123 <sha>
 mergegate gate validate
-mergegate gate export-json --state implementing
-mergegate gate export-md --risk HIGH
+mergegate gate --format json validate
+mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
+mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
 mergegate gate stats --format json
+mergegate gate serve
 ```
 
 Compatibility alias:
@@ -179,8 +183,9 @@ mergegate gate pr issue-123 456
 mergegate gate merge issue-123 <sha>
 mergegate gate manual-complete issue-123 --reason "docs-only change" --operator shunsuke
 mergegate gate validate
-mergegate gate export-json --state implementing
-mergegate gate export-md --since 2026-04-12
+mergegate gate --format json validate
+mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
+mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
 mergegate gate stats --format json
 mergegate gate locks
 mergegate gate dispatchable
@@ -197,6 +202,16 @@ MergeGate is intentionally moving away from:
 - vendor-specific backend identity
 
 The durable surface is the gate CLI.
+
+The mainline product direction is:
+
+- Rust-first deterministic execution protocol
+- CLI/API as the source of truth
+- MergeGate-native UI as a supporting surface
+- no multi-source PM dashboard positioning in the core product
+
+PM dashboard assets may inform MergeGate UI/UX, but cross-source orchestration remains a separate higher-level layer.
+See [docs/PRODUCT_DIRECTION.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/PRODUCT_DIRECTION.md).
 
 ## Workspace Layout
 

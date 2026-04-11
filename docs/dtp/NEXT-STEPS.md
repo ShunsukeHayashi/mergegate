@@ -1,54 +1,23 @@
-# Next Steps — Gate 可視化・検証機能の完成
+# Next Steps — 次フェーズ
 
 _Updated: 2026-04-12_
 
 ---
 
-## 直近の完了条件
+監査面の v1 は完了した前提で、ここからは外部連携と品質ゲートを広げる。
+現在の固定済み基盤は以下:
 
-Gate CLI を「ledger を読める・監査できる・運用に載せられる」状態まで引き上げる。
+- `mergegate gate validate` の text / JSON / exit code 契約
+- `export-json` / `export-md` の共通 filter 契約
+- `stats --format json` の固定分類
+- dashboard の `/api/tasks` `/api/stats` `/api/validate`
+- README / product spec の CLI-first 同期
 
-完了条件:
+本流方針:
 
-- `mergegate gate validate` が snapshot 整合性を検査できる
-- `mergegate gate export-json` / `export-md` が同じ filter 仕様を持つ
-- `mergegate gate stats --format json` のスキーマが固定される
-- dashboard が `/api/tasks` / `/api/stats` / `/api/validate` を使って CLI と同じ定義で表示する
-- README のコマンド例が現行実装と一致する
-
----
-
-## 今週
-
-### 1. Validation を正式公開
-
-- `gate validate` を追加
-- text 出力で `clean` / `warning` / `error` を先頭表示
-- JSON 出力を OpenClaw 連携向けに固定
-- 終了コードを定義
-  - `0`: clean
-  - `1`: warnings only
-  - `2`: consistency error
-
-### 2. Export / Stats の統一
-
-- `export-json` に `--state` / `--risk` / `--since`
-- `export-md` に同一 filter を追加
-- `stats` に `failed` を追加し、completed / active / waiting の分類を固定
-- CLI と dashboard が同一集計ロジックを使うようにする
-
-### 3. Dashboard API の整備
-
-- `/api/tasks`
-- `/api/stats`
-- `/api/validate`
-- 既存 `/api/status` は後方互換のため維持してもよいが、UI は新APIを優先利用する
-
-### 4. テストとドキュメント同期
-
-- `cargo test --all`
-- README の使用例を更新
-- `docs/PRODUCT_SPEC.md` の先頭を CLI-first に修正
+- MergeGate は Rust-first protocol product として進める
+- cross-source PM dashboard 化は本体スコープに含めない
+- UI は MergeGate-native surface に限定して強化する
 
 ---
 
