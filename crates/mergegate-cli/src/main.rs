@@ -1,7 +1,6 @@
 /// MergeGate CLI - Main entry point
-
-use chrono::Duration as ChronoDuration;
-use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use miyabi_core::{FeatureFlagManager, RulesLoader};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -147,6 +146,19 @@ enum ImpactRiskArg {
     Critical,
 }
 
+#[derive(Clone, Debug, Args)]
+struct ExportFilterArgs {
+    /// Filter by task state (e.g. implementing, done)
+    #[arg(long)]
+    state: Option<String>,
+    /// Filter by impact risk (LOW, MEDIUM, HIGH, CRITICAL)
+    #[arg(long)]
+    risk: Option<String>,
+    /// Filter by created-at timestamp (RFC3339)
+    #[arg(long)]
+    since: Option<String>,
+}
+
 #[derive(Subcommand)]
 enum GateCommand {
     /// Initialize project memory for the current repository
@@ -245,6 +257,20 @@ enum GateCommand {
     Locks,
     /// Show DAG levels
     Dag,
+    /// Validate snapshot consistency
+    Validate,
+    /// Export tasks as JSON
+    ExportJson {
+        #[command(flatten)]
+        filter: ExportFilterArgs,
+    },
+    /// Export tasks as Markdown
+    ExportMd {
+        #[command(flatten)]
+        filter: ExportFilterArgs,
+    },
+    /// Show task statistics
+    Stats,
     /// Show dispatchable tasks
     Dispatchable,
     /// Serve a minimal web dashboard
@@ -1069,6 +1095,7 @@ fn handle_gate_command(
     use miyabi_core::store::{CompletionMode, ImpactRiskLevel};
 
     let protocol = DeterministicExecutionProtocol::from_store_path(store_path.to_path_buf());
+    let mut success_code = 0;
     let actor = "miyabi-cli";
     let node = std::env::var("HOSTNAME")
         .ok()
@@ -1365,6 +1392,50 @@ fn handle_gate_command(
                 }
             }
         }),
+        GateCommand::Validate => load_snapshot(store_path)
+            .map_err(ProtocolError::Internal)
+            .map(|snapshot| {
+                let report = miyabi_core::validate::validate_snapshot(&snapshot);
+                success_code = report.exit_code();
+                if emit_event {
+                    emit_gate_event("validation_reported", None, &report);
+                } else if matches!(format, OutputFormat::Json) {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&validation_report_json(&report)).unwrap()
+                    );
+                } else {
+                    println!("{report}");
+                }
+            }),
+        GateCommand::ExportJson { filter } => load_snapshot(store_path)
+            .map_err(ProtocolError::Internal)
+            .and_then(|snapshot| {
+                let filter = parse_export_filter(filter)
+                    .map_err(|error| ProtocolError::input(error.to_string()))?;
+                let export = miyabi_core::export::export_json(&snapshot, filter);
+                println!("{export}");
+                Ok(())
+            }),
+        GateCommand::ExportMd { filter } => load_snapshot(store_path)
+            .map_err(ProtocolError::Internal)
+            .and_then(|snapshot| {
+                let filter = parse_export_filter(filter)
+                    .map_err(|error| ProtocolError::input(error.to_string()))?;
+                let export = miyabi_core::export_md::export_markdown(&snapshot, filter.as_ref());
+                println!("{export}");
+                Ok(())
+            }),
+        GateCommand::Stats => load_snapshot(store_path)
+            .map_err(ProtocolError::Internal)
+            .map(|snapshot| {
+                let stats = miyabi_core::stats::compute_stats(&snapshot);
+                if matches!(format, OutputFormat::Json) {
+                    println!("{}", serde_json::to_string_pretty(&stats).unwrap());
+                } else {
+                    println!("{stats}");
+                }
+            }),
         GateCommand::Dispatchable => protocol.dispatchable().map(|report| {
             if emit_event {
                 emit_gate_event("dispatchable_reported", None, &report);
@@ -1467,7 +1538,7 @@ fn handle_gate_command(
     };
 
     Ok(match result {
-        Ok(()) => 0,
+        Ok(()) => success_code,
         Err(ProtocolError::GateRejected(message)) => {
             emit_gate_error(format, emit_event, "gate_rejected", &message);
             1
@@ -1484,6 +1555,56 @@ fn handle_gate_command(
             emit_gate_error(format, emit_event, "internal_error", &error.to_string());
             1
         }
+    })
+}
+
+fn load_snapshot(
+    store_path: &std::path::Path,
+) -> Result<miyabi_core::store::TasksSnapshot, miyabi_core::Error> {
+    let snapshot_store = miyabi_core::store::SnapshotStore::new(
+        store_path.to_path_buf(),
+        store_path
+            .parent()
+            .map(|parent| parent.join(".tasks.lock"))
+            .unwrap_or_else(|| PathBuf::from(".tasks.lock")),
+    );
+    snapshot_store.load()
+}
+
+fn parse_export_filter(
+    args: ExportFilterArgs,
+) -> anyhow::Result<Option<miyabi_core::export::ExportFilter>> {
+    if args.state.is_none() && args.risk.is_none() && args.since.is_none() {
+        return Ok(None);
+    }
+
+    let since = args.since.as_deref().map(parse_export_since).transpose()?;
+
+    Ok(Some(miyabi_core::export::ExportFilter {
+        state: args.state,
+        risk_level: args.risk,
+        since,
+    }))
+}
+
+fn parse_export_since(value: &str) -> anyhow::Result<DateTime<Utc>> {
+    let parsed = DateTime::parse_from_rfc3339(value)
+        .map(|timestamp| timestamp.with_timezone(&Utc))
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                .map(|date| date.and_hms_opt(0, 0, 0).expect("valid midnight").and_utc())
+        })?;
+    Ok(parsed)
+}
+
+fn validation_report_json(report: &miyabi_core::validate::ValidationReport) -> serde_json::Value {
+    serde_json::json!({
+        "severity": report.severity(),
+        "exit_code": report.exit_code(),
+        "orphaned_locks": report.orphaned_locks,
+        "invalid_transitions": report.invalid_transitions,
+        "circular_dependencies": report.circular_dependencies,
+        "warnings": report.warnings,
     })
 }
 
@@ -1622,7 +1743,11 @@ fn print_gate_task_status(task: &miyabi_core::store::ExecutionTask) {
         miyabi_core::store::TaskState::Pending | miyabi_core::store::TaskState::Draft => {
             if task.impact.is_none() {
                 println!("next:");
-                println!("  {} {} --risk low --symbols 0", gate_command("impact"), task.id);
+                println!(
+                    "  {} {} --risk low --symbols 0",
+                    gate_command("impact"),
+                    task.id
+                );
                 println!(
                     "  {} {} --agent <name> --node <machine> --files \"path/to/file\"",
                     gate_command("assign"),
@@ -1665,7 +1790,10 @@ fn print_gate_snapshot_status(
         println!("this is not an error. it means the ledger is empty.");
         println!("next:");
         println!("  {}", gate_command("init"));
-        println!("  {} --issue <N> --title \"Your task\"", gate_command("register"));
+        println!(
+            "  {} --issue <N> --title \"Your task\"",
+            gate_command("register")
+        );
         println!("  {}", gate_command("guide"));
         return;
     }
@@ -2222,9 +2350,30 @@ cargo clippy --all-targets --all-features -- -D warnings
   Show DAG dependency levels.
   {{GATE}} dag
 
+### validate
+  Validate snapshot consistency.
+  {{GATE}} validate
+  {{GATE}} --format json validate
+
 ### dispatchable
   Show tasks ready to be worked on (dependencies resolved, no lock).
   {{GATE}} dispatchable
+
+### export-json
+  Export tasks as filtered JSON.
+  {{GATE}} export-json
+  {{GATE}} export-json --state implementing --risk HIGH
+  {{GATE}} export-json --since 2026-04-12T00:00:00Z
+
+### export-md
+  Export tasks as filtered Markdown.
+  {{GATE}} export-md
+  {{GATE}} export-md --state pending --since 2026-04-12
+
+### stats
+  Show aggregate task statistics.
+  {{GATE}} stats
+  {{GATE}} --format json stats
 
 ### attach
   View context attachments for a task.
@@ -2286,79 +2435,196 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f4f7fb;
-      --panel: #ffffff;
-      --text: #162033;
+      --bg: #f5f7fb;
+      --panel: rgba(255,255,255,0.92);
+      --panel-strong: #ffffff;
+      --text: #172033;
       --muted: #667085;
-      --border: #d6dfeb;
+      --border: #d9e1ec;
+      --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+      --success: #15803d;
+      --warning: #b45309;
+      --danger: #b42318;
+      --info: #2563eb;
+      --neutral: #475467;
+      --hero-a: #eff6ff;
+      --hero-b: #fdf2f8;
+      --hero-c: #f8fafc;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
-      background: linear-gradient(180deg, #eef4ff 0%, #f8fafc 55%, #f4f7fb 100%);
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
+        radial-gradient(circle at top right, rgba(190, 24, 93, 0.08), transparent 28%),
+        linear-gradient(180deg, var(--hero-a) 0%, var(--hero-b) 35%, var(--hero-c) 100%);
     }
     .shell {
-      max-width: 1120px;
+      max-width: 1240px;
       margin: 0 auto;
-      padding: 16px;
+      padding: 18px;
     }
-    header, .panel {
-      background: rgba(255, 255, 255, 0.9);
+    .panel, .hero {
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
     }
-    header {
-      padding: 20px;
-      margin-bottom: 16px;
+    .hero {
+      padding: 22px;
+      margin-bottom: 18px;
+      display: grid;
+      gap: 18px;
+    }
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
     }
     h1 {
       margin: 0 0 8px;
-      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.05;
     }
     h2 {
-      margin: 0 0 12px;
-      font-size: 1.05rem;
+      margin: 0 0 14px;
+      font-size: 1rem;
+      letter-spacing: 0.01em;
     }
-    .subtitle, .meta {
-      margin: 0;
+    h3 {
+      margin: 0 0 8px;
+      font-size: 0.98rem;
+    }
+    p { margin: 0; }
+    .subtitle, .meta, .muted, .list-meta {
       color: var(--muted);
     }
-    .grid {
-      display: grid;
-      gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    .hero-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border: 1px solid transparent;
+      white-space: nowrap;
     }
-    .panel {
+    .hero-status.clean {
+      color: var(--success);
+      background: rgba(21, 128, 61, 0.12);
+      border-color: rgba(21, 128, 61, 0.2);
+    }
+    .hero-status.warning {
+      color: var(--warning);
+      background: rgba(180, 83, 9, 0.12);
+      border-color: rgba(180, 83, 9, 0.2);
+    }
+    .hero-status.error {
+      color: var(--danger);
+      background: rgba(180, 35, 24, 0.12);
+      border-color: rgba(180, 35, 24, 0.2);
+    }
+    .hero-summary {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .metric {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: 18px;
       padding: 16px;
     }
-    .task-list, .dag-list, .lock-list {
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 800;
+      line-height: 1;
+    }
+    .metric-note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .layout {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+    .panel {
+      padding: 18px;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-kicker {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .action-list, .task-list, .detail-list {
       list-style: none;
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 10px;
+      gap: 12px;
     }
-    .task-item, .dag-item, .lock-item {
-      padding: 12px;
+    .action-item, .task-item, .detail-item {
       border: 1px solid var(--border);
-      border-radius: 14px;
-      background: #fbfdff;
+      border-radius: 18px;
+      background: var(--panel-strong);
+      padding: 14px;
     }
+    .action-item {
+      display: grid;
+      gap: 6px;
+    }
+    .action-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .action-label.error { color: var(--danger); }
+    .action-label.warning { color: var(--warning); }
+    .action-label.info { color: var(--info); }
     .task-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
     }
     .task-title {
-      font-weight: 600;
+      font-weight: 700;
+      line-height: 1.35;
       word-break: break-word;
     }
-    .task-meta, .dag-meta, .lock-meta {
+    .task-id {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 3px;
+    }
+    .task-meta {
       font-size: 0.9rem;
       color: var(--muted);
     }
@@ -2366,216 +2632,469 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
       display: inline-flex;
       justify-content: center;
       align-items: center;
-      min-width: 92px;
-      padding: 4px 10px;
+      min-width: 96px;
+      padding: 5px 11px;
       border-radius: 999px;
-      color: #ffffff;
-      font-size: 0.82rem;
-      font-weight: 700;
+      color: white;
+      font-size: 0.8rem;
+      font-weight: 800;
       text-transform: lowercase;
+      letter-spacing: 0.01em;
+    }
+    .badge.pending { background: var(--neutral); }
+    .badge.implementing { background: var(--info); }
+    .badge.reviewing { background: #7c3aed; }
+    .badge.done, .badge.merged { background: var(--success); }
+    .badge.blocked, .badge.failed, .badge.cancelled { background: var(--danger); }
+    .badge.draft, .badge.analyzing, .badge.deploying, .badge.awaiting_github_sync {
+      background: #64748b;
+    }
+    .summary-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      background: #f3f6fb;
+      color: var(--text);
+      border: 1px solid var(--border);
     }
     .empty {
       color: var(--muted);
       font-style: italic;
+      padding: 2px 0;
+    }
+    details {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel-strong);
+      padding: 14px 16px;
+    }
+    summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 700;
+    }
+    summary::-webkit-details-marker { display: none; }
+    .details-grid {
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .detail-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .hero-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
     @media (max-width: 640px) {
       .shell { padding: 12px; }
-      header, .panel { border-radius: 14px; }
-      .task-top { align-items: flex-start; flex-direction: column; }
+      .hero, .panel { border-radius: 18px; }
+      .hero-top, .task-top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .hero-summary {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="shell">
-    <header>
-      <h1>MergeGate Dashboard</h1>
-      <p class="subtitle">Deterministic Task Protocol live view</p>
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>MergeGate Control Tower</h1>
+          <p class="subtitle">まず結論、その次にやること、そのあと詳細を見るための画面です。</p>
+        </div>
+        <div id="hero-status" class="hero-status clean">Loading status...</div>
+      </div>
       <p class="meta" id="meta">Loading...</p>
-    </header>
-    <section class="grid">
-      <article class="panel" id="stats-panel">
-        <h2>Completion Stats</h2>
-        <div id="stats" class="empty">Loading stats...</div>
-      </article>
-      <article class="panel">
-        <h2>Tasks</h2>
-        <ul id="tasks" class="task-list"><li class="empty">Loading tasks...</li></ul>
-      </article>
-      <article class="panel">
-        <h2>DAG Levels</h2>
-        <ul id="dag" class="dag-list"><li class="empty">Loading DAG...</li></ul>
-      </article>
-      <article class="panel">
-        <h2>File Locks</h2>
-        <ul id="locks" class="lock-list"><li class="empty">Loading locks...</li></ul>
-      </article>
+      <div class="hero-summary">
+        <div class="metric">
+          <div class="metric-label">Dispatchable Tasks</div>
+          <div class="metric-value" id="metric-dispatchable">-</div>
+          <div class="metric-note">いま着手できるタスク数</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Validation Issues</div>
+          <div class="metric-value" id="metric-issues">-</div>
+          <div class="metric-note">lock / transition / cycle / warning</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Active Locks</div>
+          <div class="metric-value" id="metric-locks">-</div>
+          <div class="metric-note">いま競合しうるファイルロック数</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Completion</div>
+          <div class="metric-value" id="metric-completion">-</div>
+          <div class="metric-note">全体の完了率</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Next Actions</h2>
+              <p class="section-kicker">ここだけ見れば、次に何をすべきかが分かります。</p>
+            </div>
+          </div>
+          <ul id="next-actions" class="action-list"><li class="empty">Loading actions...</li></ul>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Work Queues</h2>
+              <p class="section-kicker">着手可能、進行中、詰まり、完了を分けて表示します。</p>
+            </div>
+          </div>
+          <div class="stack">
+            <div>
+              <h3>Ready To Start</h3>
+              <ul id="queue-ready" class="task-list"><li class="empty">Loading...</li></ul>
+            </div>
+            <div>
+              <h3>Needs Attention</h3>
+              <ul id="queue-attention" class="task-list"><li class="empty">Loading...</li></ul>
+            </div>
+            <div>
+              <h3>In Progress</h3>
+              <ul id="queue-progress" class="task-list"><li class="empty">Loading...</li></ul>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="stack">
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Current Health</h2>
+              <p class="section-kicker">今のシステム状態を短くまとめます。</p>
+            </div>
+          </div>
+          <div id="health-summary" class="empty">Loading health...</div>
+          <div id="health-pills" class="summary-strip"></div>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Active Locks</h2>
+              <p class="section-kicker">競合の原因になりやすい箇所です。</p>
+            </div>
+          </div>
+          <ul id="locks" class="task-list"><li class="empty">Loading locks...</li></ul>
+        </article>
+
+        <details open>
+          <summary>Deeper Detail</summary>
+          <div class="details-grid">
+            <div class="detail-item">
+              <strong>Validation Detail</strong>
+              <ul id="validation-detail" class="detail-list"><li class="empty">Loading...</li></ul>
+            </div>
+            <div class="detail-item">
+              <strong>DAG Levels</strong>
+              <ul id="dag" class="detail-list"><li class="empty">Loading...</li></ul>
+            </div>
+          </div>
+        </details>
+      </div>
     </section>
   </div>
   <script>
-    const stateColors = {
-      pending: "#6b7280",
-      implementing: "#2563eb",
-      merged: "#15803d",
-      done: "#15803d",
-      blocked: "#dc2626"
-    };
+    const ACTIVE_STATES = new Set(["analyzing", "implementing", "reviewing", "deploying"]);
+    const WAITING_STATES = new Set(["draft", "pending", "blocked", "awaiting_github_sync"]);
+    const DONE_STATES = new Set(["done", "merged"]);
 
-    function setEmpty(id, message) {
-      document.getElementById(id).innerHTML = '<li class="empty">' + message + '</li>';
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
     }
 
-    function colorForState(state) {
-      return stateColors[state] || "#7c3aed";
+    function setListEmpty(id, message) {
+      document.getElementById(id).innerHTML = '<li class="empty">' + escapeHtml(message) + '</li>';
     }
 
-    function renderTasks(snapshot) {
-      const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
-      const el = document.getElementById("tasks");
-      if (tasks.length === 0) {
-        setEmpty("tasks", "No tasks in snapshot");
+    function badgeClass(state) {
+      return "badge " + (state || "unknown");
+    }
+
+    function taskMeta(task) {
+      const deps = Array.isArray(task.dependencies) && task.dependencies.length > 0
+        ? task.dependencies.join(", ")
+        : "none";
+      return "priority " + task.priority + " | deps: " + deps;
+    }
+
+    function renderTaskList(id, tasks, emptyMessage) {
+      const el = document.getElementById(id);
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        setListEmpty(id, emptyMessage);
         return;
       }
 
-      el.innerHTML = "";
-      for (const task of tasks) {
-        const item = document.createElement("li");
-        item.className = "task-item";
+      el.innerHTML = tasks.map(task => {
+        const state = task.current_state || "unknown";
+        return (
+          '<li class="task-item">' +
+            '<div class="task-top">' +
+              '<div>' +
+                '<div class="task-title">' + escapeHtml(task.title) + '</div>' +
+                '<div class="task-id">' + escapeHtml(task.id) + '</div>' +
+              '</div>' +
+              '<span class="' + badgeClass(state) + '">' + escapeHtml(state) + '</span>' +
+            '</div>' +
+            '<div class="task-meta">' + escapeHtml(taskMeta(task)) + '</div>' +
+          '</li>'
+        );
+      }).join("");
+    }
 
-        const top = document.createElement("div");
-        top.className = "task-top";
-
-        const title = document.createElement("div");
-        title.className = "task-title";
-        title.textContent = task.title + " (" + task.id + ")";
-
-        const badge = document.createElement("span");
-        badge.className = "badge";
-        badge.style.background = colorForState(task.current_state);
-        badge.textContent = task.current_state;
-
-        top.appendChild(title);
-        top.appendChild(badge);
-
-        const meta = document.createElement("div");
-        meta.className = "task-meta";
-        const deps = Array.isArray(task.dependencies) && task.dependencies.length > 0
-          ? task.dependencies.join(", ")
-          : "none";
-        meta.textContent = "priority " + task.priority + " | deps: " + deps;
-
-        item.appendChild(top);
-        item.appendChild(meta);
-        el.appendChild(item);
+    function renderLockList(locks) {
+      const entries = Object.entries(locks || {});
+      if (entries.length === 0) {
+        setListEmpty("locks", "No active locks");
+        return;
       }
+
+      document.getElementById("locks").innerHTML = entries.map(([file, lock]) => (
+        '<li class="task-item">' +
+          '<div class="task-title">' + escapeHtml(file) + '</div>' +
+          '<div class="task-meta">' +
+            escapeHtml(lock.agent + "@" + lock.node + " | task: " + lock.task_id) +
+          '</div>' +
+        '</li>'
+      )).join("");
+    }
+
+    function renderDetailList(id, values, emptyMessage) {
+      if (!Array.isArray(values) || values.length === 0) {
+        setListEmpty(id, emptyMessage);
+        return;
+      }
+
+      document.getElementById(id).innerHTML = values
+        .map(value => '<li class="detail-item"><div class="list-meta">' + escapeHtml(value) + '</div></li>')
+        .join("");
     }
 
     function renderDag(report) {
       const levels = Array.isArray(report.levels) ? report.levels : [];
-      const el = document.getElementById("dag");
       if (levels.length === 0) {
-        setEmpty("dag", "No DAG levels available");
+        setListEmpty("dag", "No DAG levels available");
         return;
       }
 
-      el.innerHTML = "";
-      levels.forEach((level, index) => {
-        const item = document.createElement("li");
-        item.className = "dag-item";
-
-        const title = document.createElement("div");
-        title.className = "task-title";
-        title.textContent = "Level " + index;
-
-        const meta = document.createElement("div");
-        meta.className = "dag-meta";
-        meta.textContent = Array.isArray(level) && level.length > 0 ? level.join(", ") : "empty";
-
-        item.appendChild(title);
-        item.appendChild(meta);
-        el.appendChild(item);
-      });
+      document.getElementById("dag").innerHTML = levels.map((level, index) => (
+        '<li class="detail-item">' +
+          '<strong>Level ' + index + '</strong>' +
+          '<div class="list-meta">' + escapeHtml(level.length > 0 ? level.join(", ") : "empty") + '</div>' +
+        '</li>'
+      )).join("");
     }
 
-    function renderLocks(locks) {
-      const entries = Object.entries(locks || {});
-      const el = document.getElementById("locks");
-      if (entries.length === 0) {
-        setEmpty("locks", "No active file locks");
-        return;
-      }
-
-      el.innerHTML = "";
-      for (const [file, lock] of entries) {
-        const item = document.createElement("li");
-        item.className = "lock-item";
-
-        const title = document.createElement("div");
-        title.className = "task-title";
-        title.textContent = file;
-
-        const meta = document.createElement("div");
-        meta.className = "lock-meta";
-        meta.textContent = lock.agent + "@" + lock.node + " | task: " + lock.task_id;
-
-        item.appendChild(title);
-        item.appendChild(meta);
-        el.appendChild(item);
-      }
+    function validationIssueCount(report) {
+      return (
+        (report.orphaned_locks || []).length +
+        (report.invalid_transitions || []).length +
+        (report.circular_dependencies || []).length +
+        (report.warnings || []).length
+      );
     }
 
-    function renderStats(snapshot) {
-      const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
-      if (tasks.length === 0) {
-        document.getElementById("stats").innerHTML = '<span class="empty">No tasks</span>';
-        return;
+    function setHeroStatus(severity, issueCount, dispatchableCount) {
+      const el = document.getElementById("hero-status");
+      const statusText = severity === "error"
+        ? "Action Needed"
+        : severity === "warning"
+          ? "Review Needed"
+          : dispatchableCount > 0
+            ? "Ready To Move"
+            : "Healthy";
+      el.className = "hero-status " + severity;
+      el.textContent = statusText + " · " + issueCount + " issue(s)";
+    }
+
+    function renderMetrics(stats, locks, dispatchableCount, issueCount) {
+      document.getElementById("metric-dispatchable").textContent = String(dispatchableCount);
+      document.getElementById("metric-issues").textContent = String(issueCount);
+      document.getElementById("metric-locks").textContent = String(Object.keys(locks || {}).length);
+      document.getElementById("metric-completion").textContent =
+        (Math.round(stats.completion_rate_pct || 0)) + "%";
+    }
+
+    function renderHealth(stats, validation, tasks, locks) {
+      const parts = [];
+      if (validation.severity === "error") {
+        parts.push("整合性エラーがあるため、まず validation を解消する必要があります。");
+      } else if (validation.severity === "warning") {
+        parts.push("致命的ではない warning があります。作業前に確認すると安全です。");
+      } else {
+        parts.push("ledger の整合性は保たれています。");
       }
-      const done = tasks.filter(t => t.current_state === "done" || t.current_state === "merged").length;
-      const active = tasks.filter(t => t.current_state === "implementing" || t.current_state === "reviewing").length;
-      const pending = tasks.filter(t => t.current_state === "pending" || t.current_state === "draft" || t.current_state === "blocked").length;
-      const total = tasks.length;
-      const pct = total > 0 ? Math.round(done / total * 100) : 0;
 
-      const bar = '<div style="background:#e5e7eb;border-radius:8px;height:20px;margin:8px 0;overflow:hidden">' +
-        '<div style="background:#15803d;height:100%;width:' + pct + '%;transition:width .3s"></div></div>';
+      const active = tasks.filter(task => ACTIVE_STATES.has(task.current_state)).length;
+      const blocked = tasks.filter(task => task.current_state === "blocked").length;
+      parts.push(active > 0 ? active + " 件のタスクが進行中です。" : "進行中タスクはありません。");
+      parts.push(blocked > 0 ? blocked + " 件の blocked タスクがあります。" : "blocked タスクはありません。");
 
-      document.getElementById("stats").innerHTML =
-        '<div style="font-size:2rem;font-weight:700">' + pct + '%</div>' +
-        '<div class="task-meta">completed</div>' + bar +
-        '<div class="task-meta">' + done + ' done / ' + active + ' active / ' + pending + ' pending / ' + total + ' total</div>';
+      document.getElementById("health-summary").textContent = parts.join(" ");
+      document.getElementById("health-pills").innerHTML = [
+        ["completed", stats.completed + " completed"],
+        ["active", stats.active + " active"],
+        ["waiting", stats.waiting + " waiting"],
+        ["failed", stats.failed + " failed"],
+        ["locks", Object.keys(locks || {}).length + " locks"]
+      ].map(([_, label]) => '<span class="pill">' + escapeHtml(label) + '</span>').join("");
+    }
+
+    function renderNextActions(tasks, validation, locks) {
+      const actions = [];
+
+      if ((validation.invalid_transitions || []).length > 0 || (validation.orphaned_locks || []).length > 0) {
+        actions.push({
+          kind: "error",
+          title: "Fix ledger consistency first",
+          body: "Run `mergegate gate validate` and resolve lock or transition mismatches before assigning more work."
+        });
+      }
+
+      const blocked = tasks.filter(task => task.current_state === "blocked");
+      if (blocked.length > 0) {
+        actions.push({
+          kind: "warning",
+          title: "Unblock blocked tasks",
+          body: blocked.slice(0, 3).map(task => task.id).join(", ") + " need dependency or review follow-up."
+        });
+      }
+
+      const ready = tasks.filter(task => task.current_state === "pending" && (!task.dependencies || task.dependencies.length === 0));
+      if (ready.length > 0) {
+        actions.push({
+          kind: "info",
+          title: "Start a ready task",
+          body: ready.slice(0, 3).map(task => task.id + " — " + task.title).join(" | ")
+        });
+      }
+
+      if (actions.length === 0) {
+        actions.push({
+          kind: "info",
+          title: "No urgent action",
+          body: "The ledger looks stable. Review in-progress work or wait for the next task to become dispatchable."
+        });
+      }
+
+      document.getElementById("next-actions").innerHTML = actions.map(action => (
+        '<li class="action-item">' +
+          '<div class="action-label ' + action.kind + '">' + escapeHtml(action.kind) + '</div>' +
+          '<div class="task-title">' + escapeHtml(action.title) + '</div>' +
+          '<div class="task-meta">' + escapeHtml(action.body) + '</div>' +
+        '</li>'
+      )).join("");
+    }
+
+    function renderQueues(tasks, validation) {
+      const ready = tasks.filter(task => task.current_state === "pending");
+      const attention = tasks.filter(task =>
+        task.current_state === "blocked" ||
+        task.current_state === "failed" ||
+        task.current_state === "awaiting_github_sync"
+      );
+      const progress = tasks.filter(task => ACTIVE_STATES.has(task.current_state));
+
+      renderTaskList("queue-ready", ready.slice(0, 6), "No ready tasks");
+      renderTaskList("queue-attention", attention.slice(0, 6), validation.severity === "error" ? "Validation has the main issue right now" : "No tasks need attention");
+      renderTaskList("queue-progress", progress.slice(0, 6), "No work in progress");
+    }
+
+    function renderValidationDetail(report) {
+      const details = [];
+      for (const item of report.orphaned_locks || []) details.push("orphaned lock: " + item);
+      for (const item of report.invalid_transitions || []) details.push("invalid transition: " + item);
+      for (const item of report.circular_dependencies || []) details.push("cycle: " + item);
+      for (const item of report.warnings || []) details.push("warning: " + item);
+      renderDetailList("validation-detail", details, "No validation issues");
     }
 
     async function refresh() {
       try {
-        const [statusRes, locksRes, dagRes] = await Promise.all([
-          fetch("/api/status"),
+        const [tasksRes, statsRes, validateRes, locksRes, dagRes] = await Promise.all([
+          fetch("/api/tasks"),
+          fetch("/api/stats"),
+          fetch("/api/validate"),
           fetch("/api/locks"),
           fetch("/api/dag")
         ]);
 
-        if (!statusRes.ok || !locksRes.ok || !dagRes.ok) {
+        if (!tasksRes.ok || !statsRes.ok || !validateRes.ok || !locksRes.ok || !dagRes.ok) {
           throw new Error("API request failed");
         }
 
-        const [status, locks, dag] = await Promise.all([
-          statusRes.json(),
+        const [snapshot, stats, validation, locks, dag] = await Promise.all([
+          tasksRes.json(),
+          statsRes.json(),
+          validateRes.json(),
           locksRes.json(),
           dagRes.json()
         ]);
 
-        renderStats(status);
-        renderTasks(status);
-        renderLocks(locks);
+        const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+        const dispatchableCount = tasks.filter(task => task.current_state === "pending").length;
+        const issueCount = validationIssueCount(validation);
+
+        setHeroStatus(validation.severity || "clean", issueCount, dispatchableCount);
+        renderMetrics(stats, locks, dispatchableCount, issueCount);
+        renderHealth(stats, validation, tasks, locks);
+        renderNextActions(tasks, validation, locks);
+        renderQueues(tasks, validation);
+        renderLockList(locks);
+        renderValidationDetail(validation);
         renderDag(dag);
 
         document.getElementById("meta").textContent =
-          "Snapshot version " + status.version + " | updated " + status.generated_at +
-          " | auto-refresh every 3s";
+          "Snapshot version " + snapshot.version +
+          " · updated " + snapshot.generated_at +
+          " · auto-refresh every 3s";
       } catch (error) {
+        document.getElementById("hero-status").className = "hero-status error";
+        document.getElementById("hero-status").textContent = "Dashboard Unavailable";
         document.getElementById("meta").textContent = "Refresh failed: " + error.message;
-        document.getElementById("stats").innerHTML = '<span class="empty">Failed to load</span>';
-        setEmpty("tasks", "Failed to load tasks");
-        setEmpty("dag", "Failed to load DAG");
-        setEmpty("locks", "Failed to load locks");
+        document.getElementById("health-summary").textContent = "Dashboard data could not be loaded.";
+        document.getElementById("health-pills").innerHTML = "";
+        setListEmpty("next-actions", "Failed to load actions");
+        setListEmpty("queue-ready", "Failed to load tasks");
+        setListEmpty("queue-attention", "Failed to load tasks");
+        setListEmpty("queue-progress", "Failed to load tasks");
+        setListEmpty("locks", "Failed to load locks");
+        setListEmpty("validation-detail", "Failed to load validation");
+        setListEmpty("dag", "Failed to load DAG");
       }
     }
 
@@ -2596,7 +3115,8 @@ fn serve_dashboard(store_path: &std::path::Path, port: u16) -> anyhow::Result<()
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                if let Err(error) = handle_dashboard_connection(&protocol, &mut stream) {
+                if let Err(error) = handle_dashboard_connection(&protocol, store_path, &mut stream)
+                {
                     eprintln!("dashboard request error: {error}");
                 }
             }
@@ -2609,6 +3129,7 @@ fn serve_dashboard(store_path: &std::path::Path, port: u16) -> anyhow::Result<()
 
 fn handle_dashboard_connection(
     protocol: &miyabi_core::protocol::DeterministicExecutionProtocol,
+    store_path: &std::path::Path,
     stream: &mut TcpStream,
 ) -> anyhow::Result<()> {
     let mut request_line = String::new();
@@ -2636,9 +3157,20 @@ fn handle_dashboard_connection(
             "text/html; charset=utf-8",
             POLARIS_DASHBOARD_HTML.as_bytes(),
         )?,
-        "/api/status" => {
+        "/api/tasks" | "/api/status" => {
             let body =
-                serde_json::to_vec_pretty(&protocol.status(None)?).map_err(io::Error::other)?;
+                serde_json::to_vec_pretty(&load_snapshot(store_path)?).map_err(io::Error::other)?;
+            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+        }
+        "/api/stats" => {
+            let stats = miyabi_core::stats::compute_stats(&load_snapshot(store_path)?);
+            let body = serde_json::to_vec_pretty(&stats).map_err(io::Error::other)?;
+            write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
+        }
+        "/api/validate" => {
+            let report = miyabi_core::validate::validate_snapshot(&load_snapshot(store_path)?);
+            let body = serde_json::to_vec_pretty(&validation_report_json(&report))
+                .map_err(io::Error::other)?;
             write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body)?;
         }
         "/api/locks" => {
@@ -2741,5 +3273,104 @@ fn bus_enqueue(task_id: &str, title: &str, store_path: &std::path::Path) {
                 serde_json::to_string(&entry).unwrap_or_default()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use miyabi_core::store::{ExecutionTask, TaskState, TasksSnapshot};
+    use miyabi_core::validate::validate_snapshot;
+
+    #[test]
+    fn parse_export_since_accepts_rfc3339_and_date_only() {
+        assert_eq!(
+            parse_export_since("2026-04-12T09:30:00Z").unwrap(),
+            Utc.with_ymd_and_hms(2026, 4, 12, 9, 30, 0).unwrap()
+        );
+        assert_eq!(
+            parse_export_since("2026-04-12").unwrap(),
+            Utc.with_ymd_and_hms(2026, 4, 12, 0, 0, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn parse_export_filter_returns_none_when_empty() {
+        let filter = parse_export_filter(ExportFilterArgs {
+            state: None,
+            risk: None,
+            since: None,
+        })
+        .unwrap();
+
+        assert!(filter.is_none());
+    }
+
+    #[test]
+    fn validate_returns_warning_exit_code_for_missing_dependency_reference() {
+        let path = write_snapshot(TasksSnapshot {
+            tasks: vec![task_with_missing_dependency("task-a")],
+            ..TasksSnapshot::default()
+        });
+
+        let code =
+            handle_gate_command(&OutputFormat::Json, false, &path, GateCommand::Validate).unwrap();
+
+        assert_eq!(code, 1);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn validate_returns_error_exit_code_for_invalid_transition() {
+        let path = write_snapshot(TasksSnapshot {
+            tasks: vec![{
+                let mut task = ExecutionTask::new("task-a", "Task A");
+                task.current_state = TaskState::Implementing;
+                task
+            }],
+            ..TasksSnapshot::default()
+        });
+
+        let code =
+            handle_gate_command(&OutputFormat::Json, false, &path, GateCommand::Validate).unwrap();
+
+        assert_eq!(code, 2);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn validation_report_json_includes_severity_and_exit_code() {
+        let report = validate_snapshot(&TasksSnapshot {
+            tasks: vec![{
+                let mut task = ExecutionTask::new("task-a", "Task A");
+                task.current_state = TaskState::Implementing;
+                task
+            }],
+            ..TasksSnapshot::default()
+        });
+
+        let value = validation_report_json(&report);
+
+        assert_eq!(value["severity"], "error");
+        assert_eq!(value["exit_code"], 2);
+        assert!(value["invalid_transitions"].is_array());
+    }
+
+    fn write_snapshot(snapshot: TasksSnapshot) -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("mergegate-test-{unique}.json"));
+        std::fs::write(&path, serde_json::to_vec_pretty(&snapshot).unwrap()).unwrap();
+        path
+    }
+
+    fn task_with_missing_dependency(id: &str) -> ExecutionTask {
+        let mut task = ExecutionTask::new(id, "Task A");
+        task.dependencies = vec!["missing-task".to_string()];
+        task.current_state = TaskState::Pending;
+        task
     }
 }

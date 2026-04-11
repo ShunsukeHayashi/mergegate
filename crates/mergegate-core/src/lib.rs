@@ -11,6 +11,8 @@ pub mod dag;
 pub mod dream;
 pub mod error;
 pub mod error_policy;
+pub mod export;
+pub mod export_md;
 pub mod feature_flags;
 pub mod gate;
 pub mod git;
@@ -26,12 +28,14 @@ pub mod protocol;
 pub mod retry;
 pub mod rules;
 pub mod session;
+pub mod stats;
 pub mod store;
 pub mod streaming;
 pub mod token;
 pub mod tool;
 pub mod tools;
 pub mod types;
+pub mod validate;
 pub mod workflow;
 
 pub use agent::{

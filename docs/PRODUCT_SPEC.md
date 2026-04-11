@@ -2,14 +2,15 @@
 
 **Version**: 1.0.0
 **Status**: Draft
-**Last Updated**: 2025-11-22
+**Last Updated**: 2026-04-12
 
 ---
 
 ## 1. Executive Summary
 
 ### 1.1 Product Vision
-OpenAI Codex CLIと同等の機能を持ち、Miyabiの拡張機能を統合した次世代AI開発CLIツール
+AIコーディングエージェントの前段に置く、engine-agnostic な gate CLI を提供する。
+現在の製品中心は TUI ではなく `mergegate gate ...` であり、ledger の記録・検証・可視化を最優先に進める。
 
 ### 1.2 Target Users
 - ソフトウェア開発者
@@ -18,13 +19,28 @@ OpenAI Codex CLIと同等の機能を持ち、Miyabiの拡張機能を統合し�
 
 ### 1.3 Core Value Proposition
 - **高速**: Rust実装による100ms以下の起動時間
-- **美しい**: Ratatui TUIによるリッチなターミナル体験
-- **自律的**: 完全自律型タスク実行
-- **拡張性**: プラグイン対応
+- **安全**: lock / impact / merge evidence を明示的に記録
+- **監査可能**: validate / export / stats / dashboard で ledger を点検できる
+- **拡張性**: OpenClaw や外部自動化へ JSON 出力で接続できる
+
+### 1.4 Current Product Surface
+
+現在の安定インターフェースは以下:
+
+- `mergegate gate status`
+- `mergegate gate validate`
+- `mergegate gate export-json`
+- `mergegate gate export-md`
+- `mergegate gate stats`
+- `mergegate gate serve`
+
+TUI / built-in chat runtime / vendor-specific execution機能は将来拡張であり、現段階では必須スコープではない。
 
 ---
 
 ## 2. Functional Requirements
+
+> Note: 以下の TUI/LLM 要件は将来ロードマップとして保持している。直近開発の primary surface は gate CLI と web dashboard である。
 
 ### 2.1 TUI System
 
