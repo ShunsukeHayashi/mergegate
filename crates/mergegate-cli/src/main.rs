@@ -2440,11 +2440,19 @@ cargo clippy --all-targets --all-features -- -D warnings
   {{GATE}} heartbeat --all
 
 ### serve
-  Start web dashboard.
+  Start the MergeGate-native web dashboard.
   {{GATE}} serve
   {{GATE}} serve --port 8080
   Options:
     --port <N>               Port number (default: 4848)
+  Surfaces:
+    Gate Overview            Validation + next actions + ready queues
+    Task Ledger              Filter by state/risk/since and inspect task detail
+    Dependency Map           DAG levels, blocked chain, dispatchable frontier
+  Static asset order:
+    1. MERGEGATE_DASHBOARD_STATIC_DIR
+    2. web/dashboard/dist
+    3. Embedded Rust-owned fallback
 
 ### guide
   Print this guide.
@@ -2455,6 +2463,7 @@ cargo clippy --all-targets --all-features -- -D warnings
   --store-path <PATH>        Path to tasks.json (default: project_memory/tasks.json)
 "#;
 
+#[allow(dead_code)]
 const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3134,6 +3143,8 @@ const POLARIS_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
 </html>
 "##;
 
+const EMBEDDED_DASHBOARD_HTML: &str = include_str!("dashboard_embedded.html");
+
 fn serve_dashboard(store_path: &std::path::Path, port: u16) -> anyhow::Result<()> {
     let protocol = miyabi_core::protocol::DeterministicExecutionProtocol::from_store_path(
         store_path.to_path_buf(),
@@ -3207,7 +3218,7 @@ fn build_dashboard_response(
         "/api/tasks" => {
             let snapshot = load_snapshot(store_path)?;
             let filter = parse_dashboard_filter(raw_path)?;
-            let body = serde_json::to_vec_pretty(&miyabi_core::export::export_payload(
+            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_tasks_response(
                 &snapshot,
                 filter.as_ref(),
             ))
@@ -3215,32 +3226,39 @@ fn build_dashboard_response(
             Ok(json_response(body))
         }
         "/api/status" => {
-            let body =
-                serde_json::to_vec_pretty(&load_snapshot(store_path)?).map_err(io::Error::other)?;
+            let snapshot = load_snapshot(store_path)?;
+            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(
+                &snapshot,
+            ))
+            .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/stats" => {
-            let stats = miyabi_core::stats::compute_stats(&load_snapshot(store_path)?);
+            let snapshot = load_snapshot(store_path)?;
+            let stats = miyabi_core::dashboard_stats_response(&snapshot);
             let body = serde_json::to_vec_pretty(&stats).map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/validate" => {
-            let report = miyabi_core::validate::validate_snapshot(&load_snapshot(store_path)?);
-            let body =
-                serde_json::to_vec_pretty(&report.to_json_report()).map_err(io::Error::other)?;
+            let snapshot = load_snapshot(store_path)?;
+            let report = miyabi_core::dashboard_validate_response(&snapshot);
+            let body = serde_json::to_vec_pretty(&report).map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/locks" => {
-            let body = serde_json::to_vec_pretty(&protocol.locks()?).map_err(io::Error::other)?;
+            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_locks_response(protocol)?)
+                .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/dag" => {
-            let body = serde_json::to_vec_pretty(&protocol.dag()?).map_err(io::Error::other)?;
+            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_dag_response(protocol)?)
+                .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/dispatchable" => {
             let body =
-                serde_json::to_vec_pretty(&protocol.dispatchable()?).map_err(io::Error::other)?;
+                serde_json::to_vec_pretty(&miyabi_core::dashboard_dispatchable_response(protocol)?)
+                    .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         _ if path.starts_with("/api/task/") => task_detail_response(protocol, path),
@@ -3275,14 +3293,16 @@ fn task_detail_response(
         return Ok(text_response("404 Not Found", "not found"));
     };
 
-    match protocol.status(Some(task_id))? {
-        miyabi_core::protocol::StatusReport::Task(task) => {
+    match miyabi_core::dashboard_task_detail_response(protocol, task_id) {
+        Ok(Some(task)) => {
             let body = serde_json::to_vec_pretty(&task).map_err(io::Error::other)?;
             Ok(json_response(body))
         }
-        miyabi_core::protocol::StatusReport::Snapshot(_) => {
+        Ok(None) => Ok(text_response("404 Not Found", "not found")),
+        Err(miyabi_core::protocol::ProtocolError::Input(_)) => {
             Ok(text_response("404 Not Found", "not found"))
         }
+        Err(error) => Err(anyhow::anyhow!(error)),
     }
 }
 
@@ -3311,15 +3331,19 @@ fn static_dashboard_response(store_path: &Path, path: &str) -> anyhow::Result<Da
         return Ok(text_response("404 Not Found", "not found"));
     }
 
-    if path == "/" {
-        return Ok(DashboardResponse {
-            status: "200 OK".to_string(),
-            content_type: "text/html; charset=utf-8".to_string(),
-            body: POLARIS_DASHBOARD_HTML.as_bytes().to_vec(),
-        });
+    if should_fallback_to_dashboard_index(path) {
+        return Ok(embedded_dashboard_response());
     }
 
     Ok(text_response("404 Not Found", "not found"))
+}
+
+fn embedded_dashboard_response() -> DashboardResponse {
+    DashboardResponse {
+        status: "200 OK".to_string(),
+        content_type: "text/html; charset=utf-8".to_string(),
+        body: EMBEDDED_DASHBOARD_HTML.as_bytes().to_vec(),
+    }
 }
 
 fn dashboard_static_dir(store_path: &Path) -> Option<PathBuf> {
@@ -3596,6 +3620,45 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_locks_and_dag_endpoints_expose_expected_shapes() {
+        let fixture = DashboardFixture::new();
+        fixture.register_task("task-a", "Task A");
+        let files = vec!["src/lib.rs".to_string()];
+
+        let lock = fixture
+            .protocol
+            .assign("task-a", "tester", "node", &files)
+            .unwrap()
+            .lock_conflict;
+
+        assert!(!lock.conflicting);
+
+        let locks_response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/locks",
+        )
+        .unwrap();
+        let dag_response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/dag",
+        )
+        .unwrap();
+
+        let locks: serde_json::Value = serde_json::from_slice(&locks_response.body).unwrap();
+        let dag: serde_json::Value = serde_json::from_slice(&dag_response.body).unwrap();
+
+        assert_eq!(locks_response.status, "200 OK");
+        assert_eq!(locks["src/lib.rs"]["task_id"], "task-a");
+        assert_eq!(locks["src/lib.rs"]["agent"], "tester");
+        assert_eq!(dag_response.status, "200 OK");
+        assert_eq!(dag["levels"][0][0], "task-a");
+    }
+
+    #[test]
     fn dashboard_task_detail_endpoint_returns_registered_task() {
         let fixture = DashboardFixture::new();
         fixture.register_task("task-a", "Task A");
@@ -3613,6 +3676,38 @@ mod tests {
         assert_eq!(value["id"], "task-a");
         assert_eq!(value["title"], "Task A");
         assert_eq!(value["current_state"], "pending");
+    }
+
+    #[test]
+    fn dashboard_task_detail_endpoint_returns_404_for_missing_task() {
+        let fixture = DashboardFixture::new();
+
+        let response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/task/missing-task",
+        )
+        .unwrap();
+
+        assert_eq!(response.status, "404 Not Found");
+        assert_eq!(String::from_utf8(response.body).unwrap(), "not found");
+    }
+
+    #[test]
+    fn dashboard_rejects_non_get_requests() {
+        let fixture = DashboardFixture::new();
+
+        let response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "POST",
+            "/api/tasks",
+        )
+        .unwrap();
+
+        assert_eq!(response.status, "405 Method Not Allowed");
+        assert_eq!(String::from_utf8(response.body).unwrap(), "method not allowed");
     }
 
     #[test]
@@ -3651,6 +3746,29 @@ mod tests {
             String::from_utf8(spa_response.body).unwrap(),
             "<html>gate</html>"
         );
+    }
+
+    #[test]
+    fn dashboard_embedded_fallback_serves_shell_without_static_dir() {
+        let fixture = DashboardFixture::new();
+
+        let root_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/").unwrap();
+        let route_response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/ledger",
+        )
+        .unwrap();
+
+        let root_html = String::from_utf8(root_response.body).unwrap();
+        let route_html = String::from_utf8(route_response.body).unwrap();
+
+        assert_eq!(root_response.status, "200 OK");
+        assert!(root_html.contains("Gate Overview, Ledger, and Dependency Map"));
+        assert_eq!(route_response.status, "200 OK");
+        assert!(route_html.contains("Gate Overview, Ledger, and Dependency Map"));
     }
 
     fn write_snapshot(snapshot: TasksSnapshot) -> PathBuf {

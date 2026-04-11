@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MergeGate Dashboard</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: rgba(10, 24, 42, 0.88);
+      --panel-strong: rgba(13, 31, 53, 0.98);
+      --border: rgba(123, 164, 208, 0.18);
+      --text: #eaf4ff;
+      --muted: #8ca5c1;
+      --accent: #4ecdc4;
+      --accent-2: #ffd166;
+      --danger: #ff6b6b;
+      --warning: #f7b267;
+      --ok: #95d5b2;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --font: "IBM Plex Sans", "Avenir Next", sans-serif;
+      --mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(78, 205, 196, 0.2), transparent 24rem),
+        radial-gradient(circle at top right, rgba(255, 209, 102, 0.2), transparent 22rem),
+        linear-gradient(160deg, #06111f 0%, #09182c 48%, #0e223b 100%);
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .shell {
+      width: min(1380px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    .masthead {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1.4fr minmax(280px, 0.9fr);
+      align-items: stretch;
+    }
+
+    .hero,
+    .meta-card,
+    .panel,
+    .ledger-detail,
+    .level-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero {
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -6rem -8rem auto;
+      width: 18rem;
+      height: 18rem;
+      background: radial-gradient(circle, rgba(78, 205, 196, 0.22), transparent 68%);
+      pointer-events: none;
+    }
+
+    .eyebrow,
+    .section-eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 0.73rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .hero-title {
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      line-height: 1.02;
+      max-width: 11ch;
+    }
+
+    .hero-copy {
+      margin-top: 12px;
+      max-width: 54ch;
+      color: rgba(234, 244, 255, 0.78);
+      line-height: 1.6;
+    }
+
+    .hero-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 22px;
+      padding: 11px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .hero-status.clean {
+      color: var(--ok);
+      background: rgba(149, 213, 178, 0.12);
+    }
+
+    .hero-status.warning {
+      color: var(--warning);
+      background: rgba(247, 178, 103, 0.13);
+    }
+
+    .hero-status.error {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.13);
+    }
+
+    .meta-card {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .meta-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .meta-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .meta-body {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    .metric-grid {
+      margin-top: 18px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .metric {
+      padding: 18px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.84rem;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: clamp(1.6rem, 2.5vw, 2.4rem);
+      font-weight: 700;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 22px 0 18px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, color 120ms ease, background 120ms ease;
+    }
+
+    .tab:hover {
+      transform: translateY(-1px);
+      border-color: rgba(78, 205, 196, 0.5);
+      color: var(--text);
+    }
+
+    .tab.active {
+      background: rgba(78, 205, 196, 0.14);
+      border-color: rgba(78, 205, 196, 0.55);
+      color: var(--text);
+    }
+
+    .view {
+      display: none;
+      animation: fade-in 220ms ease;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .overview-grid,
+    .ledger-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .overview-grid {
+      grid-template-columns: 1.2fr 1fr;
+    }
+
+    .panel {
+      padding: 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .pill,
+    .tiny-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      font-size: 0.83rem;
+      padding: 7px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+    }
+
+    .tiny-pill {
+      padding: 5px 9px;
+      font-size: 0.76rem;
+    }
+
+    .list,
+    .detail-list,
+    .dag-levels {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .task-item,
+    .detail-item,
+    .action-item,
+    .node-card {
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .action-item {
+      display: grid;
+      gap: 8px;
+    }
+
+    .task-item.clickable,
+    .node-card.clickable {
+      cursor: pointer;
+      transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+    }
+
+    .task-item.clickable:hover,
+    .node-card.clickable:hover {
+      transform: translateY(-1px);
+      border-color: rgba(78, 205, 196, 0.4);
+      background: rgba(78, 205, 196, 0.06);
+    }
+
+    .task-item.selected,
+    .node-card.selected {
+      border-color: rgba(78, 205, 196, 0.65);
+      background: rgba(78, 205, 196, 0.1);
+    }
+
+    .task-top,
+    .node-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .task-title,
+    .node-title {
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .task-id,
+    .mono,
+    .list-meta,
+    .meta-inline {
+      font-family: var(--mono);
+    }
+
+    .task-id,
+    .list-meta,
+    .task-meta,
+    .meta-inline,
+    .subtle {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+
+    .badge.pending,
+    .badge.dispatchable {
+      background: rgba(78, 205, 196, 0.15);
+      color: #b8fff4;
+    }
+
+    .badge.blocked,
+    .badge.failed,
+    .badge.error {
+      background: rgba(255, 107, 107, 0.18);
+      color: #ffd8d8;
+    }
+
+    .badge.implementing,
+    .badge.reviewing,
+    .badge.analyzing,
+    .badge.deploying {
+      background: rgba(255, 209, 102, 0.18);
+      color: #fff0b5;
+    }
+
+    .badge.done,
+    .badge.merged,
+    .badge.clean {
+      background: rgba(149, 213, 178, 0.17);
+      color: #d8ffeb;
+    }
+
+    .action-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    .action-label.error {
+      color: #ffb8b8;
+    }
+
+    .action-label.warning {
+      color: #ffe0a3;
+    }
+
+    .action-label.info {
+      color: #b8fff4;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 12px 0;
+    }
+
+    .ledger-grid {
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      align-items: start;
+    }
+
+    .filter-bar {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    select,
+    input,
+    button {
+      font: inherit;
+    }
+
+    select,
+    input[type="date"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(4, 12, 22, 0.7);
+      color: var(--text);
+    }
+
+    .button {
+      align-self: end;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: rgba(78, 205, 196, 0.16);
+      color: var(--text);
+    }
+
+    .button.secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--muted);
+    }
+
+    .ledger-list {
+      max-height: 62vh;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .ledger-detail {
+      padding: 22px;
+      position: sticky;
+      top: 18px;
+    }
+
+    .detail-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .detail-block {
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 14px;
+    }
+
+    .detail-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    .detail-value {
+      line-height: 1.6;
+      word-break: break-word;
+    }
+
+    .dependency-grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dependency-summary {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+
+    .dag-board {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+
+    .level-card {
+      padding: 18px;
+    }
+
+    .level-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .level-title {
+      font-weight: 700;
+    }
+
+    .level-count {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .node-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .node-pressure {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 1080px) {
+      .masthead,
+      .overview-grid,
+      .ledger-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-grid,
+      .dependency-summary,
+      .filter-bar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .ledger-detail {
+        position: static;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 20px, 100%);
+        padding-top: 14px;
+      }
+
+      .hero,
+      .meta-card,
+      .panel,
+      .ledger-detail,
+      .level-card {
+        border-radius: 18px;
+      }
+
+      .metric-grid,
+      .dependency-summary,
+      .filter-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .task-top,
+      .node-top,
+      .panel-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="masthead">
+      <div class="hero">
+        <div class="eyebrow">MergeGate UI Mainline</div>
+        <h1 class="hero-title">Gate Overview, Ledger, and Dependency Map</h1>
+        <p class="hero-copy">
+          Rust-owned protocol data stays the source of truth. This dashboard highlights what is dispatchable,
+          what needs operator attention, and how the dependency frontier is moving.
+        </p>
+        <div id="hero-status" class="hero-status clean">Healthy</div>
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="metric-label">Dispatchable</div>
+            <div id="metric-dispatchable" class="metric-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Validation Issues</div>
+            <div id="metric-issues" class="metric-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Active Locks</div>
+            <div id="metric-locks" class="metric-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Completion</div>
+            <div id="metric-completion" class="metric-value">0%</div>
+          </div>
+        </div>
+      </div>
+      <aside class="meta-card">
+        <div class="meta-top">
+          <div>
+            <div class="eyebrow">Operator Meta</div>
+            <div class="meta-title">Ledger Health</div>
+          </div>
+          <span id="severity-pill" class="tiny-pill">clean</span>
+        </div>
+        <div id="health-summary" class="meta-body">Loading dashboard state...</div>
+        <div id="health-pills" class="pill-row"></div>
+        <div class="detail-block">
+          <div class="detail-label">Snapshot</div>
+          <div id="meta" class="detail-value subtle">Waiting for the first refresh.</div>
+        </div>
+      </aside>
+    </section>
+
+    <nav class="tabs" aria-label="Dashboard sections">
+      <button class="tab active" data-view="overview">Gate Overview</button>
+      <button class="tab" data-view="ledger">Task Ledger</button>
+      <button class="tab" data-view="dependency">Dependency Map</button>
+    </nav>
+
+    <main>
+      <section id="view-overview" class="view active">
+        <div class="overview-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">First Response</div>
+                <div class="panel-title">Next Actions</div>
+              </div>
+            </div>
+            <ul id="next-actions" class="list"></ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Ledger Safety</div>
+                <div class="panel-title">Validation Detail</div>
+              </div>
+            </div>
+            <ul id="validation-detail" class="detail-list"></ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Dispatchable First</div>
+                <div class="panel-title">Ready Queue</div>
+              </div>
+              <span id="ready-count" class="tiny-pill">0 tasks</span>
+            </div>
+            <ul id="queue-ready" class="list"></ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Attention</div>
+                <div class="panel-title">Blocked / Failed / Awaiting Sync</div>
+              </div>
+              <span id="attention-count" class="tiny-pill">0 tasks</span>
+            </div>
+            <ul id="queue-attention" class="list"></ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Work In Motion</div>
+                <div class="panel-title">Progress Queue</div>
+              </div>
+              <span id="progress-count" class="tiny-pill">0 tasks</span>
+            </div>
+            <ul id="queue-progress" class="list"></ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Lock Surface</div>
+                <div class="panel-title">Active Locks</div>
+              </div>
+              <span id="locks-count" class="tiny-pill">0 locks</span>
+            </div>
+            <ul id="locks" class="list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-ledger" class="view">
+        <div class="ledger-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Task Ledger</div>
+                <div class="panel-title">Filterable MergeGate-native tasks</div>
+              </div>
+              <span id="ledger-count" class="tiny-pill">0 tasks</span>
+            </div>
+            <form id="ledger-filters" class="filter-bar">
+              <label>
+                State
+                <select id="filter-state" name="state">
+                  <option value="">All states</option>
+                  <option value="draft">draft</option>
+                  <option value="pending">pending</option>
+                  <option value="analyzing">analyzing</option>
+                  <option value="implementing">implementing</option>
+                  <option value="reviewing">reviewing</option>
+                  <option value="awaiting_github_sync">awaiting_github_sync</option>
+                  <option value="merged">merged</option>
+                  <option value="done">done</option>
+                  <option value="blocked">blocked</option>
+                  <option value="failed">failed</option>
+                </select>
+              </label>
+              <label>
+                Risk
+                <select id="filter-risk" name="risk">
+                  <option value="">All risk levels</option>
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                </select>
+              </label>
+              <label>
+                Since
+                <input id="filter-since" name="since" type="date">
+              </label>
+              <button type="submit" class="button">Apply</button>
+              <button id="filters-reset" type="button" class="button secondary">Reset</button>
+            </form>
+            <div id="ledger-results" class="ledger-list"></div>
+          </div>
+
+          <aside class="ledger-detail">
+            <div class="section-eyebrow">Task Detail</div>
+            <h2 id="detail-title">Select a task</h2>
+            <p id="detail-summary" class="meta-body" style="margin-top: 10px;">
+              Pick a task from the ledger, overview queues, or dependency map to inspect branch, dependencies,
+              evidence, and completion mode.
+            </p>
+            <div id="detail-grid" class="detail-grid"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="view-dependency" class="view">
+        <div class="dependency-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Dependency Pressure</div>
+                <div class="panel-title">Frontier, blocked chain, and level structure</div>
+              </div>
+            </div>
+            <div class="dependency-summary">
+              <div class="metric">
+                <div class="metric-label">Dispatchable Frontier</div>
+                <div id="frontier-count" class="metric-value">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Blocked Tasks</div>
+                <div id="blocked-count" class="metric-value">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Dependency Levels</div>
+                <div id="level-count" class="metric-value">0</div>
+              </div>
+            </div>
+            <div id="dependency-frontier" class="pill-row"></div>
+            <p id="dependency-summary-text" class="footer-note">Loading dependency data...</p>
+          </div>
+
+          <div class="dag-board" id="dag-board"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const ACTIVE_STATES = new Set(["analyzing", "implementing", "reviewing", "deploying"]);
+    const ATTENTION_STATES = new Set(["blocked", "failed", "awaiting_github_sync"]);
+
+    const state = {
+      currentView: "overview",
+      selectedTaskId: null,
+      allTasksPayload: { tasks: [] },
+      filteredTasksPayload: { tasks: [] },
+      stats: {},
+      validation: {},
+      locks: {},
+      dag: { levels: [] },
+      dispatchable: { task_ids: [], tasks: [] }
+    };
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function badgeClass(stateName) {
+      return "badge " + (stateName || "unknown");
+    }
+
+    function setListEmpty(id, message) {
+      document.getElementById(id).innerHTML = '<div class="empty">' + escapeHtml(message) + '</div>';
+    }
+
+    function setElementHtml(id, html) {
+      document.getElementById(id).innerHTML = html;
+    }
+
+    function queryParams() {
+      return new URLSearchParams(window.location.search);
+    }
+
+    function currentFilterQuery() {
+      const params = queryParams();
+      const filter = new URLSearchParams();
+      ["state", "risk", "since"].forEach(key => {
+        const value = params.get(key);
+        if (value) filter.set(key, value);
+      });
+      const text = filter.toString();
+      return text ? "?" + text : "";
+    }
+
+    function currentView() {
+      const queryView = queryParams().get("view");
+      if (queryView) return queryView;
+
+      const path = window.location.pathname.replace(/\/+$/, "") || "/";
+      if (path === "/ledger") return "ledger";
+      if (path === "/dependency") return "dependency";
+      return "overview";
+    }
+
+    function applyUiStateToUrl(next) {
+      const params = queryParams();
+      Object.entries(next).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      });
+      const nextUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    function switchView(viewName) {
+      state.currentView = viewName;
+      document.querySelectorAll(".tab").forEach(button => {
+        button.classList.toggle("active", button.dataset.view === viewName);
+      });
+      document.querySelectorAll(".view").forEach(view => {
+        view.classList.toggle("active", view.id === "view-" + viewName);
+      });
+      applyUiStateToUrl({ view: viewName });
+    }
+
+    function selectTask(taskId, targetView) {
+      state.selectedTaskId = taskId;
+      if (targetView) switchView(targetView);
+      renderLedgerList();
+      renderDag(state.dag, state.allTasksPayload.tasks);
+      renderTaskDetail();
+    }
+
+    function validationIssueCount(report) {
+      return (
+        (report.orphaned_locks || []).length +
+        (report.invalid_transitions || []).length +
+        (report.circular_dependencies || []).length +
+        (report.warnings || []).length
+      );
+    }
+
+    function stateCount(tasks, predicate) {
+      return tasks.filter(predicate).length;
+    }
+
+    function humanTaskMeta(task) {
+      const deps = Array.isArray(task.dependencies) && task.dependencies.length > 0
+        ? task.dependencies.join(", ")
+        : "none";
+      const risk = task.impact_risk || "n/a";
+      return "priority " + task.priority + " | risk " + risk + " | deps " + deps;
+    }
+
+    function renderTaskCards(tasks, emptyMessage, options = {}) {
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        return '<div class="empty">' + escapeHtml(emptyMessage) + '</div>';
+      }
+
+      return tasks.map(task => {
+        const selected = task.id === state.selectedTaskId ? " selected" : "";
+        const clickable = options.clickable === false ? "" : " clickable";
+        return (
+          '<div class="task-item' + clickable + selected + '" data-task-id="' + escapeHtml(task.id) + '">' +
+            '<div class="task-top">' +
+              '<div>' +
+                '<div class="task-title">' + escapeHtml(task.title) + '</div>' +
+                '<div class="task-id subtle">' + escapeHtml(task.id) + '</div>' +
+              '</div>' +
+              '<span class="' + badgeClass(task.current_state || "unknown") + '">' +
+                escapeHtml(task.current_state || "unknown") +
+              '</span>' +
+            '</div>' +
+            '<div class="task-meta">' + escapeHtml(humanTaskMeta(task)) + '</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    function renderHealth(tasks, stats, validation, locks, dispatchable) {
+      const issueCount = validationIssueCount(validation);
+      const severity = validation.severity || "clean";
+      const dispatchableCount = dispatchable.count || 0;
+      const heroStatus = severity === "error"
+        ? "Action Needed"
+        : severity === "warning"
+          ? "Review Needed"
+          : dispatchableCount > 0
+            ? "Ready To Move"
+            : "Healthy";
+
+      const hero = document.getElementById("hero-status");
+      hero.className = "hero-status " + severity;
+      hero.textContent = heroStatus + " · " + issueCount + " issue(s)";
+      document.getElementById("severity-pill").textContent = severity;
+      document.getElementById("severity-pill").className = "tiny-pill " + severity;
+      document.getElementById("metric-dispatchable").textContent = String(dispatchableCount);
+      document.getElementById("metric-issues").textContent = String(issueCount);
+      document.getElementById("metric-locks").textContent = String(Object.keys(locks || {}).length);
+      document.getElementById("metric-completion").textContent = Math.round(stats.completion_rate_pct || 0) + "%";
+
+      const blockedCount = stateCount(tasks, task => task.current_state === "blocked");
+      const activeCount = stateCount(tasks, task => ACTIVE_STATES.has(task.current_state));
+      const summaryParts = [];
+      if (severity === "error") {
+        summaryParts.push("Validation reports ledger errors, so fix consistency before dispatching new work.");
+      } else if (severity === "warning") {
+        summaryParts.push("Warnings exist. The ledger is usable, but it is worth reviewing before dispatch.");
+      } else {
+        summaryParts.push("Ledger consistency is clean.");
+      }
+      summaryParts.push(dispatchableCount > 0
+        ? dispatchableCount + " dispatchable task(s) are ready now."
+        : "No dispatchable tasks are waiting right now.");
+      summaryParts.push(activeCount > 0
+        ? activeCount + " task(s) are currently in motion."
+        : "No active tasks are running.");
+      summaryParts.push(blockedCount > 0
+        ? blockedCount + " blocked task(s) need dependency or review follow-up."
+        : "No blocked tasks are currently recorded.");
+      document.getElementById("health-summary").textContent = summaryParts.join(" ");
+
+      const pills = [
+        (stats.completed || 0) + " completed",
+        (stats.active || 0) + " active",
+        (stats.waiting || 0) + " waiting",
+        (stats.failed || 0) + " failed",
+        (Object.keys(locks || {}).length) + " locks"
+      ];
+      document.getElementById("health-pills").innerHTML =
+        pills.map(label => '<span class="pill">' + escapeHtml(label) + '</span>').join("");
+    }
+
+    function renderNextActions(tasks, validation, dispatchable) {
+      const actions = [];
+      if ((validation.invalid_transitions || []).length > 0 || (validation.orphaned_locks || []).length > 0) {
+        actions.push({
+          kind: "error",
+          title: "Fix ledger consistency first",
+          body: "Run mergegate gate validate, then resolve lock ownership or invalid state transitions before dispatch."
+        });
+      }
+
+      if ((dispatchable.task_ids || []).length > 0) {
+        actions.push({
+          kind: "info",
+          title: "Dispatch from the frontier",
+          body: (dispatchable.task_ids || []).slice(0, 3).join(", ")
+        });
+      }
+
+      const blocked = tasks.filter(task => task.current_state === "blocked");
+      if (blocked.length > 0) {
+        actions.push({
+          kind: "warning",
+          title: "Unblock dependent work",
+          body: blocked.slice(0, 3).map(task => task.id + " waits on " + ((task.dependencies || []).join(", ") || "follow-up")).join(" | ")
+        });
+      }
+
+      const awaitingReview = tasks.filter(task => task.current_state === "reviewing");
+      if (awaitingReview.length > 0) {
+        actions.push({
+          kind: "info",
+          title: "Review in-flight work",
+          body: awaitingReview.slice(0, 3).map(task => task.id).join(", ")
+        });
+      }
+
+      if (actions.length === 0) {
+        actions.push({
+          kind: "info",
+          title: "No urgent operator action",
+          body: "The ledger looks stable. Review progress or wait for the next task to become dispatchable."
+        });
+      }
+
+      setElementHtml("next-actions", actions.map(action => (
+        '<div class="action-item">' +
+          '<div class="action-label ' + action.kind + '">' + escapeHtml(action.kind) + '</div>' +
+          '<div class="task-title">' + escapeHtml(action.title) + '</div>' +
+          '<div class="task-meta">' + escapeHtml(action.body) + '</div>' +
+        '</div>'
+      )).join(""));
+    }
+
+    function renderQueues(tasks) {
+      const ready = (state.dispatchable.tasks || []).slice(0, 6);
+      const attention = tasks.filter(task => ATTENTION_STATES.has(task.current_state)).slice(0, 6);
+      const progress = tasks.filter(task => ACTIVE_STATES.has(task.current_state)).slice(0, 6);
+
+      document.getElementById("ready-count").textContent = ready.length + " task(s)";
+      document.getElementById("attention-count").textContent = attention.length + " task(s)";
+      document.getElementById("progress-count").textContent = progress.length + " task(s)";
+      document.getElementById("locks-count").textContent = Object.keys(state.locks || {}).length + " lock(s)";
+
+      setElementHtml("queue-ready", renderTaskCards(ready, "No dispatchable tasks"));
+      setElementHtml("queue-attention", renderTaskCards(attention, "No blocked, failed, or awaiting sync tasks"));
+      setElementHtml("queue-progress", renderTaskCards(progress, "No tasks are currently in motion"));
+    }
+
+    function renderLocks(locks) {
+      const entries = Object.entries(locks || {});
+      if (entries.length === 0) {
+        setListEmpty("locks", "No active locks");
+        return;
+      }
+      setElementHtml("locks", entries.map(([file, lock]) => (
+        '<div class="task-item">' +
+          '<div class="task-title mono">' + escapeHtml(file) + '</div>' +
+          '<div class="task-meta">' +
+            escapeHtml(lock.task_id + " | " + lock.agent + "@" + lock.node + " | expires " + lock.expires_at) +
+          '</div>' +
+        '</div>'
+      )).join(""));
+    }
+
+    function renderValidationDetail(validation) {
+      const entries = [];
+      (validation.orphaned_locks || []).forEach(item => entries.push("orphaned lock: " + item));
+      (validation.invalid_transitions || []).forEach(item => entries.push("invalid transition: " + item));
+      (validation.circular_dependencies || []).forEach(item => entries.push("cycle: " + item));
+      (validation.warnings || []).forEach(item => entries.push("warning: " + item));
+
+      if (entries.length === 0) {
+        setListEmpty("validation-detail", "No validation issues");
+        return;
+      }
+
+      setElementHtml("validation-detail", entries.map(item => (
+        '<div class="detail-item"><div class="list-meta">' + escapeHtml(item) + '</div></div>'
+      )).join(""));
+    }
+
+    function renderLedgerList() {
+      const payload = state.filteredTasksPayload || { tasks: [] };
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      document.getElementById("ledger-count").textContent = (payload.task_count || tasks.length) + " task(s)";
+      setElementHtml("ledger-results", renderTaskCards(tasks, "No tasks match the active filter"));
+    }
+
+    function syncSelectedTaskToFilteredLedger() {
+      const filteredTasks = Array.isArray(state.filteredTasksPayload.tasks)
+        ? state.filteredTasksPayload.tasks
+        : [];
+
+      if (filteredTasks.length === 0) {
+        state.selectedTaskId = null;
+        return;
+      }
+
+      const stillVisible = filteredTasks.some(task => task.id === state.selectedTaskId);
+      if (!stillVisible) {
+        state.selectedTaskId = filteredTasks[0].id;
+      }
+    }
+
+    function detailBlock(label, value) {
+      return (
+        '<div class="detail-block">' +
+          '<div class="detail-label">' + escapeHtml(label) + '</div>' +
+          '<div class="detail-value">' + value + '</div>' +
+        '</div>'
+      );
+    }
+
+    async function renderTaskDetail() {
+      const grid = document.getElementById("detail-grid");
+      if (!state.selectedTaskId) {
+        grid.innerHTML = "";
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/task/" + encodeURIComponent(state.selectedTaskId));
+        if (!response.ok) {
+          throw new Error("Task detail request failed");
+        }
+        const task = await response.json();
+        document.getElementById("detail-title").textContent = task.title || task.id;
+        document.getElementById("detail-summary").textContent =
+          (task.current_state || "unknown") + " · completion mode " + (task.completion_mode || "n/a");
+
+        const deps = Array.isArray(task.dependencies) && task.dependencies.length > 0
+          ? task.dependencies.map(escapeHtml).join("<br>")
+          : "none";
+        const branch = task.branch_name ? escapeHtml(task.branch_name) : "none";
+        const risk = task.impact ? escapeHtml(task.impact.risk_level || "n/a") : "n/a";
+        const review = task.github_evidence
+          ? escapeHtml(JSON.stringify(task.github_evidence, null, 2))
+          : "none";
+        const lock = task.lock
+          ? escapeHtml(JSON.stringify(task.lock, null, 2))
+          : "none";
+        const attachments = Array.isArray(task.context_attachments) && task.context_attachments.length > 0
+          ? task.context_attachments.slice(0, 6).map(item => (
+              escapeHtml(item.attachment_type + " | " + item.source + " | " + item.token_estimate + " tokens")
+            )).join("<br>")
+          : "none";
+
+        grid.innerHTML = [
+          detailBlock("Identity", '<div class="mono">' + escapeHtml(task.id) + '</div>'),
+          detailBlock("State", '<span class="' + badgeClass(task.current_state || "unknown") + '">' + escapeHtml(task.current_state || "unknown") + '</span>'),
+          detailBlock("Risk", '<span class="' + badgeClass((risk || "").toLowerCase()) + '">' + risk + '</span>'),
+          detailBlock("Dependencies", '<div class="mono">' + deps + '</div>'),
+          detailBlock("Branch", '<div class="mono">' + branch + '</div>'),
+          detailBlock("Lock", '<pre class="mono subtle">' + lock + '</pre>'),
+          detailBlock("GitHub Evidence", '<pre class="mono subtle">' + review + '</pre>'),
+          detailBlock("Context Attachments", '<div class="mono subtle">' + attachments + '</div>')
+        ].join("");
+      } catch (error) {
+        document.getElementById("detail-title").textContent = state.selectedTaskId;
+        document.getElementById("detail-summary").textContent = "Failed to load task detail.";
+        grid.innerHTML = detailBlock("Error", escapeHtml(error.message));
+      }
+    }
+
+    function buildTaskMap(tasks) {
+      const map = new Map();
+      tasks.forEach(task => map.set(task.id, task));
+      return map;
+    }
+
+    function renderDag(dag, tasks) {
+      const levels = Array.isArray(dag.levels) ? dag.levels : [];
+      const taskMap = buildTaskMap(tasks || []);
+      document.getElementById("frontier-count").textContent = String((state.dispatchable.task_ids || []).length);
+      document.getElementById("blocked-count").textContent = String(stateCount(tasks || [], task => task.current_state === "blocked"));
+      document.getElementById("level-count").textContent = String(levels.length);
+      document.getElementById("dependency-frontier").innerHTML = (state.dispatchable.task_ids || []).length > 0
+        ? state.dispatchable.task_ids.map(taskId => '<span class="pill mono">' + escapeHtml(taskId) + '</span>').join("")
+        : '<span class="pill">No dispatchable frontier yet</span>';
+
+      const blocked = (tasks || []).filter(task => task.current_state === "blocked").map(task => task.id);
+      const summary = [];
+      summary.push(levels.length > 0 ? levels.length + " dependency level(s) are present." : "No DAG levels are available.");
+      summary.push((state.dispatchable.task_ids || []).length > 0
+        ? "Dispatchable frontier: " + state.dispatchable.task_ids.join(", ") + "."
+        : "Nothing is dispatchable right now.");
+      summary.push(blocked.length > 0
+        ? "Blocked chain includes " + blocked.slice(0, 5).join(", ") + "."
+        : "No blocked chain is currently visible.");
+      document.getElementById("dependency-summary-text").textContent = summary.join(" ");
+
+      if (levels.length === 0) {
+        setElementHtml("dag-board", '<div class="panel"><div class="empty">No DAG levels available</div></div>');
+        return;
+      }
+
+      setElementHtml("dag-board", levels.map((level, index) => {
+        const nodes = level.map(taskId => {
+          const task = taskMap.get(taskId) || { id: taskId, title: taskId, current_state: "unknown", dependencies: [] };
+          const dependents = (tasks || []).filter(candidate => (candidate.dependencies || []).includes(taskId)).length;
+          const selected = taskId === state.selectedTaskId ? " selected" : "";
+          const frontier = (state.dispatchable.task_ids || []).includes(taskId)
+            ? '<span class="tiny-pill dispatchable">dispatchable</span>'
+            : "";
+          return (
+            '<div class="node-card clickable' + selected + '" data-task-id="' + escapeHtml(taskId) + '">' +
+              '<div class="node-top">' +
+                '<div>' +
+                  '<div class="node-title">' + escapeHtml(task.title || taskId) + '</div>' +
+                  '<div class="task-id subtle">' + escapeHtml(taskId) + '</div>' +
+                '</div>' +
+                '<span class="' + badgeClass(task.current_state || "unknown") + '">' + escapeHtml(task.current_state || "unknown") + '</span>' +
+              '</div>' +
+              '<div class="task-meta">' + escapeHtml("deps " + ((task.dependencies || []).length) + " | dependents " + dependents + " | risk " + (task.impact_risk || "n/a")) + '</div>' +
+              '<div class="node-pressure">' +
+                frontier +
+                '<span class="tiny-pill">fan-in ' + escapeHtml(String((task.dependencies || []).length)) + '</span>' +
+                '<span class="tiny-pill">fan-out ' + escapeHtml(String(dependents)) + '</span>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join("");
+
+        return (
+          '<section class="level-card">' +
+            '<div class="level-head">' +
+              '<div class="level-title">Level ' + index + '</div>' +
+              '<div class="level-count">' + level.length + ' node(s)</div>' +
+            '</div>' +
+            '<div class="node-grid">' + nodes + '</div>' +
+          '</section>'
+        );
+      }).join(""));
+    }
+
+    function bindTaskClicks() {
+      document.querySelectorAll("[data-task-id]").forEach(element => {
+        element.addEventListener("click", () => {
+          const taskId = element.getAttribute("data-task-id");
+          const inDependencyView = element.closest("#view-dependency");
+          selectTask(taskId, inDependencyView ? "ledger" : "ledger");
+        });
+      });
+    }
+
+    function syncFiltersFromUrl() {
+      const params = queryParams();
+      document.getElementById("filter-state").value = params.get("state") || "";
+      document.getElementById("filter-risk").value = params.get("risk") || "";
+      document.getElementById("filter-since").value = params.get("since") || "";
+    }
+
+    function bindTabs() {
+      document.querySelectorAll(".tab").forEach(button => {
+        button.addEventListener("click", () => switchView(button.dataset.view));
+      });
+    }
+
+    function bindFilterControls() {
+      document.getElementById("ledger-filters").addEventListener("submit", event => {
+        event.preventDefault();
+        applyUiStateToUrl({
+          state: document.getElementById("filter-state").value,
+          risk: document.getElementById("filter-risk").value,
+          since: document.getElementById("filter-since").value,
+          view: "ledger"
+        });
+        refresh();
+      });
+
+      document.getElementById("filters-reset").addEventListener("click", () => {
+        document.getElementById("filter-state").value = "";
+        document.getElementById("filter-risk").value = "";
+        document.getElementById("filter-since").value = "";
+        applyUiStateToUrl({ state: null, risk: null, since: null, view: "ledger" });
+        refresh();
+      });
+    }
+
+    async function refresh() {
+      syncFiltersFromUrl();
+      switchView(currentView());
+      try {
+        const filterQuery = currentFilterQuery();
+        const [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes] = await Promise.all([
+          fetch("/api/tasks"),
+          fetch("/api/tasks" + filterQuery),
+          fetch("/api/stats"),
+          fetch("/api/validate"),
+          fetch("/api/locks"),
+          fetch("/api/dag"),
+          fetch("/api/dispatchable")
+        ]);
+
+        const responses = [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes];
+        if (responses.some(response => !response.ok)) {
+          throw new Error("API request failed");
+        }
+
+        const [allTasksPayload, filteredTasksPayload, stats, validation, locks, dag, dispatchable] = await Promise.all(
+          responses.map(response => response.json())
+        );
+
+        state.allTasksPayload = allTasksPayload;
+        state.filteredTasksPayload = filteredTasksPayload;
+        state.stats = stats;
+        state.validation = validation;
+        state.locks = locks;
+        state.dag = dag;
+        state.dispatchable = dispatchable;
+
+        const allTasks = Array.isArray(allTasksPayload.tasks) ? allTasksPayload.tasks : [];
+        renderHealth(allTasks, stats, validation, locks, dispatchable);
+        renderNextActions(allTasks, validation, dispatchable);
+        renderQueues(allTasks);
+        renderLocks(locks);
+        renderValidationDetail(validation);
+        renderLedgerList();
+        renderDag(dag, allTasks);
+        document.getElementById("meta").textContent =
+          "Snapshot version " + allTasksPayload.version +
+          " · updated " + allTasksPayload.generated_at +
+          " · auto-refresh every 3s";
+
+        if (!state.selectedTaskId) {
+          const preferred = (dispatchable.task_ids || [])[0] || (filteredTasksPayload.tasks || [])[0]?.id || allTasks[0]?.id || null;
+          state.selectedTaskId = preferred;
+        }
+        syncSelectedTaskToFilteredLedger();
+        await renderTaskDetail();
+        bindTaskClicks();
+      } catch (error) {
+        document.getElementById("hero-status").className = "hero-status error";
+        document.getElementById("hero-status").textContent = "Dashboard Unavailable";
+        document.getElementById("health-summary").textContent = "Dashboard data could not be loaded.";
+        document.getElementById("meta").textContent = "Refresh failed: " + error.message;
+        ["next-actions", "queue-ready", "queue-attention", "queue-progress", "locks", "validation-detail", "ledger-results", "dag-board"].forEach(id => {
+          setListEmpty(id, "Failed to load data");
+        });
+      }
+    }
+
+    bindTabs();
+    bindFilterControls();
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

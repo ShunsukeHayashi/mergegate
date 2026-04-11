@@ -7,6 +7,7 @@ pub mod anthropic;
 pub mod cache;
 pub mod config;
 pub mod conversation;
+pub mod dashboard;
 pub mod dag;
 pub mod dream;
 pub mod error;
@@ -63,6 +64,24 @@ pub use cache::{
 pub use config::{ApiConfig, Config, SessionConfig, ToolConfig, UiConfig};
 pub use conversation::{
     Conversation, ConversationError, ConversationManager, ConversationMessage, ConversationMetadata,
+};
+pub use dashboard::{
+    dag_response as dashboard_dag_response,
+    dispatchable_response as dashboard_dispatchable_response,
+    locks_response as dashboard_locks_response,
+    stats_response as dashboard_stats_response,
+    status_response as dashboard_status_response,
+    task_detail_response as dashboard_task_detail_response,
+    tasks_response as dashboard_tasks_response,
+    validate_response as dashboard_validate_response,
+    DashboardDagResponse,
+    DashboardDispatchableResponse,
+    DashboardLocksResponse,
+    DashboardStatsResponse,
+    DashboardStatusResponse,
+    DashboardTaskDetailResponse,
+    DashboardTasksResponse,
+    DashboardValidateResponse,
 };
 pub use error::Error;
 pub use error_policy::{CircuitBreaker, CircuitState, FallbackStrategy};

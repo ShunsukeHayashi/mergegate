@@ -163,6 +163,18 @@ mergegate gate stats --format json
 mergegate gate serve
 ```
 
+`mergegate gate serve` opens the MergeGate-native web surface for:
+
+- Gate Overview: validation severity, operator next actions, ready and attention queues
+- Task Ledger: filterable state/risk/since views plus task detail drill-in
+- Dependency Map: DAG levels, blocked chain visibility, and dispatchable frontier
+
+Static asset loading follows this order:
+
+1. `MERGEGATE_DASHBOARD_STATIC_DIR`
+2. `web/dashboard/dist`
+3. embedded Rust-owned dashboard fallback
+
 Compatibility alias:
 
 ```bash

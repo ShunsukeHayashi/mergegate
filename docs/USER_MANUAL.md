@@ -114,6 +114,30 @@ cargo build --release
 | `mergegate gate locks` | active lock を表示 |
 | `mergegate gate dispatchable` | 今着手できる task を表示 |
 | `mergegate gate dag` | 依存順序を表示 |
+| `mergegate gate serve` | MergeGate-native web surface を表示 |
+
+## Web Surface
+
+`mergegate gate serve` でローカル dashboard を起動できます。
+
+```bash
+./target/release/mergegate gate serve
+./target/release/mergegate gate serve --port 8080
+```
+
+この UI は次の 3 面で構成されます。
+
+- Gate Overview: validation severity、next actions、ready / attention / progress queue
+- Task Ledger: `state` `risk` `since` filter と task detail drill-in
+- Dependency Map: DAG level、blocked chain、dispatchable frontier の可視化
+
+静的アセットの探索順は次の通りです。
+
+1. `MERGEGATE_DASHBOARD_STATIC_DIR`
+2. `web/dashboard/dist`
+3. 内蔵 dashboard fallback
+
+内蔵 UI でも API は Rust-owned contract をそのまま表示します。frontend 独自の task state は持ちません。
 
 ## 実行エンジンとの関係
 
