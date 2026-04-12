@@ -3493,6 +3493,14 @@ mod tests {
     use miyabi_core::protocol::{DeterministicExecutionProtocol, RegisterTaskRequest};
     use miyabi_core::store::{CompletionMode, ExecutionTask, TaskState, TasksSnapshot};
     use miyabi_core::validate::validate_snapshot;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    fn dashboard_env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("dashboard env lock poisoned")
+    }
 
     #[test]
     fn parse_export_since_accepts_rfc3339_and_date_only() {
@@ -3712,6 +3720,7 @@ mod tests {
 
     #[test]
     fn dashboard_static_dir_serves_assets_and_spa_fallback() {
+        let _lock = dashboard_env_lock();
         let fixture = DashboardFixture::new();
         let static_dir = fixture.tempdir.path().join("dist");
         std::fs::create_dir_all(static_dir.join("assets")).unwrap();
@@ -3750,7 +3759,10 @@ mod tests {
 
     #[test]
     fn dashboard_embedded_fallback_serves_shell_without_static_dir() {
+        let _lock = dashboard_env_lock();
         let fixture = DashboardFixture::new();
+        let missing_static_dir = fixture.tempdir.path().join("missing-dist");
+        let _guard = EnvVarGuard::set("MERGEGATE_DASHBOARD_STATIC_DIR", &missing_static_dir);
 
         let root_response =
             build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/").unwrap();

@@ -122,7 +122,7 @@ This creates `project_memory/tasks.json`.
 ./target/release/mergegate gate --format json validate
 ./target/release/mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
 ./target/release/mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
-./target/release/mergegate gate stats --format json
+./target/release/mergegate gate --format json stats
 ```
 
 ### 5. Start a task
@@ -159,7 +159,7 @@ mergegate gate validate
 mergegate gate --format json validate
 mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
 mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
-mergegate gate stats --format json
+mergegate gate --format json stats
 mergegate gate serve
 ```
 
@@ -174,6 +174,8 @@ Static asset loading follows this order:
 1. `MERGEGATE_DASHBOARD_STATIC_DIR`
 2. `web/dashboard/dist`
 3. embedded Rust-owned dashboard fallback
+
+For the first foundation release boundary and verification gate, see [docs/FOUNDATION_RELEASE_CHECKLIST.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/FOUNDATION_RELEASE_CHECKLIST.md).
 
 Compatibility alias:
 
@@ -198,7 +200,7 @@ mergegate gate validate
 mergegate gate --format json validate
 mergegate gate export-json --state implementing --risk HIGH --since 2026-04-12
 mergegate gate export-md --state implementing --risk HIGH --since 2026-04-12
-mergegate gate stats --format json
+mergegate gate --format json stats
 mergegate gate locks
 mergegate gate dispatchable
 mergegate gate dag
@@ -224,6 +226,7 @@ The mainline product direction is:
 
 PM dashboard assets may inform MergeGate UI/UX, but cross-source orchestration remains a separate higher-level layer.
 See [docs/PRODUCT_DIRECTION.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/PRODUCT_DIRECTION.md).
+The first public cut should ship the foundation scope first, then land the next UI train separately. See [docs/FOUNDATION_RELEASE_CHECKLIST.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/FOUNDATION_RELEASE_CHECKLIST.md).
 
 ## Workspace Layout
 
