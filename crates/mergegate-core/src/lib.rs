@@ -7,10 +7,13 @@ pub mod anthropic;
 pub mod cache;
 pub mod config;
 pub mod conversation;
+pub mod dashboard;
 pub mod dag;
 pub mod dream;
 pub mod error;
 pub mod error_policy;
+pub mod export;
+pub mod export_md;
 pub mod feature_flags;
 pub mod gate;
 pub mod git;
@@ -26,12 +29,14 @@ pub mod protocol;
 pub mod retry;
 pub mod rules;
 pub mod session;
+pub mod stats;
 pub mod store;
 pub mod streaming;
 pub mod token;
 pub mod tool;
 pub mod tools;
 pub mod types;
+pub mod validate;
 pub mod workflow;
 
 pub use agent::{
@@ -59,6 +64,24 @@ pub use cache::{
 pub use config::{ApiConfig, Config, SessionConfig, ToolConfig, UiConfig};
 pub use conversation::{
     Conversation, ConversationError, ConversationManager, ConversationMessage, ConversationMetadata,
+};
+pub use dashboard::{
+    dag_response as dashboard_dag_response,
+    dispatchable_response as dashboard_dispatchable_response,
+    locks_response as dashboard_locks_response,
+    stats_response as dashboard_stats_response,
+    status_response as dashboard_status_response,
+    task_detail_response as dashboard_task_detail_response,
+    tasks_response as dashboard_tasks_response,
+    validate_response as dashboard_validate_response,
+    DashboardDagResponse,
+    DashboardDispatchableResponse,
+    DashboardLocksResponse,
+    DashboardStatsResponse,
+    DashboardStatusResponse,
+    DashboardTaskDetailResponse,
+    DashboardTasksResponse,
+    DashboardValidateResponse,
 };
 pub use error::Error;
 pub use error_policy::{CircuitBreaker, CircuitState, FallbackStrategy};
