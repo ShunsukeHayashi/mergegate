@@ -3227,10 +3227,9 @@ fn build_dashboard_response(
         }
         "/api/status" => {
             let snapshot = load_snapshot(store_path)?;
-            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(
-                &snapshot,
-            ))
-            .map_err(io::Error::other)?;
+            let body =
+                serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(&snapshot))
+                    .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/stats" => {
@@ -3641,20 +3640,12 @@ mod tests {
 
         assert!(!lock.conflicting);
 
-        let locks_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/locks",
-        )
-        .unwrap();
-        let dag_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/dag",
-        )
-        .unwrap();
+        let locks_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/locks")
+                .unwrap();
+        let dag_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/dag")
+                .unwrap();
 
         let locks: serde_json::Value = serde_json::from_slice(&locks_response.body).unwrap();
         let dag: serde_json::Value = serde_json::from_slice(&dag_response.body).unwrap();
@@ -3706,16 +3697,15 @@ mod tests {
     fn dashboard_rejects_non_get_requests() {
         let fixture = DashboardFixture::new();
 
-        let response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "POST",
-            "/api/tasks",
-        )
-        .unwrap();
+        let response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "POST", "/api/tasks")
+                .unwrap();
 
         assert_eq!(response.status, "405 Method Not Allowed");
-        assert_eq!(String::from_utf8(response.body).unwrap(), "method not allowed");
+        assert_eq!(
+            String::from_utf8(response.body).unwrap(),
+            "method not allowed"
+        );
     }
 
     #[test]
@@ -3766,13 +3756,9 @@ mod tests {
 
         let root_response =
             build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/").unwrap();
-        let route_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/ledger",
-        )
-        .unwrap();
+        let route_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/ledger")
+                .unwrap();
 
         let root_html = String::from_utf8(root_response.body).unwrap();
         let route_html = String::from_utf8(route_response.body).unwrap();

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::export::{export_payload, ExportFilter, ExportedTasksPayload};
-use crate::protocol::{DagReport, DeterministicExecutionProtocol, DispatchableReport, StatusReport};
+use crate::protocol::{
+    DagReport, DeterministicExecutionProtocol, DispatchableReport, StatusReport,
+};
 use crate::stats::{compute_stats, TaskStats};
 use crate::store::{ExecutionTask, FileLockEntry, TasksSnapshot};
 use crate::validate::{validate_snapshot, ValidationJsonReport};
@@ -90,8 +92,11 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let store_path = tempdir.path().join("project_memory/tasks.json");
         std::fs::create_dir_all(store_path.parent().unwrap()).unwrap();
-        std::fs::write(&store_path, serde_json::to_vec_pretty(&TasksSnapshot::default()).unwrap())
-            .unwrap();
+        std::fs::write(
+            &store_path,
+            serde_json::to_vec_pretty(&TasksSnapshot::default()).unwrap(),
+        )
+        .unwrap();
         let protocol = DeterministicExecutionProtocol::from_store_path(store_path);
 
         protocol
