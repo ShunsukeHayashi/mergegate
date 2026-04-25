@@ -992,7 +992,8 @@ impl ExecutionPlan {
 
     /// Sort calls by priority (highest first)
     pub fn sort_by_priority(&mut self) {
-        self.calls.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.calls
+            .sort_by_key(|call| std::cmp::Reverse(call.priority));
     }
 }
 
