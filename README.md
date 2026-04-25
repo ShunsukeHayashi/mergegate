@@ -175,7 +175,7 @@ Static asset loading follows this order:
 2. `web/dashboard/dist`
 3. embedded Rust-owned dashboard fallback
 
-For the first foundation release boundary and verification gate, see [docs/FOUNDATION_RELEASE_CHECKLIST.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/FOUNDATION_RELEASE_CHECKLIST.md).
+For the first foundation release boundary and verification gate, see [docs/FOUNDATION_RELEASE_CHECKLIST.md](docs/FOUNDATION_RELEASE_CHECKLIST.md).
 
 Compatibility alias:
 
@@ -225,8 +225,8 @@ The mainline product direction is:
 - no multi-source PM dashboard positioning in the core product
 
 PM dashboard assets may inform MergeGate UI/UX, but cross-source orchestration remains a separate higher-level layer.
-See [docs/PRODUCT_DIRECTION.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/PRODUCT_DIRECTION.md).
-The first public cut should ship the foundation scope first, then land the next UI train separately. See [docs/FOUNDATION_RELEASE_CHECKLIST.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/FOUNDATION_RELEASE_CHECKLIST.md).
+See [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_DIRECTION.md).
+The first public cut should ship the foundation scope first, then land the next UI train separately. See [docs/FOUNDATION_RELEASE_CHECKLIST.md](docs/FOUNDATION_RELEASE_CHECKLIST.md).
 
 ## Workspace Layout
 

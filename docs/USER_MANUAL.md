@@ -139,7 +139,7 @@ cargo build --release
 
 内蔵 UI でも API は Rust-owned contract をそのまま表示します。frontend 独自の task state は持ちません。
 
-foundation release の境界と最終確認手順は [docs/FOUNDATION_RELEASE_CHECKLIST.md](/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/docs/FOUNDATION_RELEASE_CHECKLIST.md) を参照してください。
+foundation release の境界と最終確認手順は [docs/FOUNDATION_RELEASE_CHECKLIST.md](FOUNDATION_RELEASE_CHECKLIST.md) を参照してください。
 
 JSON 形式で統計を出す場合は、`mergegate gate stats --format json` ではなく次を使います。
 

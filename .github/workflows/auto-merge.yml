@@ -18,9 +18,9 @@ jobs:
     name: Auto-merge if CI + AI Review passed
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'pull_request' ||
-      github.event_name == 'pull_request_review' ||
-      github.event_name == 'check_run'
+      github.event_name == 'check_run' ||
+      github.event.pull_request.user.login == 'Copilot' ||
+      contains(github.event.pull_request.labels.*.name, 'mergegate-auto-merge')
     permissions:
       pull-requests: write
       contents: write
