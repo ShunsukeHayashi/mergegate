@@ -35,14 +35,17 @@ jobs:
       - name: Get PR diff
         id: diff
         run: |
-          git fetch origin master 2>/dev/null || git fetch origin main 2>/dev/null || true
-          BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo "master")
-          git diff origin/${BASE}...HEAD > /tmp/pr.diff
+          BASE="${{ github.event.pull_request.base.ref }}"
+          if [ -z "$BASE" ]; then
+            BASE="main"
+          fi
+          git fetch origin "$BASE"
+          git diff "origin/${BASE}...HEAD" > /tmp/pr.diff
           BYTES=$(wc -c < /tmp/pr.diff)
           echo "Diff size: ${BYTES} bytes"
 
           # ドキュメント専用 PR 判定（全ファイルが .md なら documentation-only）
-          CHANGED=$(git diff --name-only origin/${BASE}...HEAD)
+          CHANGED=$(git diff --name-only "origin/${BASE}...HEAD")
           echo "Changed files:"
           echo "$CHANGED"
           if [ -z "$CHANGED" ]; then
