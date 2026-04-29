@@ -1,7 +1,7 @@
 {
-  "version": 144,
-  "generated_at": "2026-04-10T01:51:14.902141Z",
-  "generated_from_event_id": null,
+  "version": 222,
+  "generated_at": "2026-04-29T23:12:24.072Z",
+  "generated_from_event_id": "issue-118-StateTransition-review-fix-1777504344073",
   "tasks": [
     {
       "id": "phase-a",
@@ -938,6 +938,544 @@
       "priority": 0,
       "created_at": "2026-04-10T01:49:41.247259Z",
       "updated_at": "2026-04-10T01:51:14.901976Z"
+    },
+    {
+      "id": "issue-120",
+      "title": "Add CI badge to README",
+      "issue_number": 120,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T12:32:25.148360Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": "feature/issue-120-add-ci-badge",
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/120",
+          "content": "Issue #120",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T12:33:05.220131Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-120",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T12:33:05.220132Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/README.md",
+          "content": "# MergeGate\n\nMergeGate is an engine-agnostic gate CLI for AI-assisted development.\n\nIt does not need to be your coding agent, your chat runtime, or your terminal UI. Its job is simpler and more durable:\n\n- register work\n- record impact\n- lock files\n- assign execution\n- track branch and PR state\n- verify completion\n\nIn short:\n\n- `GitNexus`: understand the codebase\n- `MergeGate`: execute changes safely\n\nMergeGate is designed to sit in front of coding agents such as Claude Code, Codex, and Gemini CLI. The execution engine can change. The gate protocol should not.\n\n## What This Project Is\n\nMergeGate is a repo workflow tool for deterministic execution.\n\nThe core product is:\n\n- `miyabi gate ...`\n- `mergegate gate ...`\n\nThe binary still supports both `miyabi` and `mergegate` entrypoints today. `mergegate` is the product-aligned command. `miyabi` remains as a compatibility alias.",
+          "token_estimate": 221,
+          "attached_at": "2026-04-10T12:33:05.220282Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T12:31:38.699853Z",
+      "updated_at": "2026-04-10T12:34:52.689975Z"
+    },
+    {
+      "id": "issue-121",
+      "title": "gate export json — filtered JSON export",
+      "issue_number": 121,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T12:45:10.712866Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/121",
+          "content": "Issue #121",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T12:45:10.734780Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-121",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T12:45:10.734782Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T12:45:04.128459Z",
+      "updated_at": "2026-04-10T12:52:53.988310Z"
+    },
+    {
+      "id": "issue-122",
+      "title": "gate export markdown — Markdown table export",
+      "issue_number": 122,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T12:45:10.717924Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/122",
+          "content": "Issue #122",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T12:45:10.745056Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-122",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T12:45:10.745057Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T12:45:04.134395Z",
+      "updated_at": "2026-04-10T12:52:54.022575Z"
+    },
+    {
+      "id": "issue-123",
+      "title": "gate stats — completion rate, lead time, risk distribution",
+      "issue_number": 123,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T12:45:10.725155Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/123",
+          "content": "Issue #123",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T12:45:10.758627Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-123",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T12:45:10.758629Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T12:45:04.139437Z",
+      "updated_at": "2026-04-10T12:52:54.059125Z"
+    },
+    {
+      "id": "issue-124",
+      "title": "CLI integration: export-json, export-md, stats subcommands",
+      "issue_number": 124,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 1,
+        "depth1": [
+          "GateCommand"
+        ],
+        "analyzed_at": "2026-04-10T13:04:42.999576Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/124",
+          "content": "Issue #124",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T13:04:48.380235Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-124",
+          "content": "risk_level: Low\naffected_symbols: 1",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T13:04:48.380236Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-cli/src/main.rs",
+          "content": "/// MergeGate CLI - Main entry point\n\nuse chrono::Duration as ChronoDuration;\nuse clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};\nuse miyabi_core::{FeatureFlagManager, RulesLoader};\nuse serde::Serialize;\nuse std::collections::HashMap;\nuse std::fs;\nuse std::io::{self, BufRead, BufReader, Write};\nuse std::net::{TcpListener, TcpStream};\nuse std::path::PathBuf;\nuse std::process::Command;\nuse tracing_subscriber::EnvFilter;\n\n/// Global feature flags manager\nstatic FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();\nstatic INVOKED_BINARY_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();\n\n/// Get the global feature flags manager\npub fn feature_flags() -> &'static FeatureFlagManager {\n    FEATURE_FLAGS.get_or_init(|| {\n        let manager = FeatureFlagManager::new();\n        // Default feature flags\n        manager.set_flag(\"extended_thinking\", true);\n        manager.set_flag(\"auto_save_sessions\", true);\n        manager.set_flag(\"syntax_highlighting\", true);\n        manager.set_flag(\"vim_mode\", false);\n        manager\n    })\n}",
+          "token_estimate": 276,
+          "attached_at": "2026-04-10T13:04:48.380420Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T13:04:34.352880Z",
+      "updated_at": "2026-04-10T13:09:40.723095Z"
+    },
+    {
+      "id": "issue-125",
+      "title": "validate.rs: task integrity checker",
+      "issue_number": 125,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 0,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T13:04:43.004498Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/125",
+          "content": "Issue #125",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T13:04:48.388990Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-125",
+          "content": "risk_level: Low\naffected_symbols: 0",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T13:04:48.388990Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-core/src/lib.rs",
+          "content": "//! Miyabi Core - Shared types and utilities\n//!\n//! This crate provides core types and utilities shared across the Miyabi framework.\n\npub mod agent;\npub mod anthropic;\npub mod cache;\npub mod config;\npub mod conversation;\npub mod dag;\npub mod dream;\npub mod error;\npub mod error_policy;\npub mod export;\npub mod export_md;\npub mod feature_flags;\npub mod gate;\npub mod git;\npub mod github;\npub mod github_tools;\npub mod hooks;\npub mod lock;\npub mod logger;\npub mod mcp;\npub mod orchestration;\npub mod plugin;\npub mod protocol;\npub mod retry;\npub mod rules;\npub mod session;",
+          "token_estimate": 143,
+          "attached_at": "2026-04-10T13:04:48.389141Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T13:04:34.360416Z",
+      "updated_at": "2026-04-10T13:09:40.749369Z"
+    },
+    {
+      "id": "issue-126",
+      "title": "github_tools.rs unit tests",
+      "issue_number": 126,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 7,
+        "depth1": [
+          "ListIssuesTool",
+          "GetIssueTool",
+          "CreateIssueTool",
+          "AddCommentTool",
+          "ListPullRequestsTool",
+          "CreatePullRequestTool",
+          "AddLabelsTool"
+        ],
+        "analyzed_at": "2026-04-10T13:04:43.011862Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/126",
+          "content": "Issue #126",
+          "token_estimate": 3,
+          "attached_at": "2026-04-10T13:04:48.398507Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-126",
+          "content": "risk_level: Low\naffected_symbols: 7",
+          "token_estimate": 9,
+          "attached_at": "2026-04-10T13:04:48.398508Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-core/src/github_tools.rs",
+          "content": "//! GitHub Tools for Agent Execution\n//!\n//! Tools that allow agents to interact with GitHub issues, PRs, and repositories.\n\nuse async_trait::async_trait;\nuse serde_json::Value;\n\nuse crate::github::{CreateIssueRequest, CreatePullRequestRequest, GitHubClient};\nuse crate::tool::{ParameterDef, Tool, ToolError, ToolOutput, ToolRegistry, ToolResult};\n\n/// Tool to list GitHub issues\npub struct ListIssuesTool {\n    client: GitHubClient,\n}\n\nimpl ListIssuesTool {\n    pub fn new(client: GitHubClient) -> Self {\n        Self { client }\n    }\n}\n\n#[async_trait]\nimpl Tool for ListIssuesTool {\n    fn name(&self) -> &str {\n        \"github_list_issues\"\n    }\n\n    fn description(&self) -> &str {\n        \"List issues from the GitHub repository. Can filter by state (open/closed) and labels.\"\n    }",
+          "token_estimate": 197,
+          "attached_at": "2026-04-10T13:04:48.398698Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T13:04:34.366048Z",
+      "updated_at": "2026-04-10T13:09:40.785517Z"
+    },
+    {
+      "id": "openclaw-token-sync-20260410",
+      "title": "MacBook OpenClaw gateway token drift recovery playbook",
+      "issue_number": 0,
+      "current_state": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "MEDIUM",
+        "affected_symbols": 2,
+        "depth1": [],
+        "analyzed_at": "2026-04-10T13:54:45.740836Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": {
+        "required": false,
+        "approved_by": "miyabi-cli",
+        "approved_at": "2026-04-10T13:54:45.736600Z",
+        "reason": "approved via impact --approve"
+      },
+      "context_attachments": [
+        {
+          "attachment_type": "file_snippet",
+          "source": "redacted://local-openclaw-token-sync-context",
+          "content": "[redacted] Local OpenClaw configuration, node metadata, and temporary recovery script snippets intentionally omitted from repository ledger.",
+          "token_estimate": 18,
+          "attached_at": "2026-04-10T13:54:32.596114Z"
+        }
+      ],
+      "priority": 0,
+      "created_at": "2026-04-10T13:54:07.212942Z",
+      "updated_at": "2026-04-10T13:54:45.741351Z"
+    },
+    {
+      "id": "issue-117",
+      "title": "Foundation: Rust-owned static serving and UI API surface for MergeGate",
+      "issue_number": 117,
+      "current_state": "done",
+      "dependencies": [],
+      "dependents": [
+        "issue-118",
+        "issue-120-ui-dependency-map",
+        "issue-119"
+      ],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": {
+        "risk_level": "LOW",
+        "affected_symbols": 3,
+        "depth1": [
+          "serve_dashboard",
+          "handle_dashboard_connection",
+          "handle_gate_command"
+        ],
+        "analyzed_at": "2026-04-11T22:20:45.635005Z",
+        "analyzed_commit": null,
+        "input_hash": null
+      },
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/117",
+          "content": "Issue #117",
+          "token_estimate": 3,
+          "attached_at": "2026-04-11T22:20:45.664587Z"
+        },
+        {
+          "attachment_type": "impact",
+          "source": "dtp://impact/issue-117",
+          "content": "risk_level: Low\naffected_symbols: 3",
+          "token_estimate": 9,
+          "attached_at": "2026-04-11T22:20:45.664696Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-cli/src/main.rs",
+          "content": "/// MergeGate CLI - Main entry point\nuse chrono::{DateTime, Duration as ChronoDuration, Utc};\nuse clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};\nuse miyabi_core::{FeatureFlagManager, RulesLoader};\nuse serde::Serialize;\nuse std::collections::HashMap;\nuse std::fs;\nuse std::io::{self, BufRead, BufReader, Write};\nuse std::net::{TcpListener, TcpStream};\nuse std::path::PathBuf;\nuse std::process::Command;\nuse tracing_subscriber::EnvFilter;\n\n/// Global feature flags manager\nstatic FEATURE_FLAGS: std::sync::OnceLock<FeatureFlagManager> = std::sync::OnceLock::new();\nstatic INVOKED_BINARY_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();\n\n/// Get the global feature flags manager\npub fn feature_flags() -> &'static FeatureFlagManager {\n    FEATURE_FLAGS.get_or_init(|| {\n        let manager = FeatureFlagManager::new();\n        // Default feature flags\n        manager.set_flag(\"extended_thinking\", true);\n        manager.set_flag(\"auto_save_sessions\", true);\n        manager.set_flag(\"syntax_highlighting\", true);\n        manager.set_flag(\"vim_mode\", false);\n        manager\n    })\n}\n",
+          "token_estimate": 282,
+          "attached_at": "2026-04-11T22:20:45.665877Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-core/src/protocol.rs",
+          "content": "//! Deterministic execution protocol entry point.\n\nuse crate::dream::DreamReport;\nuse crate::error::Error;\nuse crate::gate::{evaluate_gate, validate_branch_name, Gate, GateContext, GateReport};\nuse crate::lock::{FileLockManager, LeaseConfig, LockConflict};\nuse crate::store::{\n    CompletionMode, ContextAttachment, EventStore, ExecutionTask, GitHubEvidence, GitHubIssueState,\n    GitHubPrState, HumanApproval, ImpactRiskLevel, ReviewDecision, SnapshotStore, TaskEvent,\n    TaskEventType, TaskImpact, TaskState, TasksSnapshot,\n};\nuse chrono::Utc;\nuse serde::{Deserialize, Serialize};\nuse serde_json::Value;\nuse std::collections::{HashMap, VecDeque};\nuse std::fs;\nuse std::io::{BufRead, BufReader};\nuse std::path::{Path, PathBuf};\nuse std::process::Command;\nuse std::time::{Duration, Instant};\n\nconst MAX_CONTEXT_TOKENS: usize = 4_000;\nconst FILE_SNIPPET_LINE_LIMIT: usize = 30;\nconst ANNOUNCE_CHAR_LIMIT: usize = 180;\nconst MAX_ATTACHMENT_AGE_HOURS: i64 = 24;\n\n#[derive(Debug, Clone)]\npub struct DeterministicExecutionProtocol {\n    event_store: EventStore,\n    snapshot_store: SnapshotStore,",
+          "token_estimate": 273,
+          "attached_at": "2026-04-11T22:20:45.665928Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-core/src/export.rs",
+          "content": "use chrono::{DateTime, Utc};\nuse serde::{Deserialize, Serialize};\n\nuse crate::store::{ExecutionTask, TasksSnapshot};\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct ExportFilter {\n    pub state: Option<String>,\n    pub risk_level: Option<String>,\n    pub since: Option<DateTime<Utc>>,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct ExportedTask {\n    pub id: String,\n    pub title: String,\n    pub state: String,\n    pub current_state: String,\n    pub impact_risk: Option<String>,\n    pub branch: Option<String>,\n    pub dependencies: Vec<String>,\n    pub priority: u32,\n    pub created_at: DateTime<Utc>,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct ExportedTasksPayload {\n    pub version: u64,\n    pub generated_at: DateTime<Utc>,\n    pub generated_from_event_id: Option<String>,",
+          "token_estimate": 218,
+          "attached_at": "2026-04-11T22:20:45.665966Z"
+        },
+        {
+          "attachment_type": "file_snippet",
+          "source": "/Users/shunsukehayashi/dev/personal/HAYASHI_SHUNSUKE/mergegate/crates/mergegate-core/src/validate.rs",
+          "content": "use crate::store::{TaskState, TasksSnapshot};\nuse serde::{Deserialize, Serialize};\nuse std::collections::{HashMap, HashSet};\nuse std::fmt;\n\n#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]\npub struct ValidationReport {\n    pub orphaned_locks: Vec<String>,\n    pub invalid_transitions: Vec<String>,\n    pub circular_dependencies: Vec<String>,\n    pub warnings: Vec<String>,\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]\npub enum ValidationSeverity {\n    Clean,\n    Warning,\n    Error,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\npub struct ValidationJsonReport {\n    pub severity: ValidationSeverity,\n    pub exit_code: i32,\n    pub issue_count: usize,\n    pub error_count: usize,\n    pub warning_count: usize,\n    pub orphaned_locks: Vec<String>,\n    pub invalid_transitions: Vec<String>,",
+          "token_estimate": 224,
+          "attached_at": "2026-04-11T22:20:45.666002Z"
+        }
+      ],
+      "priority": 10,
+      "created_at": "2026-04-11T22:17:47.123114Z",
+      "updated_at": "2026-04-12T07:30:14.282157Z"
+    },
+    {
+      "id": "issue-116",
+      "title": "Mainline UI track: MergeGate-native web surfaces on top of the Rust protocol",
+      "issue_number": 116,
+      "current_state": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": null,
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "manual",
+      "human_approval": null,
+      "context_attachments": [],
+      "priority": 8,
+      "created_at": "2026-04-11T22:17:47.134639Z",
+      "updated_at": "2026-04-11T22:17:47.134748Z"
+    },
+    {
+      "id": "issue-118",
+      "title": "UI: Implement Gate Overview as the first-class MergeGate web surface",
+      "issue_number": 118,
+      "current_state": "pending",
+      "dependencies": [
+        "issue-117"
+      ],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": null,
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [
+        {
+          "attachment_type": "issue",
+          "source": "github://issue/118",
+          "content": "Issue #118",
+          "token_estimate": 3,
+          "attached_at": "2026-04-23T23:20:39.899061Z"
+        },
+        {
+          "attachment_type": "sprint_plan",
+          "source": "planning-wizard://sprint/2026-04-24-mergegate-ui",
+          "content": "Sprint Goal: complete issue-118 Gate Overview as the primary MergeGate web surface. Secondary: start issue-119 Task Ledger. Stretch: design issue-120-ui-dependency-map only after its GitHub issue sync is corrected. Out of scope: issue-116 as parent track and openclaw-token-sync-20260410. DoD: cargo fmt --all, cargo clippy --all-targets -- -D warnings, cargo test --all, mergegate gate validate, plus UI browser evidence.",
+          "token_estimate": 93,
+          "attached_at": "2026-04-23T23:21:00Z"
+        }
+      ],
+      "priority": 9,
+      "created_at": "2026-04-11T22:17:53.630425Z",
+      "updated_at": "2026-04-29T23:12:24.072Z"
+    },
+    {
+      "id": "issue-120-ui-dependency-map",
+      "title": "UI: Implement Dependency Map for MergeGate DAG and dependency pressure",
+      "issue_number": 0,
+      "current_state": "pending",
+      "dependencies": [
+        "issue-117"
+      ],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": null,
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [],
+      "priority": 6,
+      "created_at": "2026-04-11T22:18:00.472834Z",
+      "updated_at": "2026-04-23T23:21:00Z"
+    },
+    {
+      "id": "issue-119",
+      "title": "UI: Implement Task Ledger with MergeGate-native task semantics",
+      "issue_number": 119,
+      "current_state": "pending",
+      "dependencies": [
+        "issue-117"
+      ],
+      "dependents": [],
+      "soft_dependencies": [],
+      "lock": null,
+      "impact": null,
+      "branch_name": null,
+      "github_evidence": null,
+      "completion_mode": "github_pr",
+      "human_approval": null,
+      "context_attachments": [],
+      "priority": 6,
+      "created_at": "2026-04-11T22:18:00.486900Z",
+      "updated_at": "2026-04-11T22:18:00.487022Z"
     }
   ],
   "file_locks": {}

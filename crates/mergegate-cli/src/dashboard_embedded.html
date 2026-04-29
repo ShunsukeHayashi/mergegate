@@ -6,20 +6,24 @@
   <title>MergeGate Dashboard</title>
   <style>
     :root {
-      --bg: #07111f;
-      --panel: rgba(10, 24, 42, 0.88);
-      --panel-strong: rgba(13, 31, 53, 0.98);
-      --border: rgba(123, 164, 208, 0.18);
-      --text: #eaf4ff;
-      --muted: #8ca5c1;
-      --accent: #4ecdc4;
-      --accent-2: #ffd166;
-      --danger: #ff6b6b;
-      --warning: #f7b267;
-      --ok: #95d5b2;
-      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-      --radius: 22px;
-      --radius-sm: 14px;
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --panel-strong: #fbfcfe;
+      --surface: #f1f5f9;
+      --surface-strong: #e8eef6;
+      --border: #d8e0ea;
+      --text: #172033;
+      --muted: #617087;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --danger: #b42318;
+      --warning: #b45309;
+      --ok: #15803d;
+      --info: #2563eb;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+      --radius: 8px;
+      --radius-sm: 8px;
       --font: "IBM Plex Sans", "Avenir Next", sans-serif;
       --mono: "IBM Plex Mono", "SFMono-Regular", monospace;
     }
@@ -33,10 +37,7 @@
       min-height: 100vh;
       font-family: var(--font);
       color: var(--text);
-      background:
-        radial-gradient(circle at top left, rgba(78, 205, 196, 0.2), transparent 24rem),
-        radial-gradient(circle at top right, rgba(255, 209, 102, 0.2), transparent 22rem),
-        linear-gradient(160deg, #06111f 0%, #09182c 48%, #0e223b 100%);
+      background: linear-gradient(180deg, #eef3f8 0%, var(--bg) 34%, #ffffff 100%);
     }
 
     a {
@@ -44,16 +45,17 @@
     }
 
     .shell {
-      width: min(1380px, calc(100vw - 32px));
+      width: min(1440px, calc(100vw - 32px));
       margin: 0 auto;
-      padding: 24px 0 40px;
+      padding: 18px 0 40px;
     }
 
     .masthead {
       display: grid;
-      gap: 18px;
-      grid-template-columns: 1.4fr minmax(280px, 0.9fr);
+      gap: 20px;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
       align-items: stretch;
+      padding: 8px 0 18px;
     }
 
     .hero,
@@ -65,29 +67,25 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
     }
 
     .hero {
-      padding: 28px;
+      padding: 8px 0;
       position: relative;
       overflow: hidden;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
     }
 
     .hero::after {
-      content: "";
-      position: absolute;
-      inset: auto -6rem -8rem auto;
-      width: 18rem;
-      height: 18rem;
-      background: radial-gradient(circle, rgba(78, 205, 196, 0.22), transparent 68%);
-      pointer-events: none;
+      display: none;
     }
 
     .eyebrow,
     .section-eyebrow {
       text-transform: uppercase;
-      letter-spacing: 0.16em;
+      letter-spacing: 0;
       font-size: 0.73rem;
       color: var(--muted);
       margin-bottom: 10px;
@@ -101,15 +99,15 @@
     }
 
     .hero-title {
-      font-size: clamp(2rem, 4vw, 3.5rem);
-      line-height: 1.02;
-      max-width: 11ch;
+      font-size: clamp(1.85rem, 3.2vw, 3rem);
+      line-height: 1.1;
+      max-width: 18ch;
     }
 
     .hero-copy {
       margin-top: 12px;
-      max-width: 54ch;
-      color: rgba(234, 244, 255, 0.78);
+      max-width: 64ch;
+      color: var(--muted);
       line-height: 1.6;
     }
 
@@ -119,24 +117,28 @@
       gap: 10px;
       margin-top: 22px;
       padding: 11px 16px;
-      border-radius: 999px;
+      border-radius: var(--radius-sm);
       font-weight: 700;
-      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      background: var(--panel);
     }
 
     .hero-status.clean {
       color: var(--ok);
-      background: rgba(149, 213, 178, 0.12);
+      background: #ecfdf3;
+      border-color: #bbf7d0;
     }
 
     .hero-status.warning {
       color: var(--warning);
-      background: rgba(247, 178, 103, 0.13);
+      background: #fffbeb;
+      border-color: #fde68a;
     }
 
     .hero-status.error {
-      color: #ffd0d0;
-      background: rgba(255, 107, 107, 0.13);
+      color: var(--danger);
+      background: #fef3f2;
+      border-color: #fecaca;
     }
 
     .meta-card {
@@ -174,8 +176,9 @@
     .metric {
       padding: 18px;
       border-radius: var(--radius-sm);
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
     }
 
     .metric-label {
@@ -199,8 +202,9 @@
     .tab {
       border: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--muted);
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 999px;
+      background: var(--panel);
+      border-color: var(--border);
+      border-radius: var(--radius-sm);
       padding: 10px 16px;
       font-weight: 700;
       cursor: pointer;
@@ -209,13 +213,13 @@
 
     .tab:hover {
       transform: translateY(-1px);
-      border-color: rgba(78, 205, 196, 0.5);
+      border-color: rgba(15, 118, 110, 0.4);
       color: var(--text);
     }
 
     .tab.active {
-      background: rgba(78, 205, 196, 0.14);
-      border-color: rgba(78, 205, 196, 0.55);
+      background: #ccfbf1;
+      border-color: rgba(15, 118, 110, 0.35);
       color: var(--text);
     }
 
@@ -249,6 +253,10 @@
       grid-template-columns: 1.2fr 1fr;
     }
 
+    .overview-wide {
+      grid-column: 1 / -1;
+    }
+
     .panel {
       padding: 20px;
     }
@@ -278,16 +286,35 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      border-radius: 999px;
+      border-radius: var(--radius-sm);
       font-size: 0.83rem;
       padding: 7px 10px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--surface);
       color: var(--muted);
+      border: 1px solid var(--border);
     }
 
     .tiny-pill {
       padding: 5px 9px;
       font-size: 0.76rem;
+    }
+
+    .tiny-pill.clean {
+      color: var(--ok);
+      background: #ecfdf3;
+      border-color: #bbf7d0;
+    }
+
+    .tiny-pill.warning {
+      color: var(--warning);
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .tiny-pill.error {
+      color: var(--danger);
+      background: #fef3f2;
+      border-color: #fecaca;
     }
 
     .list,
@@ -304,15 +331,49 @@
     .detail-item,
     .action-item,
     .node-card {
-      border-radius: 16px;
+      border-radius: var(--radius-sm);
       padding: 14px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
     }
 
     .action-item {
       display: grid;
       gap: 8px;
+    }
+
+    .focus-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .focus-card {
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      min-height: 108px;
+    }
+
+    .focus-label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      margin-bottom: 8px;
+    }
+
+    .focus-value {
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .focus-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.83rem;
+      line-height: 1.5;
     }
 
     .task-item.clickable,
@@ -324,14 +385,14 @@
     .task-item.clickable:hover,
     .node-card.clickable:hover {
       transform: translateY(-1px);
-      border-color: rgba(78, 205, 196, 0.4);
-      background: rgba(78, 205, 196, 0.06);
+      border-color: rgba(15, 118, 110, 0.38);
+      background: #f0fdfa;
     }
 
     .task-item.selected,
     .node-card.selected {
-      border-color: rgba(78, 205, 196, 0.65);
-      background: rgba(78, 205, 196, 0.1);
+      border-color: rgba(15, 118, 110, 0.55);
+      background: #ccfbf1;
     }
 
     .task-top,
@@ -370,57 +431,62 @@
       padding: 6px 10px;
       font-size: 0.76rem;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--surface);
+      border: 1px solid var(--border);
       white-space: nowrap;
     }
 
     .badge.pending,
     .badge.dispatchable {
-      background: rgba(78, 205, 196, 0.15);
-      color: #b8fff4;
+      background: #ccfbf1;
+      color: #0f766e;
+      border-color: #99f6e4;
     }
 
     .badge.blocked,
     .badge.failed,
     .badge.error {
-      background: rgba(255, 107, 107, 0.18);
-      color: #ffd8d8;
+      background: #fee4e2;
+      color: var(--danger);
+      border-color: #fecaca;
     }
 
     .badge.implementing,
     .badge.reviewing,
     .badge.analyzing,
     .badge.deploying {
-      background: rgba(255, 209, 102, 0.18);
-      color: #fff0b5;
+      background: #fef3c7;
+      color: var(--warning);
+      border-color: #fde68a;
     }
 
     .badge.done,
     .badge.merged,
     .badge.clean {
-      background: rgba(149, 213, 178, 0.17);
-      color: #d8ffeb;
+      background: #dcfce7;
+      color: var(--ok);
+      border-color: #bbf7d0;
     }
 
     .action-label {
       font-size: 0.72rem;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
+      letter-spacing: 0;
       color: var(--muted);
     }
 
     .action-label.error {
-      color: #ffb8b8;
+      color: var(--danger);
     }
 
     .action-label.warning {
-      color: #ffe0a3;
+      color: var(--warning);
     }
 
     .action-label.info {
-      color: #b8fff4;
+      color: var(--info);
     }
 
     .empty {
@@ -458,8 +524,8 @@
       width: 100%;
       padding: 10px 12px;
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(4, 12, 22, 0.7);
+      border: 1px solid var(--border);
+      background: var(--panel);
       color: var(--text);
     }
 
@@ -467,16 +533,17 @@
       align-self: end;
       border: none;
       padding: 10px 14px;
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       font-weight: 700;
       cursor: pointer;
-      background: rgba(78, 205, 196, 0.16);
-      color: var(--text);
+      background: #0f766e;
+      color: white;
     }
 
     .button.secondary {
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface);
       color: var(--muted);
+      border: 1px solid var(--border);
     }
 
     .ledger-list {
@@ -498,9 +565,9 @@
     }
 
     .detail-block {
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
       padding: 14px;
     }
 
@@ -508,7 +575,7 @@
       color: var(--muted);
       font-size: 0.78rem;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
+      letter-spacing: 0;
       margin-bottom: 8px;
     }
 
@@ -575,6 +642,82 @@
       font-size: 0.84rem;
     }
 
+    .hidden {
+      display: none !important;
+    }
+
+    .connection-notice {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border: 1px solid #fbbf24;
+      border-radius: var(--radius);
+      background: #fffbeb;
+      color: #78350f;
+    }
+
+    .notice-title,
+    .decision-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+
+    .notice-body {
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .command-line,
+    .action-command {
+      font-family: var(--mono);
+      border-radius: var(--radius-sm);
+      background: #101828;
+      color: #f8fafc;
+      padding: 10px 12px;
+      white-space: nowrap;
+      overflow: auto;
+    }
+
+    .decision-strip {
+      margin-top: 18px;
+      display: grid;
+      gap: 6px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    .decision-title {
+      font-size: 1.08rem;
+      font-weight: 800;
+    }
+
+    .decision-body {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .action-command {
+      margin-top: 2px;
+      font-size: 0.82rem;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    pre {
+      max-width: 100%;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
     @media (max-width: 1080px) {
       .masthead,
       .overview-grid,
@@ -584,7 +727,8 @@
 
       .metric-grid,
       .dependency-summary,
-      .filter-bar {
+      .filter-bar,
+      .focus-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
@@ -604,84 +748,112 @@
       .panel,
       .ledger-detail,
       .level-card {
-        border-radius: 18px;
+        border-radius: var(--radius);
       }
 
       .metric-grid,
       .dependency-summary,
-      .filter-bar {
+      .filter-bar,
+      .focus-grid {
         grid-template-columns: 1fr;
       }
 
       .task-top,
       .node-top,
-      .panel-header {
+      .panel-header,
+      .connection-notice {
         flex-direction: column;
+        grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
   <div class="shell">
+    <div id="connection-notice" class="connection-notice hidden" role="status">
+      <div>
+        <div class="notice-title">Live data is not connected</div>
+        <div id="connection-notice-body" class="notice-body">
+          Start the dashboard server, then open the localhost URL.
+        </div>
+      </div>
+      <div class="command-line">./target/debug/mergegate gate serve --port 4848</div>
+    </div>
+
     <section class="masthead">
       <div class="hero">
-        <div class="eyebrow">MergeGate UI Mainline</div>
-        <h1 class="hero-title">Gate Overview, Ledger, and Dependency Map</h1>
+        <div class="eyebrow">MergeGate</div>
+        <h1 class="hero-title">作業ボード</h1>
         <p class="hero-copy">
-          Rust-owned protocol data stays the source of truth. This dashboard highlights what is dispatchable,
-          what needs operator attention, and how the dependency frontier is moving.
+          上から順に、今やること、詰まり、詳細を確認できます。迷ったら最初の「次にやること」だけ見れば大丈夫です。
         </p>
-        <div id="hero-status" class="hero-status clean">Healthy</div>
+        <div id="hero-status" class="hero-status clean">読み込み中</div>
         <div class="metric-grid">
           <div class="metric">
-            <div class="metric-label">Dispatchable</div>
+            <div class="metric-label">今すぐ着手</div>
             <div id="metric-dispatchable" class="metric-value">0</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Validation Issues</div>
+            <div class="metric-label">要確認</div>
             <div id="metric-issues" class="metric-value">0</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Active Locks</div>
+            <div class="metric-label">ロック</div>
             <div id="metric-locks" class="metric-value">0</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Completion</div>
+            <div class="metric-label">完了率</div>
             <div id="metric-completion" class="metric-value">0%</div>
           </div>
+        </div>
+        <div id="decision-summary" class="decision-strip">
+          <div class="decision-label">Now</div>
+          <div class="decision-title">データを読み込んでいます</div>
+          <div class="decision-body">live API に接続できると、最優先の次アクションをここに表示します。</div>
         </div>
       </div>
       <aside class="meta-card">
         <div class="meta-top">
           <div>
-            <div class="eyebrow">Operator Meta</div>
-            <div class="meta-title">Ledger Health</div>
+            <div class="eyebrow">Status</div>
+            <div class="meta-title">状態サマリ</div>
           </div>
           <span id="severity-pill" class="tiny-pill">clean</span>
         </div>
-        <div id="health-summary" class="meta-body">Loading dashboard state...</div>
+        <div id="health-summary" class="meta-body">状態を読み込んでいます...</div>
         <div id="health-pills" class="pill-row"></div>
         <div class="detail-block">
-          <div class="detail-label">Snapshot</div>
-          <div id="meta" class="detail-value subtle">Waiting for the first refresh.</div>
+          <div class="detail-label">データソース</div>
+          <div id="meta" class="detail-value subtle">最初の更新を待っています。</div>
         </div>
       </aside>
     </section>
 
     <nav class="tabs" aria-label="Dashboard sections">
-      <button class="tab active" data-view="overview">Gate Overview</button>
-      <button class="tab" data-view="ledger">Task Ledger</button>
-      <button class="tab" data-view="dependency">Dependency Map</button>
+      <button class="tab active" data-view="overview">概要</button>
+      <button class="tab" data-view="ledger">タスク台帳</button>
+      <button class="tab" data-view="dependency">依存関係</button>
     </nav>
 
     <main>
       <section id="view-overview" class="view active">
         <div class="overview-grid">
+          <div class="panel overview-wide">
+            <div class="panel-header">
+              <div>
+                <div class="section-eyebrow">Sprint Focus</div>
+                <div class="panel-title">今スプリントの軸</div>
+              </div>
+              <span id="sprint-status" class="tiny-pill">loading</span>
+            </div>
+            <div id="sprint-focus" class="focus-grid"></div>
+          </div>
+
           <div class="panel">
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">First Response</div>
-                <div class="panel-title">Next Actions</div>
+                <div class="panel-title">次にやること</div>
               </div>
             </div>
             <ul id="next-actions" class="list"></ul>
@@ -691,7 +863,7 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Ledger Safety</div>
-                <div class="panel-title">Validation Detail</div>
+                <div class="panel-title">壊れているところ</div>
               </div>
             </div>
             <ul id="validation-detail" class="detail-list"></ul>
@@ -701,7 +873,7 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Dispatchable First</div>
-                <div class="panel-title">Ready Queue</div>
+                <div class="panel-title">着手できる</div>
               </div>
               <span id="ready-count" class="tiny-pill">0 tasks</span>
             </div>
@@ -712,7 +884,7 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Attention</div>
-                <div class="panel-title">Blocked / Failed / Awaiting Sync</div>
+                <div class="panel-title">詰まり</div>
               </div>
               <span id="attention-count" class="tiny-pill">0 tasks</span>
             </div>
@@ -723,7 +895,7 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Work In Motion</div>
-                <div class="panel-title">Progress Queue</div>
+                <div class="panel-title">進行中</div>
               </div>
               <span id="progress-count" class="tiny-pill">0 tasks</span>
             </div>
@@ -734,7 +906,7 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Lock Surface</div>
-                <div class="panel-title">Active Locks</div>
+                <div class="panel-title">ロック中のファイル</div>
               </div>
               <span id="locks-count" class="tiny-pill">0 locks</span>
             </div>
@@ -749,13 +921,13 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Task Ledger</div>
-                <div class="panel-title">Filterable MergeGate-native tasks</div>
+                <div class="panel-title">絞り込みできるタスク一覧</div>
               </div>
               <span id="ledger-count" class="tiny-pill">0 tasks</span>
             </div>
             <form id="ledger-filters" class="filter-bar">
               <label>
-                State
+                状態
                 <select id="filter-state" name="state">
                   <option value="">All states</option>
                   <option value="draft">draft</option>
@@ -771,7 +943,7 @@
                 </select>
               </label>
               <label>
-                Risk
+                リスク
                 <select id="filter-risk" name="risk">
                   <option value="">All risk levels</option>
                   <option value="LOW">LOW</option>
@@ -781,21 +953,20 @@
                 </select>
               </label>
               <label>
-                Since
+                更新日
                 <input id="filter-since" name="since" type="date">
               </label>
-              <button type="submit" class="button">Apply</button>
-              <button id="filters-reset" type="button" class="button secondary">Reset</button>
+              <button type="submit" class="button">適用</button>
+              <button id="filters-reset" type="button" class="button secondary">リセット</button>
             </form>
             <div id="ledger-results" class="ledger-list"></div>
           </div>
 
           <aside class="ledger-detail">
             <div class="section-eyebrow">Task Detail</div>
-            <h2 id="detail-title">Select a task</h2>
+            <h2 id="detail-title">タスクを選択</h2>
             <p id="detail-summary" class="meta-body" style="margin-top: 10px;">
-              Pick a task from the ledger, overview queues, or dependency map to inspect branch, dependencies,
-              evidence, and completion mode.
+              一覧、概要、依存関係のどこからでもタスクを選ぶと、branch、依存、証跡、完了条件を確認できます。
             </p>
             <div id="detail-grid" class="detail-grid"></div>
           </aside>
@@ -808,25 +979,25 @@
             <div class="panel-header">
               <div>
                 <div class="section-eyebrow">Dependency Pressure</div>
-                <div class="panel-title">Frontier, blocked chain, and level structure</div>
+                <div class="panel-title">次に進める場所と詰まり</div>
               </div>
             </div>
             <div class="dependency-summary">
               <div class="metric">
-                <div class="metric-label">Dispatchable Frontier</div>
+                <div class="metric-label">着手可能</div>
                 <div id="frontier-count" class="metric-value">0</div>
               </div>
               <div class="metric">
-                <div class="metric-label">Blocked Tasks</div>
+                <div class="metric-label">詰まり</div>
                 <div id="blocked-count" class="metric-value">0</div>
               </div>
               <div class="metric">
-                <div class="metric-label">Dependency Levels</div>
+                <div class="metric-label">階層</div>
                 <div id="level-count" class="metric-value">0</div>
               </div>
             </div>
             <div id="dependency-frontier" class="pill-row"></div>
-            <p id="dependency-summary-text" class="footer-note">Loading dependency data...</p>
+            <p id="dependency-summary-text" class="footer-note">依存関係を読み込んでいます...</p>
           </div>
 
           <div class="dag-board" id="dag-board"></div>
@@ -838,6 +1009,9 @@
   <script>
     const ACTIVE_STATES = new Set(["analyzing", "implementing", "reviewing", "deploying"]);
     const ATTENTION_STATES = new Set(["blocked", "failed", "awaiting_github_sync"]);
+    const DASHBOARD_COMMAND = "./target/debug/mergegate gate serve --port 4848";
+    const DASHBOARD_URL = "http://127.0.0.1:4848";
+    const IS_FILE_VIEW = window.location.protocol === "file:";
 
     const state = {
       currentView: "overview",
@@ -848,7 +1022,8 @@
       validation: {},
       locks: {},
       dag: { levels: [] },
-      dispatchable: { task_ids: [], tasks: [] }
+      dispatchable: { task_ids: [], tasks: [] },
+      sprintFocus: {}
     };
 
     function escapeHtml(value) {
@@ -870,6 +1045,30 @@
 
     function setElementHtml(id, html) {
       document.getElementById(id).innerHTML = html;
+    }
+
+    function showConnectionNotice(message) {
+      document.getElementById("connection-notice").classList.remove("hidden");
+      document.getElementById("connection-notice-body").textContent = message;
+    }
+
+    function hideConnectionNotice() {
+      document.getElementById("connection-notice").classList.add("hidden");
+    }
+
+    function setMetricPlaceholders(value = "-") {
+      document.getElementById("metric-dispatchable").textContent = value;
+      document.getElementById("metric-issues").textContent = value;
+      document.getElementById("metric-locks").textContent = value;
+      document.getElementById("metric-completion").textContent = value;
+    }
+
+    function setDecisionSummary(label, title, body) {
+      setElementHtml("decision-summary", (
+        '<div class="decision-label">' + escapeHtml(label) + '</div>' +
+        '<div class="decision-title">' + escapeHtml(title) + '</div>' +
+        '<div class="decision-body">' + escapeHtml(body) + '</div>'
+      ));
     }
 
     function queryParams() {
@@ -950,6 +1149,120 @@
       return "priority " + task.priority + " | risk " + risk + " | deps " + deps;
     }
 
+    function renderFocusCard(label, value, note) {
+      return (
+        '<div class="focus-card">' +
+          '<div class="focus-label">' + escapeHtml(label) + '</div>' +
+          '<div class="focus-value">' + escapeHtml(value) + '</div>' +
+          '<div class="focus-note">' + escapeHtml(note) + '</div>' +
+        '</div>'
+      );
+    }
+
+    function taskFocusValue(task) {
+      if (!task) return "Not specified";
+      return task.id + " · " + (task.current_state || "unknown");
+    }
+
+    function taskFocusNote(task, fallback) {
+      return task ? task.title : fallback;
+    }
+
+    function renderSprintFocus(sprintFocus) {
+      const plan = sprintFocus?.plan || null;
+      const primary = sprintFocus?.primary || null;
+      const secondary = sprintFocus?.secondary || null;
+      const stretch = sprintFocus?.stretch || null;
+
+      document.getElementById("sprint-status").textContent = plan ? "fixed" : "not fixed";
+      document.getElementById("sprint-status").className = plan ? "tiny-pill clean" : "tiny-pill warning";
+
+      if (!plan) {
+        setElementHtml("sprint-focus", renderFocusCard(
+          "Plan",
+          "sprint_plan が未設定",
+          "sprint_plan attachment を付けると、ここに実行レーンが出ます。"
+        ));
+        return;
+      }
+
+      setElementHtml("sprint-focus", [
+        renderFocusCard(
+          "Primary",
+          taskFocusValue(primary),
+          taskFocusNote(primary, "Plan owner or Primary task is not available.")
+        ),
+        renderFocusCard(
+          "Secondary",
+          taskFocusValue(secondary),
+          taskFocusNote(secondary, "sprint_plan に Secondary: task-id を追加してください。")
+        ),
+        renderFocusCard(
+          "Stretch",
+          stretch ? stretch.id + " · issue #" + (stretch.issue_number || "unsynced") : "Not specified",
+          taskFocusNote(stretch, "sprint_plan に Stretch: task-id を追加してください。")
+        ),
+        renderFocusCard(
+          "Definition of Done",
+          "fmt, clippy, tests, validate",
+          "完了前に UI evidence も確認します。"
+        )
+      ].join(""));
+    }
+
+    function renderDecisionSummary(tasks, validation, dispatchable, locks) {
+      const issueCount = validationIssueCount(validation);
+      const dispatchableTasks = Array.isArray(dispatchable.tasks) ? dispatchable.tasks : [];
+      const activeTasks = tasks.filter(task => ACTIVE_STATES.has(task.current_state));
+      const attentionTasks = tasks.filter(task => ATTENTION_STATES.has(task.current_state));
+      const lockCount = Object.keys(locks || {}).length;
+
+      if ((validation.invalid_transitions || []).length > 0 || (validation.orphaned_locks || []).length > 0) {
+        setDecisionSummary(
+          "Now",
+          "まず台帳の整合性を直す",
+          "invalid transition / orphaned lock があるため、新しい作業を進める前に `mergegate gate validate` の指摘を潰します。"
+        );
+        return;
+      }
+
+      if (dispatchableTasks.length > 0) {
+        const task = dispatchableTasks[0];
+        setDecisionSummary(
+          "Now",
+          "次に着手: " + task.id,
+          (task.title || "Untitled task") + "。詳細を見て、必要ファイルを lock して進めます。"
+        );
+        return;
+      }
+
+      if (attentionTasks.length > 0) {
+        const task = attentionTasks[0];
+        setDecisionSummary(
+          "Now",
+          "詰まりを確認: " + task.id,
+          (task.title || "Untitled task") + " が " + (task.current_state || "unknown") + " です。依存か GitHub sync を確認します。"
+        );
+        return;
+      }
+
+      if (activeTasks.length > 0) {
+        const task = activeTasks[0];
+        setDecisionSummary(
+          "Now",
+          "進行中を片付ける: " + task.id,
+          (task.title || "Untitled task") + " が動いています。lock は " + lockCount + " 件、validation issue は " + issueCount + " 件です。"
+        );
+        return;
+      }
+
+      setDecisionSummary(
+        "Now",
+        "待機中",
+        "着手可能なタスクはありません。依存関係が解けるか、新しいタスクが pending になるまで待ちます。"
+      );
+    }
+
     function renderTaskCards(tasks, emptyMessage, options = {}) {
       if (!Array.isArray(tasks) || tasks.length === 0) {
         return '<div class="empty">' + escapeHtml(emptyMessage) + '</div>';
@@ -980,16 +1293,16 @@
       const severity = validation.severity || "clean";
       const dispatchableCount = dispatchable.count || 0;
       const heroStatus = severity === "error"
-        ? "Action Needed"
+        ? "要対応"
         : severity === "warning"
-          ? "Review Needed"
+          ? "確認あり"
           : dispatchableCount > 0
-            ? "Ready To Move"
-            : "Healthy";
+            ? "着手可能"
+            : "正常";
 
       const hero = document.getElementById("hero-status");
       hero.className = "hero-status " + severity;
-      hero.textContent = heroStatus + " · " + issueCount + " issue(s)";
+      hero.textContent = heroStatus + " · 確認 " + issueCount + " 件";
       document.getElementById("severity-pill").textContent = severity;
       document.getElementById("severity-pill").className = "tiny-pill " + severity;
       document.getElementById("metric-dispatchable").textContent = String(dispatchableCount);
@@ -1001,29 +1314,29 @@
       const activeCount = stateCount(tasks, task => ACTIVE_STATES.has(task.current_state));
       const summaryParts = [];
       if (severity === "error") {
-        summaryParts.push("Validation reports ledger errors, so fix consistency before dispatching new work.");
+        summaryParts.push("台帳の整合性エラーがあります。新しい作業を進める前に修正してください。");
       } else if (severity === "warning") {
-        summaryParts.push("Warnings exist. The ledger is usable, but it is worth reviewing before dispatch.");
+        summaryParts.push("warning があります。作業前に軽く確認すると安全です。");
       } else {
-        summaryParts.push("Ledger consistency is clean.");
+        summaryParts.push("台帳の整合性は clean です。");
       }
       summaryParts.push(dispatchableCount > 0
-        ? dispatchableCount + " dispatchable task(s) are ready now."
-        : "No dispatchable tasks are waiting right now.");
+        ? dispatchableCount + " 件のタスクに今すぐ着手できます。"
+        : "今すぐ着手できるタスクはありません。");
       summaryParts.push(activeCount > 0
-        ? activeCount + " task(s) are currently in motion."
-        : "No active tasks are running.");
+        ? activeCount + " 件が進行中です。"
+        : "進行中タスクはありません。");
       summaryParts.push(blockedCount > 0
-        ? blockedCount + " blocked task(s) need dependency or review follow-up."
-        : "No blocked tasks are currently recorded.");
+        ? blockedCount + " 件の blocked タスクがあります。"
+        : "blocked タスクはありません。");
       document.getElementById("health-summary").textContent = summaryParts.join(" ");
 
       const pills = [
-        (stats.completed || 0) + " completed",
-        (stats.active || 0) + " active",
-        (stats.waiting || 0) + " waiting",
-        (stats.failed || 0) + " failed",
-        (Object.keys(locks || {}).length) + " locks"
+        "完了 " + (stats.completed || 0),
+        "進行中 " + (stats.active || 0),
+        "待機 " + (stats.waiting || 0),
+        "失敗 " + (stats.failed || 0),
+        "ロック " + (Object.keys(locks || {}).length)
       ];
       document.getElementById("health-pills").innerHTML =
         pills.map(label => '<span class="pill">' + escapeHtml(label) + '</span>').join("");
@@ -1034,16 +1347,18 @@
       if ((validation.invalid_transitions || []).length > 0 || (validation.orphaned_locks || []).length > 0) {
         actions.push({
           kind: "error",
-          title: "Fix ledger consistency first",
-          body: "Run mergegate gate validate, then resolve lock ownership or invalid state transitions before dispatch."
+          title: "まず台帳の整合性を直す",
+          body: "lock の持ち主や state transition がズレている可能性があります。",
+          command: "mergegate gate validate"
         });
       }
 
       if ((dispatchable.task_ids || []).length > 0) {
         actions.push({
           kind: "info",
-          title: "Dispatch from the frontier",
-          body: (dispatchable.task_ids || []).slice(0, 3).join(", ")
+          title: "着手可能なタスクを進める",
+          body: (dispatchable.task_ids || []).slice(0, 3).join(", "),
+          command: "mergegate gate assign <task-id> --files <path>"
         });
       }
 
@@ -1051,7 +1366,7 @@
       if (blocked.length > 0) {
         actions.push({
           kind: "warning",
-          title: "Unblock dependent work",
+          title: "blocked を外す",
           body: blocked.slice(0, 3).map(task => task.id + " waits on " + ((task.dependencies || []).join(", ") || "follow-up")).join(" | ")
         });
       }
@@ -1060,7 +1375,7 @@
       if (awaitingReview.length > 0) {
         actions.push({
           kind: "info",
-          title: "Review in-flight work",
+          title: "レビュー中のタスクを片付ける",
           body: awaitingReview.slice(0, 3).map(task => task.id).join(", ")
         });
       }
@@ -1068,17 +1383,18 @@
       if (actions.length === 0) {
         actions.push({
           kind: "info",
-          title: "No urgent operator action",
-          body: "The ledger looks stable. Review progress or wait for the next task to become dispatchable."
+          title: "急ぎの対応はありません",
+          body: "台帳は安定しています。進行中の作業を見るか、次の pending タスクを待ちます。"
         });
       }
 
       setElementHtml("next-actions", actions.map(action => (
-        '<div class="action-item">' +
+        '<li class="action-item">' +
           '<div class="action-label ' + action.kind + '">' + escapeHtml(action.kind) + '</div>' +
           '<div class="task-title">' + escapeHtml(action.title) + '</div>' +
           '<div class="task-meta">' + escapeHtml(action.body) + '</div>' +
-        '</div>'
+          (action.command ? '<div class="action-command">' + escapeHtml(action.command) + '</div>' : '') +
+        '</li>'
       )).join(""));
     }
 
@@ -1092,15 +1408,15 @@
       document.getElementById("progress-count").textContent = progress.length + " task(s)";
       document.getElementById("locks-count").textContent = Object.keys(state.locks || {}).length + " lock(s)";
 
-      setElementHtml("queue-ready", renderTaskCards(ready, "No dispatchable tasks"));
-      setElementHtml("queue-attention", renderTaskCards(attention, "No blocked, failed, or awaiting sync tasks"));
-      setElementHtml("queue-progress", renderTaskCards(progress, "No tasks are currently in motion"));
+      setElementHtml("queue-ready", renderTaskCards(ready, "今すぐ着手できるタスクはありません"));
+      setElementHtml("queue-attention", renderTaskCards(attention, "詰まりはありません"));
+      setElementHtml("queue-progress", renderTaskCards(progress, "進行中タスクはありません"));
     }
 
     function renderLocks(locks) {
       const entries = Object.entries(locks || {});
       if (entries.length === 0) {
-        setListEmpty("locks", "No active locks");
+        setListEmpty("locks", "ロック中のファイルはありません");
         return;
       }
       setElementHtml("locks", entries.map(([file, lock]) => (
@@ -1121,7 +1437,7 @@
       (validation.warnings || []).forEach(item => entries.push("warning: " + item));
 
       if (entries.length === 0) {
-        setListEmpty("validation-detail", "No validation issues");
+        setListEmpty("validation-detail", "validation issue はありません");
         return;
       }
 
@@ -1134,7 +1450,7 @@
       const payload = state.filteredTasksPayload || { tasks: [] };
       const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
       document.getElementById("ledger-count").textContent = (payload.task_count || tasks.length) + " task(s)";
-      setElementHtml("ledger-results", renderTaskCards(tasks, "No tasks match the active filter"));
+      setElementHtml("ledger-results", renderTaskCards(tasks, "条件に合うタスクはありません"));
     }
 
     function syncSelectedTaskToFilteredLedger() {
@@ -1227,21 +1543,21 @@
       document.getElementById("level-count").textContent = String(levels.length);
       document.getElementById("dependency-frontier").innerHTML = (state.dispatchable.task_ids || []).length > 0
         ? state.dispatchable.task_ids.map(taskId => '<span class="pill mono">' + escapeHtml(taskId) + '</span>').join("")
-        : '<span class="pill">No dispatchable frontier yet</span>';
+        : '<span class="pill">着手可能な frontier はありません</span>';
 
       const blocked = (tasks || []).filter(task => task.current_state === "blocked").map(task => task.id);
       const summary = [];
-      summary.push(levels.length > 0 ? levels.length + " dependency level(s) are present." : "No DAG levels are available.");
+      summary.push(levels.length > 0 ? levels.length + " 階層の依存関係があります。" : "DAG 階層はありません。");
       summary.push((state.dispatchable.task_ids || []).length > 0
-        ? "Dispatchable frontier: " + state.dispatchable.task_ids.join(", ") + "."
-        : "Nothing is dispatchable right now.");
+        ? "着手可能: " + state.dispatchable.task_ids.join(", ") + "。"
+        : "今すぐ着手できるタスクはありません。");
       summary.push(blocked.length > 0
-        ? "Blocked chain includes " + blocked.slice(0, 5).join(", ") + "."
-        : "No blocked chain is currently visible.");
+        ? "blocked: " + blocked.slice(0, 5).join(", ") + "。"
+        : "blocked chain はありません。");
       document.getElementById("dependency-summary-text").textContent = summary.join(" ");
 
       if (levels.length === 0) {
-        setElementHtml("dag-board", '<div class="panel"><div class="empty">No DAG levels available</div></div>');
+        setElementHtml("dag-board", '<div class="panel"><div class="empty">DAG 階層はありません</div></div>');
         return;
       }
 
@@ -1328,27 +1644,82 @@
       });
     }
 
+    function renderUnavailableState(errorMessage) {
+      const isFileMessage = IS_FILE_VIEW
+        ? "この HTML ファイルを直接開いているため、/api/tasks などの live API に接続できません。ターミナルで dashboard server を起動して " + DASHBOARD_URL + " を開いてください。"
+        : "dashboard server には到達していますが、API の読み込みに失敗しました。server log と `mergegate gate validate` を確認してください。";
+      showConnectionNotice(isFileMessage);
+      document.getElementById("hero-status").className = "hero-status error";
+      document.getElementById("hero-status").textContent = "API 未接続";
+      document.getElementById("severity-pill").textContent = "offline";
+      document.getElementById("severity-pill").className = "tiny-pill error";
+      setMetricPlaceholders();
+      setDecisionSummary(
+        "Now",
+        "localhost の dashboard を開く",
+        "source HTML ではなく、`" + DASHBOARD_COMMAND + "` で起動した live dashboard を使うとタスク台帳が表示されます。"
+      );
+      document.getElementById("health-summary").textContent =
+        "データが読めないため、タスク状態・lock・validation を判断できません。";
+      document.getElementById("health-pills").innerHTML = '<span class="pill">offline</span>';
+      document.getElementById("meta").textContent = "Refresh failed: " + errorMessage;
+      [
+        "next-actions",
+        "queue-ready",
+        "queue-attention",
+        "queue-progress",
+        "locks",
+        "validation-detail",
+        "ledger-results",
+        "dag-board"
+      ].forEach(id => {
+        setListEmpty(id, "live API に接続すると表示されます");
+      });
+      setElementHtml("next-actions", (
+        '<li class="action-item">' +
+          '<div class="action-label warning">offline</div>' +
+          '<div class="task-title">dashboard server を起動</div>' +
+          '<div class="task-meta">この画面は source file です。live data は localhost の API から読み込みます。</div>' +
+          '<div class="action-command">' + escapeHtml(DASHBOARD_COMMAND) + '</div>' +
+        '</li>'
+      ));
+      setElementHtml("sprint-focus", renderFocusCard("Plan", "API 未接続", "dashboard server 起動後に sprint_plan 由来の focus を表示します。"));
+      document.getElementById("sprint-status").textContent = "offline";
+      document.getElementById("sprint-status").className = "tiny-pill error";
+      document.getElementById("ledger-count").textContent = "0 tasks";
+      document.getElementById("frontier-count").textContent = "-";
+      document.getElementById("blocked-count").textContent = "-";
+      document.getElementById("level-count").textContent = "-";
+      document.getElementById("dependency-frontier").innerHTML = '<span class="pill">offline</span>';
+      document.getElementById("dependency-summary-text").textContent = "live API に接続すると依存関係を表示します。";
+    }
+
     async function refresh() {
       syncFiltersFromUrl();
       switchView(currentView());
+      if (IS_FILE_VIEW) {
+        renderUnavailableState("opened as file://");
+        return;
+      }
       try {
         const filterQuery = currentFilterQuery();
-        const [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes] = await Promise.all([
+        const [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes, sprintFocusRes] = await Promise.all([
           fetch("/api/tasks"),
           fetch("/api/tasks" + filterQuery),
           fetch("/api/stats"),
           fetch("/api/validate"),
           fetch("/api/locks"),
           fetch("/api/dag"),
-          fetch("/api/dispatchable")
+          fetch("/api/dispatchable"),
+          fetch("/api/sprint-focus")
         ]);
 
-        const responses = [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes];
+        const responses = [allTasksRes, filteredTasksRes, statsRes, validateRes, locksRes, dagRes, dispatchableRes, sprintFocusRes];
         if (responses.some(response => !response.ok)) {
           throw new Error("API request failed");
         }
 
-        const [allTasksPayload, filteredTasksPayload, stats, validation, locks, dag, dispatchable] = await Promise.all(
+        const [allTasksPayload, filteredTasksPayload, stats, validation, locks, dag, dispatchable, sprintFocus] = await Promise.all(
           responses.map(response => response.json())
         );
 
@@ -1359,9 +1730,13 @@
         state.locks = locks;
         state.dag = dag;
         state.dispatchable = dispatchable;
+        state.sprintFocus = sprintFocus;
 
         const allTasks = Array.isArray(allTasksPayload.tasks) ? allTasksPayload.tasks : [];
+        hideConnectionNotice();
         renderHealth(allTasks, stats, validation, locks, dispatchable);
+        renderDecisionSummary(allTasks, validation, dispatchable, locks);
+        renderSprintFocus(sprintFocus);
         renderNextActions(allTasks, validation, dispatchable);
         renderQueues(allTasks);
         renderLocks(locks);
@@ -1371,7 +1746,7 @@
         document.getElementById("meta").textContent =
           "Snapshot version " + allTasksPayload.version +
           " · updated " + allTasksPayload.generated_at +
-          " · auto-refresh every 3s";
+          " · 3 秒ごとに自動更新";
 
         if (!state.selectedTaskId) {
           const preferred = (dispatchable.task_ids || [])[0] || (filteredTasksPayload.tasks || [])[0]?.id || allTasks[0]?.id || null;
@@ -1381,20 +1756,16 @@
         await renderTaskDetail();
         bindTaskClicks();
       } catch (error) {
-        document.getElementById("hero-status").className = "hero-status error";
-        document.getElementById("hero-status").textContent = "Dashboard Unavailable";
-        document.getElementById("health-summary").textContent = "Dashboard data could not be loaded.";
-        document.getElementById("meta").textContent = "Refresh failed: " + error.message;
-        ["next-actions", "queue-ready", "queue-attention", "queue-progress", "locks", "validation-detail", "ledger-results", "dag-board"].forEach(id => {
-          setListEmpty(id, "Failed to load data");
-        });
+        renderUnavailableState(error.message);
       }
     }
 
     bindTabs();
     bindFilterControls();
     refresh();
-    setInterval(refresh, 3000);
+    if (!IS_FILE_VIEW) {
+      setInterval(refresh, 3000);
+    }
   </script>
 </body>
 </html>

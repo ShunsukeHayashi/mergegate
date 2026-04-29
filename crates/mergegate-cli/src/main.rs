@@ -3227,10 +3227,9 @@ fn build_dashboard_response(
         }
         "/api/status" => {
             let snapshot = load_snapshot(store_path)?;
-            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(
-                &snapshot,
-            ))
-            .map_err(io::Error::other)?;
+            let body =
+                serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(&snapshot))
+                    .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/stats" => {
@@ -3258,6 +3257,13 @@ fn build_dashboard_response(
         "/api/dispatchable" => {
             let body =
                 serde_json::to_vec_pretty(&miyabi_core::dashboard_dispatchable_response(protocol)?)
+                    .map_err(io::Error::other)?;
+            Ok(json_response(body))
+        }
+        "/api/sprint-focus" => {
+            let snapshot = load_snapshot(store_path)?;
+            let body =
+                serde_json::to_vec_pretty(&miyabi_core::dashboard_sprint_focus_response(&snapshot))
                     .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
@@ -3491,9 +3497,14 @@ mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
     use miyabi_core::protocol::{DeterministicExecutionProtocol, RegisterTaskRequest};
-    use miyabi_core::store::{CompletionMode, ExecutionTask, TaskState, TasksSnapshot};
+    use miyabi_core::store::{
+        CompletionMode, ContextAttachment, ExecutionTask, TaskState, TasksSnapshot,
+    };
     use miyabi_core::validate::validate_snapshot;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, MutexGuard, OnceLock,
+    };
 
     fn dashboard_env_lock() -> MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -3628,6 +3639,48 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_sprint_focus_endpoint_returns_attachment_owned_lane() {
+        let fixture = DashboardFixture::new();
+        let mut primary = ExecutionTask::new("lane-alpha", "Gate Overview");
+        primary.context_attachments.push(ContextAttachment {
+            attachment_type: "sprint_plan".to_string(),
+            source: "planning-wizard://sprint/example".to_string(),
+            content: "Sprint Goal: complete lane-alpha. Secondary: start lane-beta. Stretch: design lane-gamma."
+                .to_string(),
+            token_estimate: 12,
+            attached_at: Utc::now(),
+        });
+        let snapshot = TasksSnapshot {
+            tasks: vec![
+                primary,
+                ExecutionTask::new("lane-beta", "Task Ledger"),
+                ExecutionTask::new("lane-gamma", "Dependency Map"),
+            ],
+            ..TasksSnapshot::default()
+        };
+        std::fs::write(
+            &fixture.store_path,
+            serde_json::to_vec_pretty(&snapshot).unwrap(),
+        )
+        .unwrap();
+
+        let response = build_dashboard_response(
+            &fixture.protocol,
+            &fixture.store_path,
+            "GET",
+            "/api/sprint-focus",
+        )
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+
+        assert_eq!(response.status, "200 OK");
+        assert_eq!(value["plan"]["attachment_type"], "sprint_plan");
+        assert_eq!(value["primary"]["id"], "lane-alpha");
+        assert_eq!(value["secondary"]["id"], "lane-beta");
+        assert_eq!(value["stretch"]["id"], "lane-gamma");
+    }
+
+    #[test]
     fn dashboard_locks_and_dag_endpoints_expose_expected_shapes() {
         let fixture = DashboardFixture::new();
         fixture.register_task("task-a", "Task A");
@@ -3641,20 +3694,12 @@ mod tests {
 
         assert!(!lock.conflicting);
 
-        let locks_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/locks",
-        )
-        .unwrap();
-        let dag_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/dag",
-        )
-        .unwrap();
+        let locks_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/locks")
+                .unwrap();
+        let dag_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/dag")
+                .unwrap();
 
         let locks: serde_json::Value = serde_json::from_slice(&locks_response.body).unwrap();
         let dag: serde_json::Value = serde_json::from_slice(&dag_response.body).unwrap();
@@ -3706,16 +3751,15 @@ mod tests {
     fn dashboard_rejects_non_get_requests() {
         let fixture = DashboardFixture::new();
 
-        let response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "POST",
-            "/api/tasks",
-        )
-        .unwrap();
+        let response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "POST", "/api/tasks")
+                .unwrap();
 
         assert_eq!(response.status, "405 Method Not Allowed");
-        assert_eq!(String::from_utf8(response.body).unwrap(), "method not allowed");
+        assert_eq!(
+            String::from_utf8(response.body).unwrap(),
+            "method not allowed"
+        );
     }
 
     #[test]
@@ -3766,21 +3810,25 @@ mod tests {
 
         let root_response =
             build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/").unwrap();
-        let route_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/ledger",
-        )
-        .unwrap();
+        let route_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/ledger")
+                .unwrap();
 
         let root_html = String::from_utf8(root_response.body).unwrap();
         let route_html = String::from_utf8(route_response.body).unwrap();
 
         assert_eq!(root_response.status, "200 OK");
-        assert!(root_html.contains("Gate Overview, Ledger, and Dependency Map"));
+        assert!(root_html.contains("MergeGate"));
+        assert!(root_html.contains("作業ボード"));
+        assert!(root_html.contains("Sprint Focus"));
+        assert!(root_html.contains("今スプリントの軸"));
+        assert!(root_html.contains("connection-notice"));
         assert_eq!(route_response.status, "200 OK");
-        assert!(route_html.contains("Gate Overview, Ledger, and Dependency Map"));
+        assert!(route_html.contains("MergeGate"));
+        assert!(route_html.contains("作業ボード"));
+        assert!(route_html.contains("Sprint Focus"));
+        assert!(route_html.contains("今スプリントの軸"));
+        assert!(route_html.contains("connection-notice"));
     }
 
     fn write_snapshot(snapshot: TasksSnapshot) -> PathBuf {
@@ -3828,7 +3876,7 @@ mod tests {
             self.protocol
                 .register(
                     RegisterTaskRequest {
-                        issue: 0,
+                        issue: 1,
                         task_id: task_id.to_string(),
                         title: title.to_string(),
                         dependencies: Vec::new(),
@@ -3872,11 +3920,16 @@ mod tests {
 
     impl TestTempDir {
         fn new() -> Self {
+            static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
             let unique = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("mergegate-cli-test-{unique}"));
+            let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "mergegate-cli-test-{}-{unique}-{id}",
+                std::process::id()
+            ));
             std::fs::create_dir_all(&path).unwrap();
             Self { path }
         }
