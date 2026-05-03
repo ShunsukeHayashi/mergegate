@@ -1,7 +1,7 @@
-name: Auto-merge Copilot PRs
+name: Auto-merge MergeGate PRs
 
-# Copilot Coding Agent が作成した PR が
-# 1) CI 通過（Type Check + Build Check）かつ
+# Copilot Coding Agent の PR、または `mergegate-auto-merge` ラベル付き PR が
+# 1) 実際の CI workflow の必須 check を全て通過し、
 # 2) AI レビュー (ai-review.yml) で APPROVE された
 # 場合に自動マージする。
 
@@ -18,10 +18,9 @@ jobs:
     name: Auto-merge if CI + AI Review passed
     runs-on: ubuntu-latest
     if: |
-      github.actor == 'Copilot' ||
+      github.event_name == 'check_run' ||
       github.event.pull_request.user.login == 'Copilot' ||
-      github.event.review.user.login == 'github-actions[bot]' ||
-      github.event_name == 'check_run'
+      contains(github.event.pull_request.labels.*.name, 'mergegate-auto-merge')
     permissions:
       pull-requests: write
       contents: write
@@ -74,9 +73,10 @@ jobs:
               return;
             }
 
-            // Copilot 作成でなければスキップ
-            if (pr.data.user.login !== 'Copilot') {
-              console.log(`PR #${prNumber} is not from Copilot (${pr.data.user.login}), skipping`);
+            const labels = (pr.data.labels || []).map(label => label.name);
+            const canAutoMerge = pr.data.user.login === 'Copilot' || labels.includes('mergegate-auto-merge');
+            if (!canAutoMerge) {
+              console.log(`PR #${prNumber}: not Copilot and missing mergegate-auto-merge label, skipping`);
               return;
             }
 
@@ -88,23 +88,52 @@ jobs:
               per_page: 100,
             });
 
-            // 同名の check_run が複数ある場合（re-run）は最新のものだけを使う
-            const latestByName = {};
+            const requiredChecks = [
+              { prefix: 'Check', min: 1 },
+              { prefix: 'Test Suite', min: 2 },
+              { prefix: 'Rustfmt', min: 1 },
+              { prefix: 'Clippy', min: 1 },
+              { prefix: 'Build Release', min: 3 },
+              { prefix: 'Security Audit', min: 1 },
+            ];
+
+            // 同名の check_run が複数ある場合（re-run）は最新のものだけを使う。
+            const latestByName = new Map();
             for (const c of checks.data.check_runs) {
-              if (c.name === 'Type Check' || c.name === 'Build Check') {
-                const prev = latestByName[c.name];
-                if (!prev || new Date(c.started_at) > new Date(prev.started_at)) {
-                  latestByName[c.name] = c;
-                }
+              if (c.name === 'Auto-merge if CI + AI Review passed') {
+                continue;
+              }
+
+              const prev = latestByName.get(c.name);
+              if (!prev || new Date(c.started_at) > new Date(prev.started_at)) {
+                latestByName.set(c.name, c);
               }
             }
-            const ciChecks = Object.values(latestByName);
+            const latestChecks = Array.from(latestByName.values());
+            const checkGroups = requiredChecks.map(required => {
+              const runs = latestChecks.filter(c => c.name.startsWith(required.prefix));
+              return { ...required, runs };
+            });
 
-            const ciPassed = ciChecks.length >= 2 &&
-              ciChecks.every(c => c.status === 'completed' && c.conclusion === 'success');
+            const missing = checkGroups
+              .filter(group => group.runs.length < group.min)
+              .map(group => `${group.prefix}: expected ${group.min}, found ${group.runs.length}`);
+            const failing = checkGroups.flatMap(group =>
+              group.runs
+                .filter(c => c.status !== 'completed' || c.conclusion !== 'success')
+                .map(c => `${c.name}:${c.conclusion ?? c.status}`)
+            );
 
+            const ciChecks = checkGroups.flatMap(group => group.runs);
+            const ciPassed = missing.length === 0 && failing.length === 0;
             const ciStatus = ciChecks.map(c => `${c.name}:${c.conclusion ?? c.status}`).join(', ');
             console.log(`PR #${prNumber} CI (latest runs): ${ciStatus || 'no checks found'}`);
+            if (missing.length > 0) {
+              console.log(`PR #${prNumber}: missing required checks: ${missing.join('; ')}`);
+            }
+            if (failing.length > 0) {
+              console.log(`PR #${prNumber}: failing/pending checks: ${failing.join('; ')}`);
+            }
 
             if (!ciPassed) {
               console.log(`PR #${prNumber}: CI not fully passed yet, skipping`);

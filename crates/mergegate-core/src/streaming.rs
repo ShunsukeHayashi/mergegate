@@ -280,13 +280,11 @@ impl StreamProcessor {
                     events.push(AgentStreamEvent::TextChunk { text: delta.text });
                 }
             }
-            StreamEvent::ContentBlockStop { .. } => {
-                if !self.accumulated_text.is_empty() {
-                    events.push(AgentStreamEvent::TextComplete {
-                        text: self.accumulated_text.clone(),
-                    });
-                    self.accumulated_text.clear();
-                }
+            StreamEvent::ContentBlockStop { .. } if !self.accumulated_text.is_empty() => {
+                events.push(AgentStreamEvent::TextComplete {
+                    text: self.accumulated_text.clone(),
+                });
+                self.accumulated_text.clear();
             }
             StreamEvent::MessageDelta { usage, .. } => {
                 events.push(AgentStreamEvent::TokenUsage {

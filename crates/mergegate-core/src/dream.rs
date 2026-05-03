@@ -258,12 +258,10 @@ pub fn analyze_events(events: &[TaskEvent]) -> DreamReport {
 
     for event in events {
         match event.event_type {
-            TaskEventType::DagChanged => {
-                if event.task_id != DREAM_TASK_ID {
-                    task_started_at
-                        .entry(event.task_id.as_str())
-                        .or_insert(event.ts);
-                }
+            TaskEventType::DagChanged if event.task_id != DREAM_TASK_ID => {
+                task_started_at
+                    .entry(event.task_id.as_str())
+                    .or_insert(event.ts);
             }
             TaskEventType::GateRejected => {
                 if let Some(gate_name) = event.payload.get("gate").and_then(|value| value.as_str())

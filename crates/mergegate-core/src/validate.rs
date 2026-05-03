@@ -405,7 +405,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn circular_dependency() {
         let snapshot = TasksSnapshot {

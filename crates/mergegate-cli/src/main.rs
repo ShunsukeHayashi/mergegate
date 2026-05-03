@@ -3227,10 +3227,9 @@ fn build_dashboard_response(
         }
         "/api/status" => {
             let snapshot = load_snapshot(store_path)?;
-            let body = serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(
-                &snapshot,
-            ))
-            .map_err(io::Error::other)?;
+            let body =
+                serde_json::to_vec_pretty(&miyabi_core::dashboard_status_response(&snapshot))
+                    .map_err(io::Error::other)?;
             Ok(json_response(body))
         }
         "/api/stats" => {
@@ -3493,6 +3492,14 @@ mod tests {
     use miyabi_core::protocol::{DeterministicExecutionProtocol, RegisterTaskRequest};
     use miyabi_core::store::{CompletionMode, ExecutionTask, TaskState, TasksSnapshot};
     use miyabi_core::validate::validate_snapshot;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    fn dashboard_env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("dashboard env lock poisoned")
+    }
 
     #[test]
     fn parse_export_since_accepts_rfc3339_and_date_only() {
@@ -3633,20 +3640,12 @@ mod tests {
 
         assert!(!lock.conflicting);
 
-        let locks_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/locks",
-        )
-        .unwrap();
-        let dag_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/api/dag",
-        )
-        .unwrap();
+        let locks_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/locks")
+                .unwrap();
+        let dag_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/api/dag")
+                .unwrap();
 
         let locks: serde_json::Value = serde_json::from_slice(&locks_response.body).unwrap();
         let dag: serde_json::Value = serde_json::from_slice(&dag_response.body).unwrap();
@@ -3698,20 +3697,20 @@ mod tests {
     fn dashboard_rejects_non_get_requests() {
         let fixture = DashboardFixture::new();
 
-        let response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "POST",
-            "/api/tasks",
-        )
-        .unwrap();
+        let response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "POST", "/api/tasks")
+                .unwrap();
 
         assert_eq!(response.status, "405 Method Not Allowed");
-        assert_eq!(String::from_utf8(response.body).unwrap(), "method not allowed");
+        assert_eq!(
+            String::from_utf8(response.body).unwrap(),
+            "method not allowed"
+        );
     }
 
     #[test]
     fn dashboard_static_dir_serves_assets_and_spa_fallback() {
+        let _lock = dashboard_env_lock();
         let fixture = DashboardFixture::new();
         let static_dir = fixture.tempdir.path().join("dist");
         std::fs::create_dir_all(static_dir.join("assets")).unwrap();
@@ -3750,17 +3749,18 @@ mod tests {
 
     #[test]
     fn dashboard_embedded_fallback_serves_shell_without_static_dir() {
+        let _lock = dashboard_env_lock();
         let fixture = DashboardFixture::new();
+        // "missing-dist" does not exist on disk — forces the server to use the
+        // Rust-owned embedded HTML shell instead of serving static files.
+        let missing_static_dir = fixture.tempdir.path().join("missing-dist");
+        let _guard = EnvVarGuard::set("MERGEGATE_DASHBOARD_STATIC_DIR", &missing_static_dir);
 
         let root_response =
             build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/").unwrap();
-        let route_response = build_dashboard_response(
-            &fixture.protocol,
-            &fixture.store_path,
-            "GET",
-            "/ledger",
-        )
-        .unwrap();
+        let route_response =
+            build_dashboard_response(&fixture.protocol, &fixture.store_path, "GET", "/ledger")
+                .unwrap();
 
         let root_html = String::from_utf8(root_response.body).unwrap();
         let route_html = String::from_utf8(route_response.body).unwrap();
