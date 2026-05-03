@@ -35,6 +35,8 @@ jobs:
       - name: Get PR diff
         id: diff
         run: |
+          # This workflow is pull_request-only, so base.ref is always set.
+          # The fallback to "main" guards against accidental reuse outside that context.
           BASE="${{ github.event.pull_request.base.ref }}"
           if [ -z "$BASE" ]; then
             BASE="main"

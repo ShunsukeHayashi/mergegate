@@ -3751,6 +3751,8 @@ mod tests {
     fn dashboard_embedded_fallback_serves_shell_without_static_dir() {
         let _lock = dashboard_env_lock();
         let fixture = DashboardFixture::new();
+        // "missing-dist" does not exist on disk — forces the server to use the
+        // Rust-owned embedded HTML shell instead of serving static files.
         let missing_static_dir = fixture.tempdir.path().join("missing-dist");
         let _guard = EnvVarGuard::set("MERGEGATE_DASHBOARD_STATIC_DIR", &missing_static_dir);
 
