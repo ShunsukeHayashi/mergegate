@@ -6,7 +6,7 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, synchronize, ready_for_review, labeled]
     branches: [master, main]
 
 jobs:
@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event.pull_request.user.login == 'Copilot' ||
-      contains(github.event.pull_request.labels.*.name, 'ai-review')
+      contains(github.event.pull_request.labels.*.name, 'ai-review') ||
+      contains(github.event.pull_request.labels.*.name, 'mergegate-auto-merge')
     permissions:
       pull-requests: write
       contents: read
